@@ -25,6 +25,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import org.jspecify.annotations.Nullable;
@@ -195,7 +196,6 @@ public final class Suffering {
 
 		throes = Math.max(20, Math.round(throes * intensity));
 		Corpse corpse = new Corpse(entity, kind, state.voice, run, throes, 60, random.nextFloat() * 100.0F);
-		corpse.burst = kind == Corpse.Kind.QUICK ? 1.0F : 0.6F;
 		corpses.put(entity.getId(), corpse);
 		evictOldCorpses();
 
@@ -333,85 +333,119 @@ public final class Suffering {
 
 	private void tickCorpse(ClientLevel level, Corpse c) {
 		c.age++;
-		c.bodyRotO = c.bodyRot;
 		c.walkPosO = c.walkPos;
+		Ragdoll body = c.body;
+		body.beginTick();
 		LivingEntity entity = c.entity;
-		if (c.unloaded) {
-			entity.xo = entity.getX();
-			entity.yo = entity.getY();
-			entity.zo = entity.getZ();
-		}
-
 		GoreConfig config = GoreConfig.get();
 		boolean gore = config.goreLevel.enabled();
 		int color = EntityFilter.bloodColor(entity);
 
-		if (c.running()) {
-			runBlind(level, c);
+		// The collision box follows the body, not the entity: until the server removes it, the entity still sits
+		// wherever the server last put it.
+		AABB box = entity.getBoundingBox().move(body.x - entity.getX(), body.y - entity.getY(), body.z - entity.getZ());
+		boolean running = c.running();
+		body.move(level, box, running ? steer(level, c, box) : 0.0);
+
+		if (!running && !c.toppled) {
+			c.toppled = true;
+			topple(c);
+		}
+
+		if (c.toppled && body.tip() > 0.0F && gore && c.kind != Corpse.Kind.QUICK) {
+			BloodEmitter.drip(GoreSystems.blood(), neck(c), color, 0.02F);
+		}
+
+		// Legs follow distance actually covered (as vanilla does), so feet never slide; none while down.
+		if (running && body.onGround) {
+			double travelled = Math.hypot(body.x - body.px, body.z - body.pz);
+			c.walkSpeed += (Math.min(1.0F, (float) travelled * 4.0F) - c.walkSpeed) * 0.4F;
+		} else {
+			c.walkSpeed = 0.0F;
+		}
+
+		c.walkPos += c.walkSpeed;
+
+		float tremble = 0.0F;
+		int ground = c.groundTicks();
+		if (running) {
 			float pressure = 1.0F - c.age / (float) Math.max(1, c.runTicks);
 			if (gore && c.age % 4 == 0) {
-				BloodEmitter.burst(GoreSystems.blood(), level, neck(entity), color, 0.05F * pressure + 0.01F, 4);
+				BloodEmitter.burst(GoreSystems.blood(), level, neck(c), color, 0.05F * pressure + 0.01F, 4);
 			}
 
-			c.pose = new SufferPose(0.4F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 10.0F);
-			return;
+			tremble = 0.4F;
+		} else if (ground >= 0) {
+			// Agonal throes: sudden convulsions that get rarer as life runs out, flinging the joints and body.
+			float life = 1.0F - Math.min(1.0F, ground / (float) c.throeTicks);
+			float envelope = (float) Math.exp(-ground / Math.max(1.0, c.throeTicks / 3.0));
+			if (life > 0.0F && random.nextFloat() < 0.07F * life) {
+				body.spasm(random, 0.5F + random.nextFloat() * 0.5F);
+			}
+
+			tremble = life <= 0.0F ? 0.0F : envelope * 0.8F;
+			if (life > 0.0F && c.kind != Corpse.Kind.HEADLESS_RUN && c.kind != Corpse.Kind.QUICK && random.nextFloat() < 0.045F * envelope + 0.01F * life) {
+				screams.gurgle(follow(entity), c.voice, envelope);
+			}
+
+			if (gore && c.kind == Corpse.Kind.HEADLESS_RUN && life > 0.0F && c.age % 7 == 0) {
+				BloodEmitter.drip(GoreSystems.blood(), neck(c), color, 0.01F);
+			}
 		}
 
-		c.walkSpeed *= 0.7F;
-		int ground = c.groundTicks();
-		if (ground < 0) {
-			return;
-		}
-
-		// Agonal throes: kicking that dies away, broken by sudden spasms that get rarer as life runs out.
-		float life = 1.0F - Math.min(1.0F, ground / (float) c.throeTicks);
-		float envelope = (float) Math.exp(-ground / Math.max(1.0, c.throeTicks / 3.0));
-		if (life > 0.0F && random.nextFloat() < 0.07F * life) {
-			c.burst = 0.6F + random.nextFloat() * 0.4F;
-		}
-
-		c.burst *= 0.82F;
-		float kick = life <= 0.0F ? 0.0F : Mth.clamp(envelope * 0.55F + c.burst * 0.8F, 0.0F, 1.0F);
-		float thrash = life <= 0.0F ? 0.0F : Math.min(1.0F, c.burst * 0.7F + envelope * 0.3F);
-		float tremble = life <= 0.0F ? 0.0F : envelope * 0.8F;
-		c.pose = new SufferPose(tremble, thrash, kick, 0.8F + c.burst * 0.9F, 0.0F, 0.0F, 0.0F, 0.0F);
-
-		if (life > 0.0F && c.kind != Corpse.Kind.HEADLESS_RUN && c.kind != Corpse.Kind.QUICK && random.nextFloat() < 0.045F * envelope + 0.01F * life) {
-			screams.gurgle(follow(entity), c.voice, envelope);
-		}
-
-		if (gore && c.kind == Corpse.Kind.HEADLESS_RUN && life > 0.0F && c.age % 7 == 0) {
-			BloodEmitter.drip(GoreSystems.blood(), neck(entity), color, 0.01F);
+		body.stepJoints();
+		c.pose = new SufferPose(tremble, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F);
+		if (c.unloaded) {
+			// Keep the entity (culling, shadow, bounding box) with the body; no offset is then needed to draw it.
+			entity.xo = body.px;
+			entity.yo = body.py;
+			entity.zo = body.pz;
+			entity.setPos(body.x, body.y, body.z);
+			entity.setOnGround(body.onGround);
 		}
 	}
 
+	/** Starts the fall: the push comes from the body's own momentum, so a hit knocks it over away from the blow. */
+	private void topple(Corpse c) {
+		Ragdoll body = c.body;
+		float yawRad = body.yaw * Mth.DEG_TO_RAD;
+		// Positive lean tips towards (cos yaw, sin yaw): the body's own right-hand side.
+		double lateral = body.vx * Mth.cos(yawRad) + body.vz * Mth.sin(yawRad);
+		float side = Math.abs(lateral) > 0.01 ? (float) Math.signum(lateral) : (random.nextBoolean() ? 1.0F : -1.0F);
+		float forward = (float) Math.hypot(body.vx, body.vz);
+		body.topple(side, Math.min(0.2F, forward * 0.5F + (float) Math.abs(lateral)));
+		body.spasm(random, c.kind == Corpse.Kind.QUICK ? 1.0F : 0.6F);
+	}
+
 	/**
-	 * Headless reflex run: forward at a jog, veering at random and turning away from walls, with full leg
-	 * movement. Uses vanilla's collision routine against block shapes so it does not pass through walls.
+	 * Headless reflex run: a jog with a smoothly wandering heading. Blocked by a wall it hops a one-block step if
+	 * there is room, otherwise it turns away over several ticks (no snapping), so it never passes through blocks.
+	 * Returns the wanted speed.
 	 */
-	private void runBlind(ClientLevel level, Corpse c) {
-		LivingEntity entity = c.entity;
-		c.bodyRot += SufferPose.noise(c.age * 0.35F, c.seed) * 14.0F;
-		float yaw = c.bodyRot * Mth.DEG_TO_RAD;
-		double speed = 0.16 + 0.04 * Math.sin(c.age * 0.5);
-		c.fallSpeed = entity.onGround() ? 0.0 : c.fallSpeed - 0.08;
-		Vec3 wanted = new Vec3(-Mth.sin(yaw) * speed, c.fallSpeed, Mth.cos(yaw) * speed);
-		Vec3 moved = Entity.collideBoundingBox(CollisionContext.empty(), wanted, entity.getBoundingBox(), level, List.of());
-		if (moved.x != wanted.x || moved.z != wanted.z) {
-			// Blind collision with a wall: lurch away.
-			c.bodyRot += 120.0F + random.nextFloat() * 120.0F;
+	private double steer(ClientLevel level, Corpse c, AABB box) {
+		Ragdoll body = c.body;
+		if (body.blocked && body.onGround && c.turnTicks == 0) {
+			float yawRad = body.yaw * Mth.DEG_TO_RAD;
+			AABB raised = box.move(0.0, 1.0, 0.0);
+			Vec3 ahead = new Vec3(-Mth.sin(yawRad) * 0.4, 0.0, Mth.cos(yawRad) * 0.4);
+			Vec3 reach = Entity.collideBoundingBox(CollisionContext.empty(), ahead, raised, level, List.of());
+			if (reach.horizontalDistanceSqr() > ahead.horizontalDistanceSqr() - 1.0E-6) {
+				body.vy = 0.42;
+			} else {
+				c.turnDir = random.nextBoolean() ? 1.0F : -1.0F;
+				c.turnTicks = 12 + random.nextInt(10);
+			}
 		}
 
-		if (moved.y != wanted.y && wanted.y < 0.0) {
-			c.fallSpeed = 0.0;
-			entity.setOnGround(true);
-		} else if (moved.y < 0.0) {
-			entity.setOnGround(false);
+		float wanted = SufferPose.noise(c.age * 0.12F, c.seed) * 5.0F;
+		if (c.turnTicks > 0) {
+			c.turnTicks--;
+			wanted = c.turnDir * 14.0F;
 		}
 
-		entity.setPos(entity.getX() + moved.x, entity.getY() + moved.y, entity.getZ() + moved.z);
-		c.walkSpeed = 1.0F;
-		c.walkPos += 1.3F;
+		body.yawV += (wanted - body.yawV) * 0.2F;
+		body.yaw += body.yawV;
+		return (0.15 + 0.03 * Math.sin(c.age * 0.4)) * Math.min(1.0, c.age / 6.0);
 	}
 
 	/** Severed heads twitch (rendered by GoreRenderer) and let out a few weak moans. */
@@ -466,6 +500,15 @@ public final class Suffering {
 
 	private static Supplier<Vec3> follow(LivingEntity entity) {
 		return () -> new Vec3(entity.getX(), entity.getY() + entity.getBbHeight() * 0.6, entity.getZ());
+	}
+
+	/** The neck stump of a ragdolled body: high up when upright, near the ground once it lies on its side. */
+	private static Vec3 neck(Corpse c) {
+		Ragdoll b = c.body;
+		float yawRad = b.yaw * Mth.DEG_TO_RAD;
+		double forward = c.entity.getBbWidth() * 0.45;
+		double height = c.entity.getBbHeight() * (0.2 + 0.6 * Mth.cos(b.roll));
+		return new Vec3(b.x - Mth.sin(yawRad) * forward, b.y + height, b.z + Mth.cos(yawRad) * forward);
 	}
 
 	private static Vec3 neck(LivingEntity entity) {

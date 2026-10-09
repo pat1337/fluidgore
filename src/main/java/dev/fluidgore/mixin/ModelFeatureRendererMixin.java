@@ -3,6 +3,8 @@ package dev.fluidgore.mixin;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.dismember.ModelParts;
+import dev.fluidgore.suffer.BodyPose;
+import dev.fluidgore.suffer.Ragdoll;
 import dev.fluidgore.suffer.SufferPose;
 import java.util.ArrayList;
 import java.util.List;
@@ -46,7 +48,8 @@ public abstract class ModelFeatureRendererMixin {
 
 		Integer mask = state.getData(Dismemberment.MISSING_PARTS);
 		SufferPose pose = state.getData(SufferPose.KEY);
-		if ((mask == null || mask == 0) && pose == null) {
+		BodyPose body = state.getData(BodyPose.KEY);
+		if ((mask == null || mask == 0) && pose == null && body == null) {
 			return;
 		}
 
@@ -64,6 +67,10 @@ public abstract class ModelFeatureRendererMixin {
 
 		if (pose != null) {
 			fluidgore$animate(parts, pose, state.ageInTicks);
+		}
+
+		if (body != null) {
+			fluidgore$joints(parts, body.joints());
 		}
 	}
 
@@ -102,6 +109,28 @@ public abstract class ModelFeatureRendererMixin {
 				float phase = i * 1.9F;
 				leg.xRot += Mth.sin(t * pose.kickRate() + phase) * pose.kick() * 0.9F;
 				leg.zRot += SufferPose.noise(t * 2.0F, phase) * pose.kick() * 0.2F;
+			}
+		}
+	}
+
+	/** Applies a ragdoll's joint offsets: the head and each limb are free-swinging springs. */
+	@Unique
+	private void fluidgore$joints(ModelPart[] parts, float[] j) {
+		ModelPart head = parts[BodyPart.HEAD.ordinal()];
+		if (head != null) {
+			fluidgore$save(head);
+			head.xRot += j[Ragdoll.HEAD_X];
+			head.yRot += j[Ragdoll.HEAD_Y];
+			head.zRot += j[Ragdoll.HEAD_Z];
+		}
+
+		BodyPart[] limbs = {BodyPart.RIGHT_ARM, BodyPart.LEFT_ARM, BodyPart.RIGHT_LEG, BodyPart.LEFT_LEG};
+		for (int i = 0; i < limbs.length; i++) {
+			ModelPart limb = parts[limbs[i].ordinal()];
+			if (limb != null) {
+				fluidgore$save(limb);
+				limb.xRot += j[Ragdoll.LIMB_X + i];
+				limb.zRot += j[Ragdoll.LIMB_Z + i];
 			}
 		}
 	}

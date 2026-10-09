@@ -35,16 +35,16 @@ public final class Corpse {
 	/** True once the server has removed the entity and only this client-side body remains. */
 	public boolean unloaded;
 
-	float bodyRot;
-	float bodyRotO;
+	public final Ragdoll body;
 	float walkPos;
 	float walkPosO;
 	float walkSpeed;
-	double fallSpeed;
-	/** Current spasm strength; set to 1 by a sudden agonal spasm and decays quickly. */
-	float burst;
 	/** Tick at which the body starts falling over (after the headless run, otherwise immediately). */
 	int collapseAt;
+	boolean toppled;
+	/** Remaining ticks of a deliberate turn away from a wall, and its direction. */
+	int turnTicks;
+	float turnDir;
 	SufferPose pose = new SufferPose(0, 0, 0, 0, 0, 0, 0, 0);
 
 	Corpse(LivingEntity entity, Kind kind, Voice voice, int runTicks, int throeTicks, int stillTicks, float seed) {
@@ -55,7 +55,7 @@ public final class Corpse {
 		this.throeTicks = throeTicks;
 		this.stillTicks = stillTicks;
 		this.seed = seed;
-		this.bodyRot = this.bodyRotO = entity.yBodyRot;
+		this.body = new Ragdoll(entity);
 		this.collapseAt = kind == Kind.HEADLESS_RUN ? runTicks : 0;
 	}
 
@@ -70,16 +70,6 @@ public final class Corpse {
 
 	public boolean done() {
 		return groundTicks() > Math.round(FALL_TICKS) + throeTicks + stillTicks;
-	}
-
-	/** Value for the vanilla death tip-over: 0 = upright, 20 = lying on its side. */
-	public float deathTime(float partialTick) {
-		float t = groundTicks() + partialTick;
-		return t <= 0.0F ? 0.0F : Math.min(FALL_TICKS, 1.0F + t);
-	}
-
-	public float bodyRot(float partialTick) {
-		return Mth.rotLerp(partialTick, bodyRotO, bodyRot);
 	}
 
 	public float walkPos(float partialTick) {

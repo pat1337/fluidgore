@@ -4,7 +4,9 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import dev.fluidgore.GoreSystems;
 import dev.fluidgore.dismember.Dismemberment;
+import dev.fluidgore.suffer.BodyPose;
 import dev.fluidgore.suffer.Corpse;
+import dev.fluidgore.suffer.Ragdoll;
 import dev.fluidgore.suffer.SufferPose;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
@@ -34,12 +36,29 @@ public abstract class LivingEntityRendererMixin {
 
 		Corpse corpse = GoreSystems.suffering().corpse(entity.getId());
 		if (corpse != null) {
-			state.deathTime = corpse.deathTime(partialTicks);
-			state.bodyRot = corpse.bodyRot(partialTicks);
+			Ragdoll body = corpse.body;
+			// The ragdoll does its own falling over; vanilla's scripted tip-over stays off.
+			state.deathTime = 0.0F;
+			state.bodyRot = body.yaw(partialTicks);
+			state.yRot = 0.0F;
+			state.xRot = 0.0F;
+			state.setData(BodyPose.KEY, new BodyPose(body.x(partialTicks) - state.x, body.y(partialTicks) - state.y,
+					body.z(partialTicks) - state.z, body.roll(partialTicks), body.joints(partialTicks)));
 			state.walkAnimationPos = corpse.walkPos(partialTicks);
 			state.walkAnimationSpeed = corpse.walkSpeed();
 			// Vanilla tints dying mobs red; over a long death that just looks wrong.
 			state.hasRedOverlay = corpse.age < 10;
+		} else {
+			state.setData(BodyPose.KEY, null);
+		}
+	}
+
+	/** Moves a ragdolled body from where vanilla would draw the entity to where the physics put it. */
+	@Inject(method = "setupRotations", at = @At("HEAD"))
+	private void fluidgore$place(LivingEntityRenderState state, PoseStack poseStack, float bodyRot, float entityScale, CallbackInfo ci) {
+		BodyPose body = state.getData(BodyPose.KEY);
+		if (body != null) {
+			poseStack.translate(body.dx(), body.dy(), body.dz());
 		}
 	}
 
@@ -49,6 +68,11 @@ public abstract class LivingEntityRendererMixin {
 	 */
 	@Inject(method = "setupRotations", at = @At("TAIL"))
 	private void fluidgore$suffer(LivingEntityRenderState state, PoseStack poseStack, float bodyRot, float entityScale, CallbackInfo ci) {
+		BodyPose body = state.getData(BodyPose.KEY);
+		if (body != null) {
+			poseStack.rotateDegrees(Axis.ZP, body.roll() * Mth.RAD_TO_DEG);
+		}
+
 		SufferPose pose = state.getData(SufferPose.KEY);
 		if (pose == null) {
 			return;
