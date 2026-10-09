@@ -1,0 +1,159 @@
+package dev.fluidgore.config;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonParseException;
+import dev.fluidgore.FluidGoreClient;
+import java.io.IOException;
+import java.io.Reader;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import net.fabricmc.loader.api.FabricLoader;
+
+/**
+ * User settings, stored as {@code config/fluidgore.json}. Fields are read directly by the effect systems every tick,
+ * so edits made in the settings screen apply immediately without a restart.
+ */
+public final class GoreConfig {
+	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+	private static final Path PATH = FabricLoader.getInstance().getConfigDir().resolve("fluidgore.json");
+
+	private static GoreConfig instance = new GoreConfig();
+
+	public GoreLevel goreLevel = GoreLevel.MEDIUM;
+	public boolean affectPlayers = true;
+	public boolean affectMobs = true;
+	public boolean affectAnimals = true;
+	/** Blood of players and passive creatures. */
+	public BloodColor bloodColor = BloodColor.RED;
+	/** Blood of hostile mobs (anything implementing {@code Enemy}). */
+	public BloodColor monsterBloodColor = BloodColor.RED;
+	/** Seconds a decal or puddle stays at Medium before it starts fading. Scaled by the gore level. */
+	public int persistenceSeconds = 180;
+	/** Hard cap on splat decals plus puddle cells; the oldest are removed first. */
+	public int maxBloodDecals = 1500;
+	public boolean wallSplatter = true;
+	public boolean footprints = true;
+	public boolean rainWashesBlood = true;
+	/** Fluid simulation budget: puddle cells processed per client tick. */
+	public int maxActiveCellsPerTick = 64;
+	/** Cap on flying droplets simulated at once. */
+	public int maxDroplets = 600;
+	/** Seconds a detached body part stays before fading. Scaled by the gore level. */
+	public int partLifetimeSeconds = 60;
+	/** Cap on detached parts in the world. */
+	public int maxDetachedParts = 32;
+	/** Non-lethal hits at or above this damage count as heavy and may sever a part from a mob. */
+	public float heavyHitDamage = 6.0F;
+	/** Items that can cut. Entries are item ids ({@code minecraft:iron_sword}) or item tags ({@code #minecraft:swords}). */
+	public List<String> bladedItems = new ArrayList<>(List.of("#minecraft:swords", "#minecraft:axes"));
+	/**
+	 * Animal Suffering intensity, independent of {@link #goreLevel}: screams, trembling, herd panic, death throes.
+	 * Off disables it.
+	 */
+	public GoreLevel sufferingLevel = GoreLevel.MEDIUM;
+	/** Scream volume in percent (also scaled by the game's Friendly Creatures volume). */
+	public int screamVolume = 100;
+	/** Maximum scream sounds playing at once. */
+	public int maxScreams = 8;
+	/** Nearby animals of the same kind panic when one is hurt or killed. */
+	public boolean herdPanic = true;
+	/** Severed parts can be punched, kicked, picked up, thrown and stomped. */
+	public boolean playWithParts = true;
+	/** Entity ids that scream, panic and get death throes. */
+	public List<String> sufferingAnimals = new ArrayList<>(List.of(
+			"minecraft:cow",
+			"minecraft:mooshroom",
+			"minecraft:pig",
+			"minecraft:sheep",
+			"minecraft:chicken",
+			"minecraft:goat",
+			"minecraft:horse",
+			"minecraft:donkey",
+			"minecraft:mule",
+			"minecraft:llama",
+			"minecraft:trader_llama",
+			"minecraft:camel",
+			"minecraft:rabbit"
+	));
+	/** Entities that never bleed or lose parts (constructs, skeletons, decorations). */
+	public List<String> bloodlessEntities = new ArrayList<>(List.of(
+			"minecraft:armor_stand",
+			"minecraft:skeleton",
+			"minecraft:stray",
+			"minecraft:wither_skeleton",
+			"minecraft:bogged",
+			"minecraft:skeleton_horse",
+			"minecraft:iron_golem",
+			"minecraft:snow_golem",
+			"minecraft:copper_golem",
+			"minecraft:shulker",
+			"minecraft:blaze",
+			"minecraft:breeze",
+			"minecraft:vex",
+			"minecraft:allay",
+			"minecraft:creaking",
+			"minecraft:wither",
+			"minecraft:ender_dragon"
+	));
+
+	public static GoreConfig get() {
+		return instance;
+	}
+
+	public static void load() {
+		if (Files.exists(PATH)) {
+			try (Reader reader = Files.newBufferedReader(PATH, StandardCharsets.UTF_8)) {
+				GoreConfig loaded = GSON.fromJson(reader, GoreConfig.class);
+				if (loaded != null) {
+					instance = loaded;
+				}
+			} catch (IOException | JsonParseException e) {
+				FluidGoreClient.LOGGER.error("Could not read {}, using defaults", PATH, e);
+				instance = new GoreConfig();
+			}
+		}
+
+		instance.sanitize();
+		save();
+	}
+
+	public static void save() {
+		try {
+			Files.createDirectories(PATH.getParent());
+			try (Writer writer = Files.newBufferedWriter(PATH, StandardCharsets.UTF_8)) {
+				GSON.toJson(instance, writer);
+			}
+		} catch (IOException e) {
+			FluidGoreClient.LOGGER.error("Could not write {}", PATH, e);
+		}
+	}
+
+	/** Repairs values that a hand-edited file may have broken (missing enums, negative caps, null lists). */
+	private void sanitize() {
+		if (goreLevel == null) goreLevel = GoreLevel.MEDIUM;
+		if (bloodColor == null) bloodColor = BloodColor.RED;
+		if (monsterBloodColor == null) monsterBloodColor = BloodColor.RED;
+		persistenceSeconds = clamp(persistenceSeconds, 10, 1800);
+		maxBloodDecals = clamp(maxBloodDecals, 50, 10000);
+		maxActiveCellsPerTick = clamp(maxActiveCellsPerTick, 8, 1024);
+		maxDroplets = clamp(maxDroplets, 50, 5000);
+		partLifetimeSeconds = clamp(partLifetimeSeconds, 5, 1800);
+		maxDetachedParts = clamp(maxDetachedParts, 1, 256);
+		if (!(heavyHitDamage > 0.0F)) heavyHitDamage = 6.0F;
+		if (sufferingLevel == null) sufferingLevel = GoreLevel.MEDIUM;
+		screamVolume = clamp(screamVolume, 0, 200);
+		maxScreams = clamp(maxScreams, 1, 32);
+		if (sufferingAnimals == null) sufferingAnimals = new ArrayList<>();
+		if (bladedItems == null) bladedItems = new ArrayList<>();
+		if (bloodlessEntities == null) bloodlessEntities = new ArrayList<>();
+	}
+
+	private static int clamp(int value, int min, int max) {
+		return Math.max(min, Math.min(max, value));
+	}
+}

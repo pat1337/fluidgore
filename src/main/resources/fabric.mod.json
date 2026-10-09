@@ -1,0 +1,27 @@
+{
+	"schemaVersion": 1,
+	"id": "fluidgore",
+	"version": "${version}",
+	"name": "Fluid Gore",
+	"description": "Client-side cosmetic gore: blood spray, blood decals that stay on the ground, a lightweight blood fluid simulation, and dismemberment with bladed weapons. Works on vanilla servers.",
+	"authors": ["Fluid Gore contributors"],
+	"license": "MIT",
+	"icon": "assets/fluidgore/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": ["dev.fluidgore.FluidGoreClient"],
+		"modmenu": ["dev.fluidgore.ui.ModMenuIntegration"]
+	},
+	"mixins": [
+		"fluidgore.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.3",
+		"java": ">=25",
+		"fabric-api": "*"
+	},
+	"suggests": {
+		"modmenu": "*"
+	}
+}

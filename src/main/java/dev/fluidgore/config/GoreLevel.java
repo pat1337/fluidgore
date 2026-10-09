@@ -1,0 +1,40 @@
+package dev.fluidgore.config;
+
+/**
+ * Global intensity preset. Every effect multiplies its base amount by the factors of the active level,
+ * so a single slider scales particles, puddles, dismemberment and effect duration together.
+ */
+public enum GoreLevel {
+	OFF(0.0F, 0.0F, 0.0F, 0, 0.0F),
+	LOW(0.4F, 0.5F, 0.15F, 1, 0.5F),
+	MEDIUM(1.0F, 1.0F, 0.35F, 2, 1.0F),
+	HIGH(1.7F, 1.5F, 0.6F, 3, 1.5F),
+	EXTREME(2.6F, 2.2F, 1.0F, 5, 2.0F);
+
+	/** Multiplier for droplet and mist particle counts. */
+	public final float particles;
+	/** Multiplier for the blood volume that lands on the ground (puddle size and amount). */
+	public final float puddles;
+	/** Probability that a qualifying bladed hit separates at least one body part. */
+	public final float partChance;
+	/** Maximum number of parts that may separate from one entity in one hit. */
+	public final int maxPartsPerHit;
+	/** Multiplier for how long decals, puddles and parts stay before fading. */
+	public final float duration;
+
+	GoreLevel(float particles, float puddles, float partChance, int maxPartsPerHit, float duration) {
+		this.particles = particles;
+		this.puddles = puddles;
+		this.partChance = partChance;
+		this.maxPartsPerHit = maxPartsPerHit;
+		this.duration = duration;
+	}
+
+	public boolean enabled() {
+		return this != OFF;
+	}
+
+	public String translationKey() {
+		return "fluidgore.level." + name().toLowerCase(java.util.Locale.ROOT);
+	}
+}

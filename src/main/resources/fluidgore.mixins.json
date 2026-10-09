@@ -1,0 +1,20 @@
+{
+	"required": true,
+	"package": "dev.fluidgore.mixin",
+	"compatibilityLevel": "JAVA_25",
+	"client": [
+		"LivingEntityMixin",
+		"LivingEntityRendererMixin",
+		"LivingEntitySoundInvoker",
+		"MinecraftMixin",
+		"MobSoundInvoker",
+		"ModelFeatureRendererMixin",
+		"ModelPartAccessor"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}

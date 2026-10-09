@@ -1,0 +1,13 @@
+{
+	"schemaVersion": 1,
+	"id": "fluidgore-test",
+	"version": "1.0.0",
+	"name": "Fluid Gore Tests",
+	"environment": "*",
+	"entrypoints": {
+		"fabric-client-gametest": ["dev.fluidgore.test.FluidGoreClientTest"]
+	},
+	"depends": {
+		"fluidgore": "*"
+	}
+}
