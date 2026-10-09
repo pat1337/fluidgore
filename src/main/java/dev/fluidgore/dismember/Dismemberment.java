@@ -151,8 +151,9 @@ public final class Dismemberment {
 		parts.add(part);
 
 		missing.put(entity.getId(), missing.get(entity.getId()) | bodyPart.bit());
-		Vec3 wound = new Vec3(part.x, part.y, part.z);
-		BloodEmitter.burst(blood, level, wound, rgb, 0.25F, 18);
+		// The stump stays attached to the body (which may keep moving); the part flies off on its own.
+		Vec3 stumpOffset = new Vec3(offset.x, offset.y, offset.z);
+		BloodEmitter.sever(blood, level, entity, () -> entity.position().add(stumpOffset), () -> new Vec3(part.x, part.y, part.z), rgb);
 	}
 
 	/** Physics for severed parts and bleeding stumps on entities that are still walking around. */

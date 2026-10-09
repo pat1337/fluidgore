@@ -24,6 +24,10 @@ saved to `.minecraft\config\fluidgore.json` when the screen closes.
 | Blood Color | Red | Players and passive creatures. Red, Dark Red, Green, Yellow, Blue, Purple, Black. |
 | Mob Blood | Red | Hostile mobs, e.g. set Green for alien-looking mob blood. |
 | Persistence | 180 s | How long blood stays at Medium before it fades (Low ×0.5, High ×1.5, Extreme ×2). |
+| Style | Redstone | **Redstone**: blocky pixel-art splats and chunky drops like redstone dust. **Realistic**: smooth round splats. **Mixed**: random mix. |
+| Gore Chunks | On | Heavy hits and kills throw redstone-block crumbs (or a block matching the blood colour) and bits of the body's meat. |
+| Arterial Spurts | On | Bad wounds and severed limbs pump blood out in pulsing jets that paint streaks. |
+| Gore Sounds | On | Wet crunching on heavy hits, kills and dismemberment. |
 | Max Blood Decals | 1500 | Cap on splats + puddle cells. The oldest go first. |
 | Wall Splatter | On | Blood sticks to walls and runs down ledges as streaks. |
 | Bloody Footprints | On | Anything walking through a puddle leaves a few footprints. |

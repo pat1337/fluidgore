@@ -136,7 +136,7 @@ public final class DropletSystem {
 			double a = xNormal ? at.z : at.x;
 			float half = 0.08F + (float) Math.min(0.25, Math.sqrt(d.volume) * 0.9);
 			world.decals().addWall(level, hit.getBlockPos(), face, a, at.y, half,
-					BloodTextures.SPLAT_0 + random.nextInt(BloodTextures.SPLAT_COUNT), random.nextInt(4), d.rgb, lifetime);
+					BloodTextures.splat(random), random.nextInt(4), d.rgb, lifetime);
 			if (d.volume > 0.012F && random.nextFloat() < 0.35F) {
 				world.decals().addWall(level, hit.getBlockPos(), face, a, at.y - 0.25, 0.22F, BloodTextures.STREAK, 0, d.rgb, lifetime);
 			}

@@ -39,6 +39,13 @@ public final class GenerateTextures {
 		drawField(atlas, 7, footprint(), 0.5, new Random(6000));
 		drawField(atlas, 8, streak(new Random(7000)), 0.5, new Random(7001));
 		drawField(atlas, 9, smallSplat(new Random(8000)), 0.5, new Random(8001));
+		// Pixel-art "redstone" style: 16x16 shapes upscaled 4x so the pixels match Minecraft's texel size.
+		for (int i = 0; i < 4; i++) {
+			drawPixelArt(atlas, 10 + i, pixelSplat(new Random(9100 + i), 0.9 + i * 0.25), new Random(9200 + i));
+		}
+
+		drawPixelArt(atlas, 14, pixelPuddle(new Random(9300)), new Random(9301));
+		drawPixelArt(atlas, 15, pixelDroplet(), new Random(9400));
 		ImageIO.write(atlas, "png", new File(misc, "blood.png"));
 
 		ImageIO.write(icon(), "png", new File(root, "icon.png"));
@@ -234,6 +241,131 @@ public final class GenerateTextures {
 		}
 
 		return f;
+	}
+
+	/**
+	 * A blocky splat on a 16x16 grid, like redstone dust smeared on the ground: a lumpy core, a few jagged arms
+	 * and loose single-pixel specks. {@code size} scales the core.
+	 */
+	private static boolean[][] pixelSplat(Random random, double size) {
+		boolean[][] mask = new boolean[16][16];
+		int blobs = 3 + random.nextInt(3);
+		for (int b = 0; b < blobs; b++) {
+			double cx = 7.5 + random.nextGaussian() * 1.4;
+			double cy = 7.5 + random.nextGaussian() * 1.4;
+			double r = (1.6 + random.nextDouble() * 1.6) * size;
+			fillCircle(mask, cx, cy, r);
+		}
+
+		int arms = 3 + random.nextInt(4);
+		for (int a = 0; a < arms; a++) {
+			double angle = random.nextDouble() * Math.PI * 2.0;
+			double x = 7.5;
+			double y = 7.5;
+			int length = 4 + random.nextInt(4);
+			for (int s = 0; s < length; s++) {
+				angle += random.nextGaussian() * 0.35;
+				x += Math.cos(angle);
+				y += Math.sin(angle);
+				set(mask, (int) Math.round(x), (int) Math.round(y));
+				if (s < length / 2 && random.nextBoolean()) {
+					set(mask, (int) Math.round(x + Math.sin(angle)), (int) Math.round(y - Math.cos(angle)));
+				}
+			}
+
+			// A drop at the end of the arm.
+			fillCircle(mask, x + Math.cos(angle), y + Math.sin(angle), 0.9 + random.nextDouble() * 0.6);
+		}
+
+		int specks = 6 + random.nextInt(8);
+		for (int s = 0; s < specks; s++) {
+			double angle = random.nextDouble() * Math.PI * 2.0;
+			double dist = 4.0 + random.nextDouble() * 3.5;
+			set(mask, (int) Math.round(7.5 + Math.cos(angle) * dist), (int) Math.round(7.5 + Math.sin(angle) * dist));
+		}
+
+		return mask;
+	}
+
+	private static boolean[][] pixelPuddle(Random random) {
+		boolean[][] mask = new boolean[16][16];
+		fillCircle(mask, 7.5, 7.5, 5.2);
+		for (int i = 0; i < 7; i++) {
+			double angle = i / 7.0 * Math.PI * 2.0 + random.nextDouble() * 0.5;
+			fillCircle(mask, 7.5 + Math.cos(angle) * 4.0, 7.5 + Math.sin(angle) * 4.0, 1.5 + random.nextDouble() * 1.6);
+		}
+
+		for (int s = 0; s < 5; s++) {
+			double angle = random.nextDouble() * Math.PI * 2.0;
+			set(mask, (int) Math.round(7.5 + Math.cos(angle) * 7.2), (int) Math.round(7.5 + Math.sin(angle) * 7.2));
+		}
+
+		return mask;
+	}
+
+	/** A chunky drop: a plus shape filled out to a 4x4 pixel blob, centred. */
+	private static boolean[][] pixelDroplet() {
+		boolean[][] mask = new boolean[16][16];
+		for (int y = 5; y <= 10; y++) {
+			for (int x = 5; x <= 10; x++) {
+				boolean corner = (x == 5 || x == 10) && (y == 5 || y == 10);
+				mask[y][x] = !corner;
+			}
+		}
+
+		return mask;
+	}
+
+	private static void fillCircle(boolean[][] mask, double cx, double cy, double r) {
+		for (int y = 0; y < 16; y++) {
+			for (int x = 0; x < 16; x++) {
+				double dx = x + 0.5 - (cx + 0.5);
+				double dy = y + 0.5 - (cy + 0.5);
+				if (dx * dx + dy * dy <= r * r) {
+					mask[y][x] = true;
+				}
+			}
+		}
+	}
+
+	private static void set(boolean[][] mask, int x, int y) {
+		if (x >= 1 && y >= 1 && x < 15 && y < 15) {
+			mask[y][x] = true;
+		}
+	}
+
+	/**
+	 * Draws a 16x16 mask as 4x4 blocks of solid pixels. Each texel gets one of a few shades, darker towards the
+	 * edge of the shape, which reads like the speckled red of redstone dust.
+	 */
+	private static void drawPixelArt(BufferedImage image, int tile, boolean[][] mask, Random random) {
+		int ox = (tile % 4) * TILE;
+		int oy = (tile / 4) * TILE;
+		double[] shades = {0.5, 0.62, 0.75, 0.88};
+		for (int ty = 0; ty < 16; ty++) {
+			for (int tx = 0; tx < 16; tx++) {
+				int argb = 0;
+				if (mask[ty][tx]) {
+					int neighbours = 0;
+					for (int[] d : new int[][]{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
+						int nx = tx + d[0];
+						int ny = ty + d[1];
+						if (nx >= 0 && ny >= 0 && nx < 16 && ny < 16 && mask[ny][nx]) {
+							neighbours++;
+						}
+					}
+
+					int shade = Math.max(0, Math.min(3, neighbours - 1 + random.nextInt(2) - (random.nextInt(4) == 0 ? 1 : 0)));
+					argb = argb(1.0, shades[shade]);
+				}
+
+				for (int py = 0; py < 4; py++) {
+					for (int px = 0; px < 4; px++) {
+						image.setRGB(ox + tx * 4 + px, oy + ty * 4 + py, argb);
+					}
+				}
+			}
+		}
 	}
 
 	/**

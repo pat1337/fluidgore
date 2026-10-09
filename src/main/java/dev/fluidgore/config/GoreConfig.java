@@ -28,6 +28,14 @@ public final class GoreConfig {
 	public boolean affectPlayers = true;
 	public boolean affectMobs = true;
 	public boolean affectAnimals = true;
+	/** Look of splats, puddles and droplets. */
+	public BloodStyle bloodStyle = BloodStyle.REDSTONE;
+	/** Flying chunks (redstone-block crumbs and meat bits) on heavy hits and kills. */
+	public boolean goreChunks = true;
+	/** Arterial spurts: pulsing jets of blood from bad wounds. */
+	public boolean arterialSpurts = true;
+	/** Wet crunching sounds on heavy hits, kills and dismemberment. */
+	public boolean goreSounds = true;
 	/** Blood of players and passive creatures. */
 	public BloodColor bloodColor = BloodColor.RED;
 	/** Blood of hostile mobs (anything implementing {@code Enemy}). */
@@ -136,6 +144,7 @@ public final class GoreConfig {
 	/** Repairs values that a hand-edited file may have broken (missing enums, negative caps, null lists). */
 	private void sanitize() {
 		if (goreLevel == null) goreLevel = GoreLevel.MEDIUM;
+		if (bloodStyle == null) bloodStyle = BloodStyle.REDSTONE;
 		if (bloodColor == null) bloodColor = BloodColor.RED;
 		if (monsterBloodColor == null) monsterBloodColor = BloodColor.RED;
 		persistenceSeconds = clamp(persistenceSeconds, 10, 1800);

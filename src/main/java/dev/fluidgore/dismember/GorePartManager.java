@@ -30,6 +30,7 @@ public final class GorePartManager {
 	private static final double GRAVITY = 0.06;
 	private static final double AIR_DRAG = 0.98;
 	private static final double BOUNCE = 0.3;
+	private static final RandomSource RANDOM = RandomSource.create();
 	/** Speed (blocks/tick) above which hitting a surface splats blood and squelches. */
 	private static final double IMPACT_SPEED = 0.3;
 
@@ -201,7 +202,7 @@ public final class GorePartManager {
 		BlockPos block = BlockPos.containing(p.x - face.getStepX() * (r + 0.05), p.y, p.z - face.getStepZ() * (r + 0.05));
 		double a = face.getAxis() == Direction.Axis.X ? p.z : p.x;
 		blood.decals().addWall(level, block, face, a, p.y, 0.2F + (float) Math.min(0.2, speed * 0.3),
-				BloodTextures.SPLAT_0 + (p.age & 3), p.age & 3, p.bloodRgb, blood.decalLifetime());
+				BloodTextures.splat(RANDOM), RANDOM.nextInt(4), p.bloodRgb, blood.decalLifetime());
 		level.playLocalSound(p.x, p.y, p.z, SoundEvents.SLIME_SQUISH, SoundSource.NEUTRAL, (float) Math.min(1.0, speed), 0.9F, false);
 		p.bleedLeft += 0.01F;
 	}

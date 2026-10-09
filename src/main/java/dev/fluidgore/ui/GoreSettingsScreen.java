@@ -2,6 +2,7 @@ package dev.fluidgore.ui;
 
 import com.mojang.serialization.Codec;
 import dev.fluidgore.config.BloodColor;
+import dev.fluidgore.config.BloodStyle;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.config.GoreLevel;
 import java.util.Arrays;
@@ -44,6 +45,12 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 		);
 
 		this.list.addHeader(Component.translatable("fluidgore.header.blood"));
+		this.list.addSmall(
+				enumCycle("fluidgore.option.blood_style", BloodStyle.values(), c.bloodStyle, BloodStyle::translationKey, v -> c.bloodStyle = v),
+				OptionInstance.createBoolean("fluidgore.option.gore_chunks", c.goreChunks, v -> c.goreChunks = v),
+				OptionInstance.createBoolean("fluidgore.option.arterial_spurts", c.arterialSpurts, v -> c.arterialSpurts = v),
+				OptionInstance.createBoolean("fluidgore.option.gore_sounds", c.goreSounds, v -> c.goreSounds = v)
+		);
 		this.list.addSmall(
 				scaledSlider("fluidgore.option.persistence", 1, 120, 10, c.persistenceSeconds, "fluidgore.unit.seconds", v -> c.persistenceSeconds = v),
 				scaledSlider("fluidgore.option.max_decals", 1, 100, 50, c.maxBloodDecals, null, v -> c.maxBloodDecals = v),

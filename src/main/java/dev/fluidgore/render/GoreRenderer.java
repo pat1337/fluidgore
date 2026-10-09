@@ -168,7 +168,7 @@ public final class GoreRenderer {
 
 		boolean pool = cell.pooled;
 		float half = pool ? 0.5F : cell.halfSize();
-		int tile = pool ? BloodTextures.POOL : BloodTextures.PUDDLE;
+		int tile = pool ? BloodTextures.POOL : BloodTextures.puddle(cell.serial);
 		int orient = (int) (cell.serial & 7);
 		int color = argb(dry(cell.rgb, cell.dryness()), alpha);
 
@@ -265,8 +265,9 @@ public final class GoreRenderer {
 		Vector3f right = orientation.transform(new Vector3f(1.0F, 0.0F, 0.0F));
 		Vector3f up = orientation.transform(new Vector3f(0.0F, 1.0F, 0.0F));
 		Vector3f normal = orientation.transform(new Vector3f(0.0F, 0.0F, 1.0F));
-		float u0 = BloodTextures.u0(BloodTextures.DROPLET);
-		float v0 = BloodTextures.v0(BloodTextures.DROPLET);
+		int dropletTile = BloodTextures.droplet();
+		float u0 = BloodTextures.u0(dropletTile);
+		float v0 = BloodTextures.v0(dropletTile);
 		float span = BloodTextures.span();
 		for (DropletSystem.Droplet d : droplets) {
 			double x = d.prevX + (d.x - d.prevX) * partialTick - cam.x;

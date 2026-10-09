@@ -1,5 +1,6 @@
 package dev.fluidgore.trigger;
 
+import dev.fluidgore.config.BloodColor;
 import dev.fluidgore.config.GoreConfig;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -45,8 +46,12 @@ public final class EntityFilter {
 	}
 
 	public static int bloodColor(LivingEntity entity) {
+		return bloodType(entity).rgb;
+	}
+
+	public static BloodColor bloodType(LivingEntity entity) {
 		GoreConfig config = GoreConfig.get();
-		return entity instanceof Enemy ? config.monsterBloodColor.rgb : config.bloodColor.rgb;
+		return entity instanceof Enemy ? config.monsterBloodColor : config.bloodColor;
 	}
 
 	public static boolean isBloodless(LivingEntity entity) {
