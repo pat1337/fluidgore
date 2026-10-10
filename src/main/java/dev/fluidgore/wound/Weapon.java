@@ -52,6 +52,14 @@ public enum Weapon {
 		return severs;
 	}
 
+	/**
+	 * Leaves a slash: a long, narrow incised or chop wound along the swing. Everything else (fists, clubs, points,
+	 * teeth, blasts) leaves a round, ragged wound.
+	 */
+	public boolean slashes() {
+		return this == BLADE || this == FLINT || this == CHOP;
+	}
+
 	/** What the held item does to flesh. Spears pierce; anything not configured as a blade (or a pick) is blunt. */
 	public static Weapon of(ItemStack held) {
 		if (held.is(Items.FLINT)) {

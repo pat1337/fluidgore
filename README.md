@@ -32,10 +32,16 @@ after death. Open wounds drip, so a wounded animal leaves a trail.
   little outside, and after enough of it the animal bleeds from the mouth and nose instead. A flint scrapes ragged,
   shallow cuts; swords cut; axes chop deep and wide; a pickaxe digs in and knocks bits of fat, meat and bone out
   like mining; arrows and spears punch small, deep holes; animals bite. Each has its own sound.
+- **Slashes like real cuts.** Swords, axes and flint leave incised and chop wounds: long and narrow, laid along the
+  swing, gaping in the middle and tapering at the ends. Deeper, they open through bruised edges, the yellow rim of fat
+  under the skin, the dark split, muscle, and a line of bone. Fists, clubs, points and teeth leave round, ragged wounds.
 - **Hack it off.** A blade through a wound that cannot get any deeper takes that limb or the head off. The body keeps
   a raw stump; the piece keeps its gashes and shows meat around bone where it was cut.
-- **Flesh by species.** Ordinary animals bleed red. Husks are dried leather that splits to a sickly, poison-coloured
-  ooze. Skeletons never bleed: they scuff, crack, chip into shards and shatter.
+- **Flesh by species.** Ordinary animals bleed red. Zombies, drowned, zombified piglins, zoglins and zombie horses
+  are rotting meat: the skin round a wound marbles black and green, the fat has turned to grey wax, the cut fills with
+  black-brown ooze, the muscle is grey-green and putrid, there is pus, there are maggots (and they drop out), the bone
+  is stained yellow, and the blood is dark, thick and slow, with no pulse to jet it. Husks are dried leather that
+  splits to a sickly, poison-coloured ooze. Skeletons never bleed: they scuff, crack, chip into shards and shatter.
 
 ![Severed pieces with raw cut ends](docs/images/severed.png)
 
@@ -142,7 +148,8 @@ Tested alongside Sodium, Iris (without a shader pack), Lithium, FerriteCore, Ent
 | Play With Parts | On | Punch severed parts, pick them up and throw them, kick them by walking into them, stomp them flat. |
 | Blast Gore | On | Explosions shred, tear open and throw bodies by how close they were (see Explosions). |
 | Wounds | On | The hit-zone and wound system described above. |
-| Wounds on Monsters | Off | Wounds on hostile mobs too. |
+| Wounds on Monsters | On | Wounds on hostile mobs too. |
+| Rotten Undead | On | Zombies and their kin are rotting meat, with rotten wounds and dark, thick rotten blood. |
 | Wounds on Players | On | Wounds on other players. Everyone with the mod sees the same ones. |
 | Suffering | Medium | Screams, trembling, death throes and herd panic, separate from Gore Level. Off disables it. |
 | Scream Volume | 100% | Also follows the Friendly Creatures volume. |

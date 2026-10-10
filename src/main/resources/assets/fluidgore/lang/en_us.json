@@ -60,7 +60,9 @@
 	"fluidgore.option.wounds": "Wounds",
 	"fluidgore.option.wounds.tooltip": "Every blow lands where you aimed it on the body and leaves a wound there that worsens with each blow to the same spot: bruise, gash, open meat, then bone. A blade through a wound that cannot get any deeper takes the limb or head off. The Gore Level sets how deep wounds go: Low stops at gashes, Medium at open meat, High and Extreme reach the bone. Works on living animals and on bodies after death.",
 	"fluidgore.option.wound_hostiles": "Wounds on Monsters",
-	"fluidgore.option.wound_hostiles.tooltip": "Show wounds on hostile mobs too: zombies tear, husks split open to a sickly ooze, skeletons scuff and crack.",
+	"fluidgore.option.wound_hostiles.tooltip": "Show wounds on hostile mobs too: zombies rot open, husks split open to a sickly ooze, skeletons scuff and crack.",
+	"fluidgore.option.rotten_undead": "Rotten Undead",
+	"fluidgore.option.rotten_undead.tooltip": "Zombies, drowned, zombified piglins, zoglins and zombie horses are rotting meat: wounds marbled black and green, waxy fat, putrid muscle, pus and maggots, and thick dark rotten blood.",
 	"fluidgore.option.wound_players": "Wounds on Players",
 	"fluidgore.option.wound_players.tooltip": "Show wounds on other players. Everyone with the mod sees the same wounds in the same places; nothing changes on the server.",
 
@@ -108,6 +110,7 @@
 	"fluidgore.color.blue": "Blue",
 	"fluidgore.color.purple": "Purple",
 	"fluidgore.color.black": "Black",
+	"fluidgore.color.rotten": "Rotten",
 
 	"modmenu.descriptionTranslation.fluidgore": "Client-side cosmetic gore: blood spray, lasting blood decals, a lightweight blood fluid simulation and dismemberment. Works on vanilla servers."
 }

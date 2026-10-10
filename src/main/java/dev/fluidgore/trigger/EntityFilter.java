@@ -3,6 +3,7 @@ package dev.fluidgore.trigger;
 import dev.fluidgore.blood.BoneEmitter;
 import dev.fluidgore.config.BloodColor;
 import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.wound.Flesh;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -72,7 +73,16 @@ public final class EntityFilter {
 
 	public static BloodColor bloodType(LivingEntity entity) {
 		GoreConfig config = GoreConfig.get();
+		if (isRotten(entity)) {
+			return BloodColor.ROTTEN;
+		}
+
 		return entity instanceof Enemy ? config.monsterBloodColor : config.bloodColor;
+	}
+
+	/** A rotting body (zombies and their kin, with Rotten Undead on): its blood is old, thick and slow. */
+	public static boolean isRotten(LivingEntity entity) {
+		return GoreConfig.get().rottenUndead && Flesh.rotten(entity.getType());
 	}
 
 	public static boolean isBloodless(LivingEntity entity) {

@@ -75,6 +75,7 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 				OptionInstance.createBoolean("fluidgore.option.blast_gore", c.blastGore, v -> c.blastGore = v),
 				OptionInstance.createBoolean("fluidgore.option.wounds", c.wounds, v -> c.wounds = v),
 				OptionInstance.createBoolean("fluidgore.option.wound_hostiles", c.woundHostiles, v -> c.woundHostiles = v),
+				OptionInstance.createBoolean("fluidgore.option.rotten_undead", c.rottenUndead, v -> c.rottenUndead = v),
 				OptionInstance.createBoolean("fluidgore.option.wound_players", c.woundPlayers, v -> c.woundPlayers = v)
 		);
 

@@ -2,6 +2,25 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.2.0]
+
+Rotting zombies and slashes that look like real cuts.
+
+### Added
+- Slashes: swords, axes and flint leave long, narrow incised and chop wounds laid along the swing, gaping in the
+  middle and tapering at the ends, that open through bruised margins, the yellow rim of fat under the skin, the dark
+  split, muscle and a line of bone. A blade through a bruise turns it into a cut. Fists, clubs, points and teeth
+  still leave round, ragged wounds.
+- Rotten Undead (on by default): zombies, zombie villagers, drowned, zombified piglins, zoglins and zombie horses are
+  rotting meat. Their wounds show skin marbled black and green, fat turned to grey wax, black-brown clotted ooze,
+  grey-green putrid muscle, pus, maggots and stained bone; maggots drop out of deep wounds. Their blood is a new dark
+  "Rotten" colour, oozes at about half the rate, never spurts (no pulse), and slops out of a stump. Flesh pieces
+  knocked out of them are rotten too.
+- `rot` demo and game test.
+
+### Changed
+- Wounds on Monsters is on by default (existing configs are switched on once).
+
 ## [2.1.0]
 
 Deaths overhauled: every animal now goes down at once and dies out on the ground, the way real animals do.

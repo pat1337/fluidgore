@@ -50,6 +50,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			suffering(context, singleplayer.getServer());
 			hackModel(context, singleplayer.getServer());
 			sharedFate(context, singleplayer.getServer());
+			rot(context, singleplayer.getServer());
 			babies(context, singleplayer.getServer());
 			grief(context, singleplayer.getServer());
 			weapons(context, singleplayer.getServer());
@@ -592,6 +593,89 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 				"a blow along the player's view did not land on the head: " + outcome[0]);
 		check(outcome[0].equals(outcome[1]), "the same fight came out differently: " + outcome[0] + " vs " + outcome[1]);
 		server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");
+	}
+
+	/**
+	 * Rotting zombies and anatomical slashes: sword blows aimed at a zombie's body must open slashes (long cuts along the
+	 * swing) in rotten flesh, deep enough for maggots; punches must leave round wounds; its blood must be rotten; and a
+	 * cow must still be ordinary meat.
+	 */
+	private static void rot(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("tp @a 60.5 -60 0.5 0 10");
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:iron_sword");
+		// The helmet keeps the daylight from setting it alight.
+		server.runCommand("summon minecraft:zombie 60.5 -60 2.5 {NoAI:1b,Rotation:[180f,0f],equipment:{head:{id:\"minecraft:leather_helmet\"}}}");
+		server.runCommand("summon minecraft:cow 63.5 -60 2.5 {NoAI:1b,Rotation:[180f,0f]}");
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+		context.waitTicks(15);
+		int zombieId = context.computeOnClient(mc -> {
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e instanceof net.minecraft.world.entity.monster.zombie.Zombie) {
+					return e.getId();
+				}
+			}
+
+			return -1;
+		});
+		check(zombieId >= 0, "rot test zombie not found");
+		String blood = context.computeOnClient(mc -> dev.fluidgore.trigger.EntityFilter.bloodType((net.minecraft.world.entity.LivingEntity) mc.level.getEntity(zombieId)).name());
+		check("ROTTEN".equals(blood), "a zombie does not bleed rotten blood: " + blood);
+
+		// Four sword blows on the same spot of its chest, each aimed as the player sees it, cut deeper each time.
+		double[][] spots = {{0.0, 1.2}, {0.0, 1.2}, {0.0, 1.2}, {0.0, 1.2}};
+		for (double[] spot : spots) {
+			context.runOnClient(mc -> {
+				var zombie = (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(zombieId);
+				var at = zombie.position().add(spot[0], spot[1], 0.0);
+				aimAt(mc, at.x, at.y, at.z);
+				var eye = mc.player.getEyePosition();
+				GoreSystems.dismemberment().wounds().recordAim(zombie, eye, at.subtract(eye).normalize());
+			});
+			server.runCommand("execute as @p run damage @e[type=minecraft:zombie,limit=1] 3 minecraft:player_attack by @s");
+			context.waitTicks(14);
+		}
+
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");
+		context.runOnClient(mc -> {
+			var zombie = (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(zombieId);
+			var at = zombie.position().add(0.15, 0.6, 0.0);
+			aimAt(mc, at.x, at.y, at.z);
+			var eye = mc.player.getEyePosition();
+			GoreSystems.dismemberment().wounds().recordAim(zombie, eye, at.subtract(eye).normalize());
+		});
+		server.runCommand("execute as @p run damage @e[type=minecraft:zombie,limit=1] 2 minecraft:player_attack by @s");
+		context.waitTicks(14);
+		server.runCommand("tp @a 60.5 -60 1.1 0 25");
+		context.waitTicks(5);
+		context.takeScreenshot("rot_zombie_wounds");
+
+		String wounds = context.computeOnClient(mc -> {
+			var set = GoreSystems.dismemberment().wounds().get(zombieId);
+			return set == null ? "none" : set.flesh() + " slashes=" + set.count(dev.fluidgore.wound.WoundSet.SLASH) + " round="
+					+ set.count(dev.fluidgore.wound.WoundSet.ROUND) + " deepest=" + set.deepest();
+		});
+		System.out.println("[FluidGoreTest] rotten zombie: " + wounds);
+		check(wounds.startsWith("ROTTEN"), "the zombie's flesh is not rotten: " + wounds);
+		check(!wounds.contains("slashes=0"), "sword blows left no slashes: " + wounds);
+		check(!wounds.contains("round=0"), "a punch left no round wound: " + wounds);
+		float deepest = context.computeOnClient(mc -> GoreSystems.dismemberment().wounds().get(zombieId).deepest());
+		check(deepest >= 0.5F, "the slashes never got deep enough for maggots: " + deepest);
+
+		String cow = context.computeOnClient(mc -> {
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e instanceof net.minecraft.world.entity.animal.cow.Cow living) {
+					return dev.fluidgore.wound.Flesh.of(living).name();
+				}
+			}
+
+			return "none";
+		});
+		check("MEAT".equals(cow), "a cow is not ordinary meat: " + cow);
 	}
 
 	/** The head, or for babies without one (a chick is a single block) the first part the model has. */

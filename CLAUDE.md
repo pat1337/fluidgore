@@ -102,7 +102,11 @@ Mod Menu 21.0.0 (compile-only, soft dependency).
     decides targeted cuts. Other players' melee swings are cast along their synced view (`alongView`), so they land
     on the same spot on every screen. Only aimed blows sever precisely; guessed spots (mobs, projectiles) keep random severing.
   - `WoundRenderer` draws from `ModelFeatureRendererMixin` right after `renderToBuffer`, in the same part
-    transforms (`entityCutoutZOffset`, `wounds.png`). `Weapon` (blunt/flint/blade/chop/pick/pierce/bite/blast), `Flesh` (meat/bone/dried).
+    transforms (`entityCutoutZOffset`, `wounds.png`), as a stack of `Layer`s (row, opens-at severity, size, `Flesh.Tissue`):
+    `ROUND` or `SLASH` per wound (`WoundSet.morph`; `Weapon.slashes()`), with PUS and MAGGOTS slotted in before the
+    bone for `Flesh.rots()`. A slash's `variant % 4` is its angle (`WoundSet.slashVariant`: level along the face).
+    `Weapon` (blunt/flint/blade/chop/pick/pierce/bite/blast), `Flesh` (meat/bone/dried/rotten; `Flesh.rotten(type)` +
+    `rottenUndead`; `EntityFilter.isRotten` gives `BloodColor.ROTTEN`, half the bleed, no spurts).
 - `render/GoreRenderer`: draws decals, puddles, droplets, parts and removed corpses via
   `LevelRenderEvents.COLLECT_SUBMITS` and `submitCustomGeometry` / `submitModelPart` / the entity dispatcher.
 - `mixin/` (`fluidgore.mixins.json`, all client):
@@ -118,8 +122,9 @@ Mod Menu 21.0.0 (compile-only, soft dependency).
 `assets/fluidgore/textures/misc/blood.png` is a 4x4 atlas of 64px tiles, white/grey with alpha, tinted by vertex
 colour. Tiles 0-9 are smooth (splats 0-3, puddle 4, pool 5, droplet 6, footprint 7, streak 8, small splat 9) and
 10-15 are pixel-art "redstone" (splats 10-13, puddle 14, droplet 15). **The atlas is full.** Adding a tile means
-growing the grid (e.g. 8x4) and updating `BloodTextures.GRID` math and the generator. `wounds.png` is separate: a
-4x4 grid of 16px pixel-art tiles, one row per wound layer (bruise, gash, meat, bone), four variants. All PNGs come from
+growing the grid (e.g. 8x4) and updating `BloodTextures.GRID` math and the generator. `wounds.png` is separate: an
+8x11 grid of 16px greyscale tiles, eight variants per row: rows 0-3 round (bruise, gash, meat, bone), 4-8 slash (margin,
+fat, split, muscle, bone; column % 4 = angle), 9 pus, 10 maggots. All PNGs come from
 `tools/GenerateTextures.java` (deterministic seeds). Never hand-edit the PNG.
 
 ## Looking up APIs
@@ -182,3 +187,6 @@ severable parts; severed heads can't blink.
 - **2.1.0**: deaths overhauled (see `suffer/` above): the nine upright/running deaths and the headless run are gone;
   every body drops at once and dies on the ground in 3-5 s, shaped by eight causes. Corpse render clock fixes frozen
   kicking after server removal. Game test `deaths` rewritten (one cow per cause, sampled every tick). Demo: `deaths`.
+- **2.2.0**: anatomical slashes (incised/chop wounds along the swing, five tissue layers) and Rotten Undead (rotten
+  flesh tints, pus/maggot layers, falling maggots, `BloodColor.ROTTEN`, slow ooze, no spurts, rotten giblets).
+  `woundHostiles` on by default (`configVersion` 4). Game test: `rot`. Demo: `rot`.

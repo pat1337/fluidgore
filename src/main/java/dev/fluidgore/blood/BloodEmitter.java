@@ -105,10 +105,10 @@ public final class BloodEmitter {
 			chunks(level, origin, type, meatOf(entity), Math.round((lethal ? 14 : 6) * preset.particles * severity));
 		}
 
-		// Arteries are opened by edges and blasts, not by fists.
+		// Arteries are opened by edges and blasts, not by fists. A walking corpse has no pulse to jet with.
 		float spurtChance = Mth.clamp(damage / 14.0F + (lethal ? 0.35F : 0.0F) + (severity - 1.0F) * 0.2F, 0.0F, 0.9F) * Math.min(1.0F, preset.particles)
 				* Mth.clamp(open * open, 0.0F, 1.0F);
-		if (config.arterialSpurts && RANDOM.nextFloat() < spurtChance) {
+		if (config.arterialSpurts && !EntityFilter.isRotten(entity) && RANDOM.nextFloat() < spurtChance) {
 			Vec3 dir = new Vec3(RANDOM.nextGaussian() * 0.5 + (away != null ? away.x : 0.0), 0.6 + RANDOM.nextDouble() * 0.6,
 					RANDOM.nextGaussian() * 0.5 + (away != null ? away.z : 0.0));
 			int life = Math.round((20 + RANDOM.nextInt(40)) * preset.duration);
@@ -144,7 +144,10 @@ public final class BloodEmitter {
 			crunch(level, at, 1.0F);
 		}
 
-		if (config.arterialSpurts) {
+		if (EntityFilter.isRotten(entity)) {
+			// No heartbeat: the rot just slops out of the stump.
+			drip(world, stump.get(), rgb, 0.06F * preset.puddles);
+		} else if (config.arterialSpurts) {
 			int life = Math.round((30 + RANDOM.nextInt(40)) * preset.duration);
 			world.spurts().start(stump, new Vec3(RANDOM.nextGaussian() * 0.4, 1.0, RANDOM.nextGaussian() * 0.4), rgb, life, 1.1F);
 			world.spurts().start(part, new Vec3(RANDOM.nextGaussian(), 0.3, RANDOM.nextGaussian()), rgb, life / 2, 0.6F);

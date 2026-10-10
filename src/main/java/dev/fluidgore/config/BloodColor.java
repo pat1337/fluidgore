@@ -16,7 +16,9 @@ public enum BloodColor {
 	YELLOW(0xB59A12, () -> Blocks.HONEY_BLOCK),
 	BLUE(0x1E3F9C, () -> Blocks.LAPIS_BLOCK),
 	PURPLE(0x5B1A7A, () -> Blocks.AMETHYST_BLOCK),
-	BLACK(0x1A1414, () -> Blocks.COAL_BLOCK);
+	BLACK(0x1A1414, () -> Blocks.COAL_BLOCK),
+	/** What is left in a walking corpse: dark, brown and clotted. */
+	ROTTEN(0x3A2414, () -> Blocks.MUD);
 
 	public final int rgb;
 	private final Supplier<Block> chunkBlock;

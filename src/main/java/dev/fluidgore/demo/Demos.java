@@ -22,6 +22,7 @@ import org.jspecify.annotations.Nullable;
  */
 public final class Demos {
 	public static final List<Demo> ALL = List.of(
+			new Demo("rot", "2.2.0", "A zombie hacked open: slashes along the swing into rotting flesh, pus and maggots", false, Demos::rot),
 			new Demo("deaths", "2.1.0", "Eight cows, eight causes of death: each drops at once, then rigid, paddling, gasps, still", false, Demos::deaths),
 			new Demo("burnt", "1.8.0", "A chicken and a pig burnt alive: they char black, smoke and leave scorch marks", false, Demos::burnt),
 			new Demo("evidence", "1.8.0", "A pig beaten to death on Extreme: the body and the blood stay as evidence", false, Demos::evidence),
@@ -88,7 +89,37 @@ public final class Demos {
 		s.hit("fgd_cow" + kinds.length, 100.0F).say("And the rare one (one in twenty): when it finally goes, it bursts").pause(300);
 	}
 
-	/** Set alight where they stand: they char as they burn, writhe, and lie charred and smoking. */
+/**
+ * A zombie (in a helmet, so the daylight leaves it be) slashed with a sword and chopped with an axe: long cuts along
+ * the swing, through marbled skin and waxy fat into grey-green muscle, pus and maggots. A cow beside it for
+ * comparison: the same sword, fresh red meat.
+ */
+private static void rot(Script s, Stage st) {
+	s.summon(st, "zombie", "fgd_zombie", -1.2, 0, 3, 180.0F, "equipment:{head:{id:\"minecraft:leather_helmet\"}}");
+	s.summon(st, "cow", "fgd_cow", 1.6, 0, 3.5, 90.0F, "");
+	s.pause(20).hold("minecraft:iron_sword").say("A sword on a zombie: long cuts along the swing, into rotting flesh");
+	for (int i = 0; i < 4; i++) {
+		s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.ZOMBIE, -1.2, 0, 3), null));
+		s.hit("fgd_zombie", 3.0F).pause(16);
+	}
+
+	s.say("Marbled skin, grey waxy fat, black ooze, putrid muscle, pus, maggots").pause(60);
+	s.hold("minecraft:iron_axe").say("An axe chops wider and deeper, down to stained bone");
+	for (int i = 0; i < 2; i++) {
+		s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.ZOMBIE, -1.2, 0, 3), null));
+		s.hit("fgd_zombie", 3.0F).pause(18);
+	}
+
+	s.hold("minecraft:iron_sword").say("The same sword on a cow: fresh red meat and yellow fat");
+	for (int i = 0; i < 3; i++) {
+		s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.COW, 1.6, 0, 3.5), null));
+		s.hit("fgd_cow", 2.0F).pause(16);
+	}
+
+	s.pause(200);
+}
+
+/** Set alight where they stand: they char as they burn, writhe, and lie charred and smoking. */
 	private static void burnt(Script s, Stage st) {
 		s.summon(st, "chicken", "fgd_chicken", -1, 0, 3, 90.0F, "");
 		s.summon(st, "pig", "fgd_pig", 1.5, 0, 3.5, 90.0F, "");

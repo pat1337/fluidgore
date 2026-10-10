@@ -204,7 +204,9 @@ public final class DamageTracker {
 			// No attacker and no blast: a fall, fire, drowning. Bruising and a little bleeding.
 			// Fire sears the flesh shut instead: it chars (see Burns) but does not bleed.
 			if (hit == null || !hit.fire()) {
-				BloodEmitter.bleed(blood, level, victim, damage, lethal, away, weapon != null ? weapon.bleed : 0.25F);
+				// What is in a walking corpse is old and thick: it oozes rather than sprays.
+				float flow = EntityFilter.isRotten(victim) ? 0.55F : 1.0F;
+				BloodEmitter.bleed(blood, level, victim, damage, lethal, away, (weapon != null ? weapon.bleed : 0.25F) * flow);
 			}
 
 			Wounds.Strike wound = weapon == null ? null : blastAt != null

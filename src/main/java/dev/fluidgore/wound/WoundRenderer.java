@@ -13,17 +13,38 @@ import org.joml.Vector3f;
 
 /**
  * Draws a body's wounds right after its model, inside the same part transforms, so they move with every limb.
- * Each wound is up to four stacked pixel-art quads (bruise, gash, meat, bone), each a little smaller and a hair
- * further out than the one below, clipped to the cube face they sit on. Cutout with a polygon offset: no sorting
+ * Each wound is a stack of pixel-art quads, one per tissue it has been opened down to (see {@link Layer}), each a
+ * hair further out than the one below, clipped to the cube face they sit on. Cutout with a polygon offset: no sorting
  * and no z-fighting with the skin underneath.
  */
 public final class WoundRenderer {
 	public static final Identifier TEXTURE = Identifier.fromNamespaceAndPath("fluidgore", "textures/misc/wounds.png");
-	/** Size of each layer relative to the wound radius: the bruise spreads wider than the cut, bone is a knob. */
-	private static final float[] LAYER_SIZE = {1.3F, 1.0F, 0.8F, 0.5F};
+	/**
+	 * One tissue of a wound: its row in wounds.png, the severity at which it opens, its size relative to the wound
+	 * radius and what it is (for its colour).
+	 */
+	private record Layer(int row, float opens, float size, Flesh.Tissue tissue) {
+	}
+
+	/** A round wound: the bruise spreads wider than the tear, the meat under it, a knob of bone. */
+	private static final Layer[] ROUND = {
+			new Layer(0, 0.0F, 1.3F, Flesh.Tissue.BRUISE), new Layer(1, 0.25F, 1.0F, Flesh.Tissue.SPLIT),
+			new Layer(2, 0.5F, 0.8F, Flesh.Tissue.MUSCLE), new Layer(3, 0.75F, 0.5F, Flesh.Tissue.BONE)};
+	/** A slash: bruised margins, the fat under the skin, the gaping split, muscle in its depth, a line of bone. */
+	private static final Layer[] SLASH = {
+			new Layer(4, 0.0F, 1.15F, Flesh.Tissue.BRUISE), new Layer(5, 0.2F, 1.0F, Flesh.Tissue.FAT),
+			new Layer(6, 0.25F, 0.95F, Flesh.Tissue.SPLIT), new Layer(7, 0.45F, 0.85F, Flesh.Tissue.MUSCLE),
+			new Layer(8, 0.75F, 0.7F, Flesh.Tissue.BONE)};
+	/** Rot in a zombie's wound, over the meat and under the bone: pus once it is open, maggots once it is deep. */
+	private static final Layer PUS = new Layer(9, 0.3F, 0.9F, Flesh.Tissue.PUS);
+	private static final Layer MAGGOTS = new Layer(10, 0.5F, 0.85F, Flesh.Tissue.MAGGOTS);
+	private static final Layer[] ROUND_ROTTEN = rotten(ROUND);
+	private static final Layer[] SLASH_ROTTEN = rotten(SLASH);
 	/** Outward lift per layer, in model pixels, so the layers stack instead of fighting. */
 	private static final float LIFT = 0.02F;
-	private static final float TILE = 0.25F;
+	/** wounds.png is 8 tiles across and 11 down. */
+	private static final float TILE_U = 1.0F / 8.0F;
+	private static final float TILE_V = 1.0F / 11.0F;
 
 	private static final Vector3f POS = new Vector3f();
 	private static final Vector3f NORMAL = new Vector3f();
@@ -32,7 +53,17 @@ public final class WoundRenderer {
 	private WoundRenderer() {
 	}
 
-	public static RenderType renderType() {
+/** The layers with the rot slotted in before the bone. */
+private static Layer[] rotten(Layer[] layers) {
+	Layer[] out = new Layer[layers.length + 2];
+	System.arraycopy(layers, 0, out, 0, layers.length - 1);
+	out[layers.length - 1] = PUS;
+	out[layers.length] = MAGGOTS;
+	out[layers.length + 1] = layers[layers.length - 1];
+	return out;
+}
+
+public static RenderType renderType() {
 		return RenderTypes.entityCutoutZOffset(TEXTURE);
 	}
 
@@ -82,15 +113,17 @@ public final class WoundRenderer {
 		float face = set.sign[i] > 0 ? max[a] : min[a];
 		float severity = set.severity[i];
 		pose.transformNormal(NORMAL.set(0.0F).setComponent(a, set.sign[i]), NORMAL);
-		for (int layer = 0; layer < WoundSet.LAYERS; layer++) {
-			float start = layer * 0.25F;
-			if (layer > 0 && severity <= start) {
-				break;
+		boolean slash = set.morph[i] == WoundSet.SLASH;
+		Layer[] layers = set.flesh.rots() ? slash ? SLASH_ROTTEN : ROUND_ROTTEN : slash ? SLASH : ROUND;
+		for (int n = 0; n < layers.length; n++) {
+			Layer layer = layers[n];
+			if (layer.opens() > 0.0F && severity <= layer.opens()) {
+				continue;
 			}
 
 			// Each layer grows in as the wound deepens through it.
-			float grow = Mth.clamp((severity - start) / 0.25F + 0.4F, 0.4F, 1.0F);
-			float r = set.radius[i] * LAYER_SIZE[layer] * grow;
+			float grow = Mth.clamp((severity - layer.opens()) / 0.25F + 0.4F, 0.4F, 1.0F);
+			float r = set.radius[i] * layer.size() * grow;
 			float b0 = Math.max(min[b], set.u[i] - r);
 			float b1 = Math.min(max[b], set.u[i] + r);
 			float c0 = Math.max(min[c], set.v[i] - r);
@@ -99,15 +132,16 @@ public final class WoundRenderer {
 				continue;
 			}
 
-			float tu = set.variant[i] * TILE;
-			float tv = layer * TILE;
-			float span = TILE / (2.0F * r);
-			float u0 = tu + (b0 - (set.u[i] - r)) * span;
-			float u1 = tu + (b1 - (set.u[i] - r)) * span;
-			float v0 = tv + (c0 - (set.v[i] - r)) * span;
-			float v1 = tv + (c1 - (set.v[i] - r)) * span;
-			float depth = face + set.sign[i] * LIFT * (layer + 1);
-			int color = 0xFF000000 | set.flesh.tint(layer, set.blood);
+			float tu = set.variant[i] * TILE_U;
+			float tv = layer.row() * TILE_V;
+			float spanU = TILE_U / (2.0F * r);
+			float spanV = TILE_V / (2.0F * r);
+			float u0 = tu + (b0 - (set.u[i] - r)) * spanU;
+			float u1 = tu + (b1 - (set.u[i] - r)) * spanU;
+			float v0 = tv + (c0 - (set.v[i] - r)) * spanV;
+			float v1 = tv + (c1 - (set.v[i] - r)) * spanV;
+			float depth = face + set.sign[i] * LIFT * (n + 1);
+			int color = 0xFF000000 | set.flesh.tint(layer.tissue(), set.blood);
 			Matrix4f m = pose.pose();
 			vertex(buffer, m, a, b, c, depth, b0, c0, color, u0, v0, light, overlay);
 			vertex(buffer, m, a, b, c, depth, b1, c0, color, u1, v0, light, overlay);

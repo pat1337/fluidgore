@@ -1,19 +1,31 @@
 package dev.fluidgore.wound;
 
+import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.trigger.EntityFilter;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.LivingEntity;
 
 /**
- * What a body is made of, which decides how each wound layer looks. Layers are bruise, gash, open meat and bone.
- * Ordinary flesh takes its colours from the creature's blood; skeletons scuff and crack; husks and camel husks are dried leather
- * that splits to show a sickly, poison-coloured ooze.
+ * What a body is made of, which decides the colour of each tissue a wound opens down through. Ordinary flesh takes its
+ * colours from the creature's blood; skeletons scuff and crack; husks and camel husks are dried leather that splits to
+ * show a sickly, poison-coloured ooze; zombies are rotting meat.
  */
 public enum Flesh {
 	MEAT,
 	BONE,
-	DRIED;
+	DRIED,
+	/**
+	 * A walking corpse, as decomposition really goes: the skin round a wound marbles green-black and purple, the fat
+	 * under it has turned to grey wax (adipocere), what is in the cut is black-brown clotted ooze, the muscle is
+	 * grey-green and soft, there is pus, there are maggots, and the bone is stained yellow-brown.
+	 */
+	ROTTEN;
+
+	/** The tissues a wound shows, from the skin down, plus the rot that lives in it. */
+	public enum Tissue {
+		BRUISE, FAT, SPLIT, MUSCLE, BONE, PUS, MAGGOTS
+	}
 
 	private static final int POISON_OOZE = 0x6E8A3A;
 
@@ -23,33 +35,63 @@ public enum Flesh {
 		}
 
 		EntityType<?> type = entity.getType();
-		return type == EntityTypes.HUSK || type == EntityTypes.CAMEL_HUSK ? DRIED : MEAT;
+		if (type == EntityTypes.HUSK || type == EntityTypes.CAMEL_HUSK) {
+			return DRIED;
+		}
+
+		return rotten(type) && GoreConfig.get().rottenUndead ? ROTTEN : MEAT;
+	}
+
+	/** The undead that are rotting meat (husks are dried out instead, and skeletons are bone). */
+	public static boolean rotten(EntityType<?> type) {
+		return type == EntityTypes.ZOMBIE || type == EntityTypes.ZOMBIE_VILLAGER || type == EntityTypes.DROWNED
+				|| type == EntityTypes.ZOMBIFIED_PIGLIN || type == EntityTypes.ZOGLIN || type == EntityTypes.ZOMBIE_HORSE;
 	}
 
 	public boolean bleeds() {
 		return this != BONE;
 	}
 
-	/** Opaque RGB tint of wound layer 0-3 on a creature whose blood is {@code blood}. */
-	public int tint(int layer, int blood) {
+	/** True if this flesh has pus and maggots in its wounds. */
+	public boolean rots() {
+		return this == ROTTEN;
+	}
+
+	/** Opaque RGB tint of {@code tissue} on a creature whose blood is {@code blood}. */
+	public int tint(Tissue tissue, int blood) {
 		return switch (this) {
-			case MEAT -> switch (layer) {
-				case 0 -> mix(scale(blood, 0.5F), 0x3A1F3D, 0.55F);
-				case 1 -> scale(blood, 0.8F);
-				case 2 -> rgb(r(blood) * 0.7F + 80.0F, g(blood) * 0.55F + 38.0F, b(blood) * 0.55F + 42.0F);
-				default -> 0xE6DDC8;
+			case MEAT -> switch (tissue) {
+				case BRUISE -> mix(scale(blood, 0.5F), 0x3A1F3D, 0.55F);
+				case FAT -> 0xE8D59A;
+				case SPLIT -> scale(blood, 0.8F);
+				case MUSCLE -> rgb(r(blood) * 0.7F + 80.0F, g(blood) * 0.55F + 38.0F, b(blood) * 0.55F + 42.0F);
+				case BONE -> 0xE6DDC8;
+				case PUS -> 0xC8C060;
+				case MAGGOTS -> 0xF0EBD8;
 			};
-			case BONE -> switch (layer) {
-				case 0 -> 0x9A968C;
-				case 1 -> 0x4A463F;
-				case 2 -> 0xB8B09A;
-				default -> 0xD8D2C0;
+			case BONE -> switch (tissue) {
+				case BRUISE -> 0x9A968C;
+				case FAT, MUSCLE -> 0xB8B09A;
+				case SPLIT -> 0x4A463F;
+				case BONE, PUS, MAGGOTS -> 0xD8D2C0;
 			};
-			case DRIED -> switch (layer) {
-				case 0 -> 0x5E5A3A;
-				case 1 -> POISON_OOZE;
-				case 2 -> 0x8A7A55;
-				default -> 0xD8CFB0;
+			case DRIED -> switch (tissue) {
+				case BRUISE -> 0x5E5A3A;
+				case FAT -> 0xA8986A;
+				case SPLIT -> POISON_OOZE;
+				case MUSCLE -> 0x8A7A55;
+				case BONE -> 0xD8CFB0;
+				case PUS -> 0x9AA040;
+				case MAGGOTS -> 0xE8E0C8;
+			};
+			case ROTTEN -> switch (tissue) {
+				case BRUISE -> 0x3B3D25;
+				case FAT -> 0xB5B08C;
+				case SPLIT -> 0x2A1A10;
+				case MUSCLE -> 0x6B5E3A;
+				case BONE -> 0xBFAE7A;
+				case PUS -> 0x9FA63A;
+				case MAGGOTS -> 0xEDE6CF;
 			};
 		};
 	}

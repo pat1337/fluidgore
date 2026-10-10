@@ -114,7 +114,12 @@ public final class GoreConfig {
 	 */
 	public boolean wounds = true;
 	/** Wounds on hostile mobs as well as animals. */
-	public boolean woundHostiles = false;
+	public boolean woundHostiles = true;
+	/**
+	 * Zombies and their kin are rotting meat: rotten wounds with pus and maggots, and dark, thick, slow rotten blood
+	 * instead of the monster blood colour.
+	 */
+	public boolean rottenUndead = true;
 	/** Wounds on other players. Everyone with the mod sees the same wounds (see trigger/Fate). */
 	public boolean woundPlayers = true;
 	/** Severed parts can be punched, kicked, picked up, thrown and stomped. */
@@ -205,7 +210,7 @@ public final class GoreConfig {
 	}
 
 	/** Repairs values that a hand-edited file may have broken (missing enums, negative caps, null lists). */
-	private static final int CONFIG_VERSION = 3;
+	private static final int CONFIG_VERSION = 4;
 
 	private void sanitize() {
 		if (configVersion < 2) {
@@ -216,6 +221,11 @@ public final class GoreConfig {
 		if (configVersion < 3) {
 			// 2.0: wounds on players were off because each screen showed different ones. Now every player sees the same.
 			woundPlayers = true;
+		}
+
+		if (configVersion < 4) {
+			// 2.2: monsters got their own wounds (rotting zombies, anatomical slashes), so they are shown by default.
+			woundHostiles = true;
 		}
 
 		configVersion = CONFIG_VERSION;

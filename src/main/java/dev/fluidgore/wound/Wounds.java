@@ -16,12 +16,15 @@ import net.fabricmc.fabric.api.client.rendering.v1.RenderStateDataKey;
 import net.minecraft.client.model.Model;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
@@ -37,6 +40,8 @@ public final class Wounds {
 	private static final int AIM_TICKS = 10;
 	private static final double REACH = 8.0;
 	private static final RandomSource RANDOM = Fate.stream("wounds");
+	/** A maggot falling out of a rotting wound: a pale speck that drops to the ground. */
+	private static final BlockParticleOption MAGGOT = new BlockParticleOption(ParticleTypes.FALLING_DUST, Blocks.BONE_BLOCK.defaultBlockState());
 	/** Pitch and yaw offsets, in degrees, tried in order when another player's view ray misses the body. */
 	private static final float[][] VIEW_NUDGES = {{0, 0}, {2, 0}, {-2, 0}, {0, 2}, {0, -2}, {4, 0}, {-4, 0}, {0, 4}, {0, -4}};
 
@@ -298,7 +303,16 @@ public final class Wounds {
 				}
 
 				Vec3 offset = new Vec3(set.ox[i], set.oy[i], set.oz[i]).yRot((set.yaw[i] - yaw) * Mth.DEG_TO_RAD);
-				BloodEmitter.drip(blood, base.add(offset), set.blood, 0.004F * severity * puddles);
+				Vec3 at = base.add(offset);
+				if (set.flesh.rots()) {
+					// A rotting wound seeps slowly, and now and then a maggot drops out of a deep one.
+					BloodEmitter.drip(blood, at, set.blood, 0.002F * severity * puddles);
+					if (severity >= 0.5F && RANDOM.nextFloat() < 0.25F) {
+						level.addParticle(MAGGOT, at.x, at.y, at.z, 0.0, 0.0, 0.0);
+					}
+				} else {
+					BloodEmitter.drip(blood, at, set.blood, 0.004F * severity * puddles);
+				}
 			}
 		}
 	}

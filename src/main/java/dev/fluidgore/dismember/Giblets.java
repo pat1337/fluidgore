@@ -129,7 +129,7 @@ public final class Giblets {
 			Tissue t = switch (flesh) {
 				case BONE -> Tissue.BONE;
 				case DRIED -> RANDOM.nextFloat() < 0.3F ? Tissue.BONE : RANDOM.nextFloat() < 0.4F ? Tissue.HIDE : Tissue.MUSCLE;
-				case MEAT -> innards ? Tissue.pickInnards(RANDOM.nextFloat()) : Tissue.pick(RANDOM.nextFloat());
+				case MEAT, ROTTEN -> innards ? Tissue.pickInnards(RANDOM.nextFloat()) : Tissue.pick(RANDOM.nextFloat());
 			};
 			if (t == Tissue.HIDE && skinTexture == null) {
 				t = Tissue.MUSCLE;
@@ -251,6 +251,17 @@ private static int tint(Tissue t, Flesh flesh) {
 		int base = t == Tissue.ORGAN && RANDOM.nextBoolean() ? 0xD48A8E : t.rgb;
 		if (flesh == Flesh.DRIED && t == Tissue.MUSCLE) {
 			base = 0x6B5A3C;
+		} else if (flesh == Flesh.ROTTEN) {
+			// Rotting: grey-green muscle, waxy grey fat, black-brown guts and organs, stained bone.
+			base = switch (t) {
+				case MUSCLE -> 0x6B5E3A;
+				case FAT -> 0xB5B08C;
+				case BONE -> 0xBFAE7A;
+				case GUT -> 0x5E4A30;
+				case ORGAN -> 0x3A2818;
+				case BLOOD -> 0x3A2414;
+				default -> base;
+			};
 		}
 
 		// Every piece a little different.

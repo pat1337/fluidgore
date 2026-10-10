@@ -411,16 +411,29 @@ public final class GenerateTextures {
 
 
 	/**
-	 * wounds.png: a 4x4 grid of 16px pixel-art tiles, one row per wound layer (bruise, gash, open meat, bone), four
-	 * variants each. Greyscale with hard alpha; the game tints each layer by the creature's blood and flesh colour.
+	 * wounds.png: an 8x11 grid of 16px pixel-art tiles, greyscale with hard alpha; the game tints each by the body's
+	 * flesh and blood. Eight variants per row.
+	 * <ul>
+	 * <li>Rows 0-3, round wounds (lacerations from fists, clubs, teeth, points): bruise, gash, open meat, bone.</li>
+	 * <li>Rows 4-8, slashes (incised and chop wounds), long and narrow along the cut: bruised margin, the yellow rim of
+	 *     fat under the skin, the dark split, muscle in the depth, a line of bone. Column {@code c} runs at
+	 *     {@code (c % 4) * 45} degrees, so the game can lay a slash along the swing.</li>
+	 * <li>Rows 9-10, rot (zombies): beads of pus, and maggots.</li>
+	 * </ul>
 	 */
 	private static BufferedImage wounds() {
-		BufferedImage image = new BufferedImage(64, 64, BufferedImage.TYPE_INT_ARGB);
-		for (int v = 0; v < 4; v++) {
-			woundTile(image, 0, v, new Random(11000 + v));
-			woundTile(image, 1, v, new Random(12000 + v));
-			woundTile(image, 2, v, new Random(13000 + v));
-			woundTile(image, 3, v, new Random(14000 + v));
+		BufferedImage image = new BufferedImage(128, 176, BufferedImage.TYPE_INT_ARGB);
+		for (int v = 0; v < 8; v++) {
+			for (int layer = 0; layer < 4; layer++) {
+				woundTile(image, layer, v, new Random(11000 + layer * 1000 + v));
+			}
+
+			for (int sub = 0; sub < 5; sub++) {
+				slashTile(image, sub, v, new Random(21000 + sub * 1000 + v));
+			}
+
+			rotTile(image, 0, v, new Random(31000 + v));
+			rotTile(image, 1, v, new Random(32000 + v));
 		}
 
 		return image;
@@ -429,8 +442,8 @@ public final class GenerateTextures {
 	private static void woundTile(BufferedImage image, int layer, int variant, Random random) {
 		int ox = variant * 16;
 		int oy = layer * 16;
-		// A slash runs at one of four angles; the other layers are lumpy blobs.
-		double angle = variant * Math.PI / 4.0 + (random.nextDouble() - 0.5) * 0.3;
+		// The gash runs at one of four angles; the other layers are lumpy blobs.
+		double angle = (variant % 4) * Math.PI / 4.0 + (random.nextDouble() - 0.5) * 0.3;
 		double ca = Math.cos(angle);
 		double sa = Math.sin(angle);
 		double[] lumps = new double[8];
@@ -486,6 +499,120 @@ public final class GenerateTextures {
 				}
 
 				image.setRGB(ox + x, oy + y, inside ? argb(1.0, light) : 0);
+			}
+		}
+	}
+
+	/**
+	 * One layer of a slash, at {@code (variant % 4) * 45} degrees. A cut gapes most in the middle and tapers to sharp
+	 * ends (a lens); the skin's edges bruise, the fat under them shows as a pale rim, and the muscle and bone show
+	 * only down the middle of a deep one.
+	 */
+	private static void slashTile(BufferedImage image, int sub, int variant, Random random) {
+		int ox = variant * 16;
+		int oy = (4 + sub) * 16;
+		double angle = (variant % 4) * Math.PI / 4.0 + (random.nextDouble() - 0.5) * 0.12;
+		double ca = Math.cos(angle);
+		double sa = Math.sin(angle);
+		// Slight curve and an uneven gape, so no two cuts are alike.
+		double bend = (random.nextDouble() - 0.5) * 0.25;
+		double skew = (random.nextDouble() - 0.5) * 0.3;
+		for (int y = 0; y < 16; y++) {
+			for (int x = 0; x < 16; x++) {
+				double dx = (x + 0.5 - 8.0) / 8.0;
+				double dy = (y + 0.5 - 8.0) / 8.0;
+				double along = dx * ca + dy * sa;
+				double across = -dx * sa + dy * ca - bend * (1.0 - along * along);
+				double taper = Math.max(0.0, 1.0 - Math.pow(Math.abs(along + skew * 0.3) / 0.98, 2.2));
+				double noise = random.nextDouble();
+				double width;
+				boolean inside;
+				double light;
+				switch (sub) {
+					case 0 -> {
+						// Margin: bruised, abraded skin either side of the cut, breaking up at its edge.
+						width = 0.36 * taper + 0.04;
+						inside = Math.abs(across) < width * (noise < 0.35 ? 1.15 : 0.9) && Math.abs(along) < 1.0;
+						light = 0.5 + noise * 0.35 - Math.abs(across) / Math.max(0.05, width) * 0.15;
+					}
+					case 1 -> {
+						// Fat: a lumpy pale band just inside the skin edge, globules catching the light.
+						width = 0.24 * taper;
+						double inner = width * 0.55;
+						inside = Math.abs(across) < width && Math.abs(across) > inner * (0.8 + noise * 0.3);
+						light = 0.8 + noise * 0.2;
+					}
+					case 2 -> {
+						// The split: the gaping cut itself, dark and wet, darkest along its middle.
+						width = 0.2 * taper + (noise - 0.5) * 0.03;
+						inside = Math.abs(across) < width;
+						light = Math.abs(across) < width * 0.45 ? 0.18 + noise * 0.08 : 0.4 + noise * 0.15;
+					}
+					case 3 -> {
+						// Muscle: red fibres running across the depth of the cut, with wet highlights.
+						width = 0.14 * taper;
+						inside = Math.abs(across) < width;
+						boolean fibre = Math.floorMod((int) Math.floor(along * 9.0 + noise * 0.5), 2) == 0;
+						light = fibre ? 0.55 + noise * 0.1 : 0.8 + noise * 0.15;
+						if (noise > 0.95) {
+							light = 1.0;
+						}
+					}
+					default -> {
+						// Bone: a pale line at the bottom of the cut, notched where the edge bit into it.
+						width = 0.055;
+						inside = Math.abs(across) < width && Math.abs(along) < 0.55;
+						light = 0.9 + noise * 0.1;
+						if (Math.abs(along) < 0.08) {
+							light = 0.45;
+						}
+					}
+				}
+
+				image.setRGB(ox + x, oy + y, inside ? argb(1.0, light) : 0);
+			}
+		}
+	}
+
+	/** Rot on a zombie's wounds: beads of pus ({@code kind} 0) or a few maggots ({@code kind} 1), scattered over it. */
+	private static void rotTile(BufferedImage image, int kind, int variant, Random random) {
+		int ox = variant * 16;
+		int oy = (9 + kind) * 16;
+		if (kind == 0) {
+			int beads = 5 + random.nextInt(4);
+			for (int k = 0; k < beads; k++) {
+				double angle = random.nextDouble() * Math.PI * 2.0;
+				double dist = random.nextDouble() * 5.0;
+				int cx = (int) Math.round(8 + Math.cos(angle) * dist);
+				int cy = (int) Math.round(8 + Math.sin(angle) * dist);
+				int size = random.nextDouble() < 0.4 ? 2 : 1;
+				for (int y = cy - size + 1; y <= cy; y++) {
+					for (int x = cx - size + 1; x <= cx; x++) {
+						if (x >= 0 && x < 16 && y >= 0 && y < 16) {
+							image.setRGB(ox + x, oy + y, argb(1.0, x == cx - size + 1 && y == cy - size + 1 ? 1.0 : 0.75 + random.nextDouble() * 0.15));
+						}
+					}
+				}
+			}
+
+			return;
+		}
+
+		int maggots = 4 + random.nextInt(4);
+		for (int k = 0; k < maggots; k++) {
+			double angle = random.nextDouble() * Math.PI * 2.0;
+			double dist = random.nextDouble() * 4.5;
+			int cx = (int) Math.round(8 + Math.cos(angle) * dist);
+			int cy = (int) Math.round(8 + Math.sin(angle) * dist);
+			// A grub two or three pixels long, its head darker.
+			boolean flat = random.nextBoolean();
+			int length = 2 + random.nextInt(2);
+			for (int s = 0; s < length; s++) {
+				int x = flat ? cx + s : cx;
+				int y = flat ? cy : cy + s;
+				if (x >= 0 && x < 16 && y >= 0 && y < 16) {
+					image.setRGB(ox + x, oy + y, argb(1.0, s == 0 ? 0.7 : 0.95 + random.nextDouble() * 0.05));
+				}
 			}
 		}
 	}

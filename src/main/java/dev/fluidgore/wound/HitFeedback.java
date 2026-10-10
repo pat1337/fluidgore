@@ -42,7 +42,7 @@ public final class HitFeedback {
 		Vec3 away = strike.hit().normal().scale(0.6).add(dir.scale(0.45)).add(0.0, 0.15, 0.0);
 		if (away.lengthSqr() > 1.0E-6) {
 			int count = Math.round((3 + 10 * depth) * weapon.bleed);
-			int color = flesh == Flesh.BONE ? BoneEmitter.BONE : flesh == Flesh.DRIED ? flesh.tint(1, rgb) : rgb;
+			int color = flesh == Flesh.BONE ? BoneEmitter.BONE : flesh == Flesh.DRIED ? flesh.tint(Flesh.Tissue.SPLIT, rgb) : rgb;
 			if (count > 0) {
 				BloodEmitter.cut(blood, level, at, away.normalize(), color, (0.01F + 0.04F * depth) * weapon.bleed, count);
 			}

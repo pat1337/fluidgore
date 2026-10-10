@@ -12,12 +12,15 @@ import org.jspecify.annotations.Nullable;
 /**
  * Every wound on one body, painted on the faces of its model's cubes in each part's own space, so they follow the
  * animation for free. A wound is a spot on one cube face with a radius and a severity from 0 to 1 that walks
- * through four layers: bruise, gash (0.25), open meat (0.5) and bone (0.75). Fixed-size arrays; when full, the
- * shallowest wound makes room.
+ * through four layers: bruise, gash (0.25), open meat (0.5) and bone (0.75). A wound is either round (a ragged
+ * laceration from a fist, club, point or tooth) or a slash (a long incised or chop wound laid along the swing). Fixed-size
+ * arrays; when full, the shallowest wound makes room.
  */
 public final class WoundSet {
 	public static final int MAX = 32;
 	public static final int LAYERS = 4;
+	public static final byte ROUND = 0;
+	public static final byte SLASH = 1;
 	/** Widest a wound can be hacked open, in model pixels. */
 	private static final float MAX_RADIUS = 4.5F;
 
@@ -36,7 +39,10 @@ public final class WoundSet {
 	final @Nullable BodyPart[] bodyPart = new BodyPart[MAX];
 	final byte[] axis = new byte[MAX];
 	final byte[] sign = new byte[MAX];
+	/** Texture column 0-7. For a slash, {@code variant % 4} is its angle on the face in steps of 45 degrees. */
 	final byte[] variant = new byte[MAX];
+	/** {@link #ROUND} or {@link #SLASH}. */
+	final byte[] morph = new byte[MAX];
 	/** Position on the face along the two in-plane axes (axis + 1, axis + 2), in model pixels. */
 	final float[] u = new float[MAX];
 	final float[] v = new float[MAX];
@@ -91,6 +97,12 @@ public final class WoundSet {
 			float before = severity[i];
 			severity[i] = Math.max(before, Math.min(cap, before + amount));
 			radius[i] = Math.min(MAX_RADIUS, radius[i] + weapon.radius * weapon.spread * Math.min(1.0F, amount * 2.0F));
+			if (weapon.slashes() && morph[i] == ROUND) {
+				// A blade through a bruise: now it is a cut.
+				morph[i] = SLASH;
+				variant[i] = (byte) slashVariant(hit.axis(), random);
+			}
+
 			return new Change(i, before, severity[i]);
 		}
 
@@ -100,10 +112,12 @@ public final class WoundSet {
 		bodyPart[i] = hit.bodyPart();
 		axis[i] = (byte) hit.axis();
 		sign[i] = (byte) hit.sign();
-		variant[i] = (byte) random.nextInt(4);
+		morph[i] = weapon.slashes() ? SLASH : ROUND;
+		variant[i] = (byte) (morph[i] == SLASH ? slashVariant(hit.axis(), random) : random.nextInt(8));
 		u[i] = hu;
 		v[i] = hv;
-		radius[i] = weapon.radius * (0.85F + random.nextFloat() * 0.3F);
+		// A slash is long: the same blow opens it wider along the cut than a round wound.
+		radius[i] = weapon.radius * (morph[i] == SLASH ? 1.35F : 1.0F) * (0.85F + random.nextFloat() * 0.3F);
 		severity[i] = Math.min(cap, amount);
 		ox[i] = (float) offset.x;
 		oy[i] = (float) offset.y;
@@ -122,7 +136,8 @@ public final class WoundSet {
 		bodyPart[i] = at.bodyPart();
 		axis[i] = (byte) at.axis();
 		sign[i] = (byte) at.sign();
-		variant[i] = (byte) random.nextInt(4);
+		morph[i] = ROUND;
+		variant[i] = (byte) random.nextInt(8);
 		u[i] = at.local().get(b);
 		v[i] = at.local().get(c);
 		radius[i] = Mth.clamp(size, 1.5F, MAX_RADIUS);
@@ -150,6 +165,23 @@ public final class WoundSet {
 
 	public int count() {
 		return count;
+	}
+
+	/** What the body is made of. */
+	public Flesh flesh() {
+		return flesh;
+	}
+
+	/** How many of the wounds are of this shape, {@link #ROUND} or {@link #SLASH}. */
+	public int count(byte shape) {
+		int n = 0;
+		for (int i = 0; i < count; i++) {
+			if (morph[i] == shape) {
+				n++;
+			}
+		}
+
+		return n;
 	}
 
 	/** True for the model the wounds were cut into; other models drawn with the same render state are skipped. */
@@ -182,6 +214,7 @@ public final class WoundSet {
 				target.axis[j] = axis[i];
 				target.sign[j] = sign[i];
 				target.variant[j] = variant[i];
+				target.morph[j] = morph[i];
 				target.u[j] = u[i];
 				target.v[j] = v[i];
 				target.radius[j] = radius[i];
@@ -209,7 +242,23 @@ public final class WoundSet {
 		count = kept;
 	}
 
-	private int find(ModelHit.Result hit, float hu, float hv, Weapon weapon) {
+/**
+ * Which way a slash runs on a face whose normal is model axis {@code axis}. A swing is mostly level, so on the side
+ * of a standing body the cut runs across it, often a little diagonal, now and then straight down. Texture u runs
+ * along model axis {@code axis + 1} and v along {@code axis + 2}; angle 0 is along u, 2 (90 degrees) along v.
+ */
+private static int slashVariant(int axis, RandomSource random) {
+	int level = switch (axis) {
+		case 0 -> 2; // face along X: u is Y (up), v is Z, level means along v
+		case 2 -> 0; // face along Z: u is X, v is Y (up), level means along u
+		default -> random.nextInt(4); // a top or bottom face: any way
+	};
+	float roll = random.nextFloat();
+	int angle = axis == 1 || roll < 0.45F ? level : roll < 0.9F ? (level + (random.nextBoolean() ? 1 : 3)) % 4 : (level + 2) % 4;
+	return angle + 4 * random.nextInt(2);
+}
+
+private int find(ModelHit.Result hit, float hu, float hv, Weapon weapon) {
 		int best = -1;
 		float bestDist = Float.MAX_VALUE;
 		for (int i = 0; i < count; i++) {
@@ -252,6 +301,7 @@ public final class WoundSet {
 		axis[to] = axis[from];
 		sign[to] = sign[from];
 		variant[to] = variant[from];
+		morph[to] = morph[from];
 		u[to] = u[from];
 		v[to] = v[from];
 		radius[to] = radius[from];
