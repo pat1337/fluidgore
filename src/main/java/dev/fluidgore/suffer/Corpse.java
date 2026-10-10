@@ -108,6 +108,11 @@ public final class Corpse {
 		return body.yaw;
 	}
 
+	/** The throes are over: the body lies still from now on. */
+	public boolean lifeless() {
+		return groundTicks() > Math.round(FALL_TICKS) + throeTicks;
+	}
+
 	public boolean done() {
 		return groundTicks() > Math.round(FALL_TICKS) + throeTicks + stillTicks + extraTicks;
 	}

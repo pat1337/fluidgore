@@ -54,6 +54,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			weapons(context, singleplayer.getServer());
 			pigPit(context, singleplayer.getServer());
 			floorAndDeath(context, singleplayer.getServer());
+			burntAndEvidence(context, singleplayer.getServer());
 			// Cheats are off in this world: demos must refuse, not half-run.
 			check(!context.computeOnClient(mc -> dev.fluidgore.demo.DemoPlayer.allowed(mc)), "demos allowed without cheats");
 		}
@@ -936,6 +937,82 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		System.out.println("[FluidGoreTest] death: body gone after " + waited + " ticks, popped into " + popped + " parts");
 		check(waited < 1600, "the body never went");
 		check(popped >= 3, "the body did not pop into parts: " + popped);
+	}
+
+	/**
+	 * A chicken burnt alive must char, not bleed, die writhing, leave a scorch mark, and (on Extreme) lie there long
+	 * as evidence; so must a pig beaten to death.
+	 */
+	private static void burntAndEvidence(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("tp @a 130.5 -60 -15.5 0 30");
+		server.runCommand("summon minecraft:chicken 130.5 -60 -12.5 {NoAI:1b,Fire:400s}");
+		server.runCommand("summon minecraft:pig 133.5 -60 -12.5 {NoAI:1b,Rotation:[90f,0f]}");
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+		context.waitTicks(10);
+		int chickenId = context.computeOnClient(mc -> {
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e instanceof net.minecraft.world.entity.animal.chicken.Chicken) {
+					return e.getId();
+				}
+			}
+
+			return -1;
+		});
+		check(chickenId >= 0, "no chicken for the burn test");
+		context.waitTicks(40);
+		float burning = context.computeOnClient(mc -> GoreSystems.dismemberment().burns().charOf(chickenId));
+		int cellsWhileBurning = context.computeOnClient(mc -> GoreSystems.blood().fluid().size());
+		context.takeScreenshot("burnt_01_burning");
+		int waited = 0;
+		while (context.computeOnClient(mc -> GoreSystems.suffering().corpse(chickenId) == null) && waited < 400) {
+			context.waitTicks(10);
+			waited += 10;
+		}
+
+		context.waitTicks(60);
+		String corpse = context.computeOnClient(mc -> {
+			var c = GoreSystems.suffering().corpse(chickenId);
+			return c == null ? "none" : c.kind.name() + " " + c.stillTicks;
+		});
+		float charred = context.computeOnClient(mc -> GoreSystems.dismemberment().burns().charOf(chickenId));
+		long scorch = context.computeOnClient(mc -> GoreSystems.blood().decals().decals().stream().filter(d -> d.rgb == 0x1A1512).count());
+		context.takeScreenshot("burnt_02_charred");
+		System.out.println("[FluidGoreTest] burnt chicken: char while burning " + burning + ", at death " + charred + ", puddles while burning "
+				+ cellsWhileBurning + ", body " + corpse + ", scorch marks " + scorch);
+		check(burning > 0.1F, "the burning chicken did not char: " + burning);
+		check(charred > 0.3F, "the chicken burnt to death is not charred: " + charred);
+		check(cellsWhileBurning == 0, "burning made the chicken bleed puddles: " + cellsWhileBurning);
+		check(corpse.startsWith("BRUTAL"), "a chicken burnt alive did not writhe to death: " + corpse);
+		check(scorch >= 1, "the burnt chicken left no scorch mark");
+		int still = Integer.parseInt(corpse.split(" ")[1]);
+		check(still >= 1000, "on Extreme a burnt body does not lie long enough to be seen: " + still + " ticks");
+
+		for (int i = 0; i < 6; i++) {
+			server.runCommand("execute as @p run damage @e[type=minecraft:pig,limit=1] 2 minecraft:player_attack by @s");
+			context.waitTicks(14);
+		}
+
+		context.waitTicks(40);
+		String pig = context.computeOnClient(mc -> {
+			for (var c : GoreSystems.suffering().corpses()) {
+				if (c.entity instanceof net.minecraft.world.entity.animal.pig.Pig) {
+					return c.kind.name() + " " + c.stillTicks + " " + GoreSystems.blood().decalLifetime();
+				}
+			}
+
+			return "none";
+		});
+		context.takeScreenshot("evidence_01_beaten_pig");
+		System.out.println("[FluidGoreTest] beaten pig: body " + pig);
+		check(pig.startsWith("BRUTAL"), "the beaten pig did not die hard: " + pig);
+		String[] p = pig.split(" ");
+		check(Integer.parseInt(p[1]) >= 1000, "on Extreme a beaten body does not lie long enough to be seen: " + p[1] + " ticks");
+		check(Integer.parseInt(p[2]) >= 20 * 60 * 5, "on Extreme blood does not stay five minutes: " + p[2] + " ticks");
 	}
 
 	/**

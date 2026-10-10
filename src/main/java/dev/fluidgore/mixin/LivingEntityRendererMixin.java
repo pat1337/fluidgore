@@ -10,6 +10,7 @@ import dev.fluidgore.suffer.BodyPose;
 import dev.fluidgore.suffer.Corpse;
 import dev.fluidgore.suffer.Ragdoll;
 import dev.fluidgore.suffer.SufferPose;
+import dev.fluidgore.wound.Burns;
 import dev.fluidgore.wound.Wounds;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -44,6 +45,7 @@ public abstract class LivingEntityRendererMixin {
 		state.setData(Dismemberment.MISSING_PARTS, mask == 0 ? null : mask);
 		state.setData(SufferPose.KEY, GoreSystems.suffering().pose(entity.getId()));
 		state.setData(Wounds.KEY, GoreSystems.dismemberment().wounds().get(entity.getId()));
+		state.setData(Burns.KEY, GoreSystems.dismemberment().burns().tint(entity.getId()));
 		state.setData(ModelParts.ENTITY_ID, entity.getId());
 
 		Corpse corpse = GoreSystems.suffering().corpse(entity.getId());
@@ -58,8 +60,9 @@ public abstract class LivingEntityRendererMixin {
 					body.z(partialTicks) - state.z, body.roll(partialTicks), body.joints(partialTicks)));
 			state.walkAnimationPos = corpse.walkPos(partialTicks);
 			state.walkAnimationSpeed = corpse.walkSpeed();
-			// Vanilla keeps a dying mob red until it is gone. Without Red Death only the first moments and fresh blows are.
-			state.hasRedOverlay = GoreConfig.get().redDeath || corpse.age < 10 || corpse.flash > 0;
+			// Vanilla keeps a dying mob red while it dies. Red Death does the same for the whole of the throes; after that
+			// (and without it) only the first moments and fresh blows are red.
+			state.hasRedOverlay = GoreConfig.get().redDeath && !corpse.lifeless() || corpse.age < 10 || corpse.flash > 0;
 		} else {
 			state.setData(BodyPose.KEY, null);
 		}

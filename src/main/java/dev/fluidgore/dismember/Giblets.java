@@ -230,6 +230,13 @@ public final class Giblets {
 		return i;
 	}
 
+/** Chars pieces {@code from} up to the newest by {@code amount} (0..1): the scraps of a body that burnt. */
+public void searFrom(int from, float amount) {
+	for (int i = Math.max(0, from); i < count; i++) {
+		color[i] = sear(color[i], amount);
+	}
+}
+
 /** Darkens a colour towards charred brown-black by {@code amount} (0..1). */
 private static int sear(int rgb, float amount) {
 	float k = 0.8F * amount;

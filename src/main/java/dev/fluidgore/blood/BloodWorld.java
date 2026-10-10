@@ -45,7 +45,7 @@ public final class BloodWorld {
 	/** Decal/puddle lifetime in ticks for the current settings. */
 	public int decalLifetime() {
 		GoreConfig config = GoreConfig.get();
-		return Math.max(200, Math.round(config.persistenceSeconds * 20 * config.goreLevel.duration));
+		return Math.max(200, Math.round(config.persistenceSeconds * 20 * config.goreLevel.bloodDuration));
 	}
 
 	/** A droplet (or anything else carrying blood) reached a floor at (x, y, z). */

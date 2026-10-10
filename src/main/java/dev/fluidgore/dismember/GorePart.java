@@ -22,6 +22,8 @@ public final class GorePart {
 	public final float scale;
 	public final int bloodRgb;
 	public int lifetime;
+	/** Colour multiplied into the part's texture: white, or the char of a body that burnt. */
+	public int tint = 0xFFFFFF;
 
 	public double x, y, z;
 	public double prevX, prevY, prevZ;

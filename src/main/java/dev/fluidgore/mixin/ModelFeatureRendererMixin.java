@@ -1,11 +1,13 @@
 package dev.fluidgore.mixin;
 
+import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.blaze3d.vertex.PoseStack;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.suffer.BodyPose;
 import dev.fluidgore.suffer.SufferPose;
+import dev.fluidgore.wound.Burns;
 import dev.fluidgore.wound.WoundRenderer;
 import dev.fluidgore.wound.WoundSet;
 import dev.fluidgore.wound.Wounds;
@@ -23,6 +25,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
@@ -101,6 +104,23 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 		}
 
 		fluidgore$restore();
+	}
+
+	/** Burnt flesh: the body and anything sharing its state (saddle, wool) darkens; not the block-breaking overlay. */
+	@ModifyArg(
+			method = "prepareModel",
+			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/model/Model;renderToBuffer(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;III)V"),
+			index = 4
+	)
+	private int fluidgore$char(int color, @Local(argsOnly = true) ModelFeatureRenderer.Submit<?> submit) {
+		if (submit.sheetedDecalPose() == null && submit.state() instanceof LivingEntityRenderState state) {
+			Integer tint = state.getData(Burns.KEY);
+			if (tint != null) {
+				return Burns.apply(color, tint);
+			}
+		}
+
+		return color;
 	}
 
 	/**

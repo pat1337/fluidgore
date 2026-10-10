@@ -99,6 +99,8 @@ public final class GoreConfig {
 	 * few scraps of flesh, which can still be kicked about for a little while.
 	 */
 	public boolean deathPop = true;
+	/** Animals on fire char from seared to black, smoke and smoulder, and leave a scorch mark where they burn to death. */
+	public boolean burns = true;
 	/** Version of the saved file, so changed defaults can reach configs saved by older versions. */
 	public int configVersion;
 	/**

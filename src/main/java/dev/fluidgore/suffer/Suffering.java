@@ -49,6 +49,8 @@ public final class Suffering {
 	private static final int TERROR_MEMORY = 600;
 	private static final double TERROR_RADIUS_SQ = 14.0 * 14.0;
 	private static final int MAX_CORPSES = 12;
+	/** How much longer a beaten or burnt body lies than an ordinary kill, on High and Extreme. */
+	private static final float EVIDENCE_LINGER = 3.0F;
 	/** Survivors notice a body, and a mother her young, from this far. */
 	private static final double MOURN_RADIUS = 9.0;
 	/** Predators smell a kill from this far. */
@@ -254,6 +256,12 @@ public final class Suffering {
 			kind = Corpse.Kind.NORMAL;
 		}
 
+		boolean burnt = GoreSystems.dismemberment().burns().burnt(entity);
+		if (burnt && kind != Corpse.Kind.HEADLESS_RUN && blast < DamageTracker.TEAR_IMPACT) {
+			// Burnt alive: it writhes and screams to the end.
+			kind = Corpse.Kind.BRUTAL;
+		}
+
 		if (state.dying && (kind == Corpse.Kind.QUICK || kind == Corpse.Kind.NORMAL)) {
 			// It was already on its way down: the legs give out instead of an instant fall.
 			kind = Corpse.Kind.COLLAPSE;
@@ -284,8 +292,11 @@ public final class Suffering {
 		}
 
 		throes = Math.max(20, Math.round(throes * intensity * self.endurance()));
-		// A small body is left lying longer.
-		int linger = GoreConfig.get().corpseLingerSeconds * 20 * (entity.isBaby() ? 3 : 2) / 2;
+		// A small body is left lying longer, and on High and Extreme a body that was beaten or burnt to death lies there
+		// a good while: the evidence of what was done to it.
+		float evidence = kind == Corpse.Kind.BRUTAL || burnt ? EVIDENCE_LINGER : 1.0F;
+		int linger = Math.round(GoreConfig.get().corpseLingerSeconds * 20 * (entity.isBaby() ? 1.5F : 1.0F) * GoreConfig.get().goreLevel.linger
+				* (GoreConfig.get().goreLevel.linger > 1.0F ? evidence : 1.0F));
 		Corpse corpse = new Corpse(entity, kind, state.voice, run, throes, linger, random.nextFloat() * 100.0F);
 		corpses.put(entity.getId(), corpse);
 		evictOldCorpses();
@@ -449,7 +460,8 @@ public final class Suffering {
 			tiltX += 8.0F * dyingness;
 			stagger = Math.max(stagger, 2.0F + 6.0F * dyingness);
 			tremble = Math.min(1.0F, tremble + 0.4F * dyingness);
-			if (dyingness > 0.4F && tick % 6 == 0 && config.goreLevel.enabled() && !headless) {
+			// A body dying of burns is seared shut and does not drip.
+			if (dyingness > 0.4F && tick % 6 == 0 && config.goreLevel.enabled() && !headless && !GoreSystems.dismemberment().burns().burnt(entity)) {
 				BloodEmitter.drip(GoreSystems.blood(), new Vec3(entity.getX(), entity.getY() + 0.3, entity.getZ()), EntityFilter.bloodColor(entity), 0.02F);
 			}
 		}

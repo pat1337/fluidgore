@@ -339,7 +339,7 @@ public final class GoreRenderer {
 		poseStack.scale(-1.0F, -1.0F, 1.0F);
 		poseStack.translate(-part.localCenter.x, -part.localCenter.y, -part.localCenter.z);
 		collector.submitModelPart(part.model, poseStack, RenderTypes.entityTranslucent(part.texture), part.light, OVERLAY, null,
-				argb(0xFFFFFF, alpha));
+				argb(part.tint, alpha));
 		WoundSet wounds = part.wounds;
 		// Cutout wounds cannot fade, so they go just before the piece starts to.
 		if (wounds != null && wounds.count() > 0 && alpha >= 1.0F) {

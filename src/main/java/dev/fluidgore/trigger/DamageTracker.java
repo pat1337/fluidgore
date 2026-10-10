@@ -47,7 +47,7 @@ public final class DamageTracker {
 	 * @param explosion the hit was an explosion
 	 * @param sourceAt  where the damage came from, if the packet says (often not for TNT: the TNT entity is gone)
 	 */
-	private record PendingHit(int attackerId, boolean melee, boolean explosion, @Nullable Vec3 sourceAt, int tick) {
+	private record PendingHit(int attackerId, boolean melee, boolean explosion, boolean fire, @Nullable Vec3 sourceAt, int tick) {
 	}
 
 	/** An explosion the server told us about: where and how big (TNT is 4, a creeper 3, a charged one 6). */
@@ -73,7 +73,7 @@ public final class DamageTracker {
 	public void onDamageEvent(LivingEntity victim, DamageSource source) {
 		Entity attacker = source.getEntity();
 		boolean melee = attacker != null && source.getDirectEntity() == attacker;
-		pending.put(victim.getId(), new PendingHit(attacker == null ? -1 : attacker.getId(), melee, source.is(DamageTypeTags.IS_EXPLOSION),
+		pending.put(victim.getId(), new PendingHit(attacker == null ? -1 : attacker.getId(), melee, source.is(DamageTypeTags.IS_EXPLOSION), source.is(DamageTypeTags.IS_FIRE),
 				source.getSourcePosition(), tick));
 	}
 
@@ -193,7 +193,11 @@ public final class DamageTracker {
 		if (gore) {
 			Weapon weapon = weapon(attacker, meleeAttacker, blastAt);
 			// No attacker and no blast: a fall, fire, drowning. Bruising and a little bleeding.
-			BloodEmitter.bleed(blood, level, victim, damage, lethal, away, weapon != null ? weapon.bleed : 0.25F);
+			// Fire sears the flesh shut instead: it chars (see Burns) but does not bleed.
+			if (hit == null || !hit.fire()) {
+				BloodEmitter.bleed(blood, level, victim, damage, lethal, away, weapon != null ? weapon.bleed : 0.25F);
+			}
+
 			Wounds.Strike wound = weapon == null ? null : blastAt != null
 					? dismemberment.wounds().onBlast(victim, blastAt, damage)
 					: dismemberment.wounds().onDamage(victim, attacker, weapon, damage);

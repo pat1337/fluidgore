@@ -22,6 +22,8 @@ import org.jspecify.annotations.Nullable;
  */
 public final class Demos {
 	public static final List<Demo> ALL = List.of(
+			new Demo("burnt", "1.8.0", "A chicken and a pig burnt alive: they char black, smoke and leave scorch marks", false, Demos::burnt),
+			new Demo("evidence", "1.8.0", "A pig beaten to death on Extreme: the body and the blood stay as evidence", false, Demos::evidence),
 			new Demo("death", "1.7.0", "A cow dies red and keels over, is knocked about, then pops into pieces", false, Demos::death),
 			new Demo("floor", "1.7.0", "Pigs blown up on a raised floor; the floor goes and the gore falls with it", true, Demos::floor),
 			new Demo("pit", "1.6.0", "A 5x5 pit of pigs and a lit TNT: shredded, torn open, thrown", true, Demos::pit),
@@ -45,6 +47,28 @@ public final class Demos {
 		}
 
 		return null;
+	}
+
+	/** Set alight where they stand: they char as they burn, writhe, and lie charred and smoking. */
+	private static void burnt(Script s, Stage st) {
+		s.summon(st, "chicken", "fgd_chicken", -1, 0, 3, 90.0F, "");
+		s.summon(st, "pig", "fgd_pig", 1.5, 0, 3.5, 90.0F, "");
+		s.pause(20).say("Set on fire: seared, roasted, then black");
+		s.cmd("data merge entity @e[tag=fgd_chicken,limit=1] {Fire:400s}");
+		s.cmd("data merge entity @e[tag=fgd_pig,limit=1] {Fire:400s}");
+		s.pause(160).say("Burnt to death: charred, smoking, a scorch mark under it").pause(300);
+	}
+
+	/** Bare hands until it dies, on Extreme: the battered body lies in its blood for a long while. */
+	private static void evidence(Script s, Stage st) {
+		s.summon(st, "pig", "fgd_pig", 0, 0, 3, 90.0F, "");
+		s.pause(20).hold("minecraft:air").say("Beaten to death with bare hands");
+		for (int i = 0; i < 6; i++) {
+			s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.PIG, 0, 0, 3), null));
+			s.hit("fgd_pig", 2.0F).pause(14);
+		}
+
+		s.say("On Extreme the body and the blood stay: anyone coming by can see what happened").pause(300);
 	}
 
 	/** One sword kill, then the body is punched about while it dies, until it pops. */

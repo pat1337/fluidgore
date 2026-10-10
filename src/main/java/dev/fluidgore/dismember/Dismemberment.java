@@ -6,6 +6,7 @@ import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.config.GoreLevel;
 import dev.fluidgore.suffer.Voice;
 import dev.fluidgore.trigger.EntityFilter;
+import dev.fluidgore.wound.Burns;
 import dev.fluidgore.wound.WoundSet;
 import dev.fluidgore.wound.Wounds;
 import it.unimi.dsi.fastutil.ints.Int2IntMap;
@@ -46,6 +47,7 @@ public final class Dismemberment {
 	private final PartInteraction interaction = new PartInteraction(parts);
 	private final Wounds wounds = new Wounds();
 	private final Giblets giblets = new Giblets();
+	private final Burns burns = new Burns();
 	/** Bodies torn to pieces by a blast: not drawn at all any more. */
 	private final IntOpenHashSet vaporized = new IntOpenHashSet();
 	private int tick;
@@ -56,6 +58,10 @@ public final class Dismemberment {
 
 	public Wounds wounds() {
 		return wounds;
+	}
+
+	public Burns burns() {
+		return burns;
 	}
 
 	public Giblets giblets() {
@@ -126,19 +132,29 @@ public final class Dismemberment {
 	public void pop(BloodWorld blood, ClientLevel level, LivingEntity entity, Vec3 at, float yaw, float roll) {
 		GoreConfig config = GoreConfig.get();
 		int lifetime = Math.max(100, Math.round(config.partLifetimeSeconds * 10 * config.goreLevel.duration));
+		float burnt = burns.charOf(entity.getId());
 		for (BodyPart bodyPart : remaining(entity)) {
 			Vec3 away = new Vec3(RANDOM.nextGaussian(), 0.0, RANDOM.nextGaussian());
 			GorePart part = sever(blood, level, entity, bodyPart, away.lengthSqr() > 1.0E-6 ? away.normalize() : null, () -> at, yaw, roll, 1.4);
 			if (part != null) {
 				part.lifetime = lifetime;
+				if (burnt > 0.0F) {
+					part.tint = Burns.tint(burnt);
+				}
 				part.voice = null;
 				part.twitchTicks = 0;
 			}
 		}
 
-		giblets.spill(level, blood, entity, at, 0.0F);
+		// The oldest pieces may have made room for these, so the new ones are the last {@code made}.
+		int made = giblets.spill(level, blood, entity, at, 0.0F);
+		if (burnt > 0.0F) {
+			giblets.searFrom(giblets.count() - made, burnt);
+		}
+
 		Vec3 centre = at.add(0.0, entity.getBbWidth() * 0.4, 0.0);
-		BloodEmitter.burst(blood, level, centre, EntityFilter.bloodColor(entity), 0.12F * entity.getBbWidth() * entity.getBbHeight(),
+		// Burnt flesh is cooked through and hardly bleeds.
+		BloodEmitter.burst(blood, level, centre, EntityFilter.bloodColor(entity), 0.12F * entity.getBbWidth() * entity.getBbHeight() * (1.0F - 0.8F * burnt),
 				Math.round(24 * entity.getBbWidth()));
 		if (config.goreSounds) {
 			BloodEmitter.burstSound(level, centre, 0.6F);
@@ -296,6 +312,7 @@ public final class Dismemberment {
 		parts.tick(level, blood);
 		wounds.tick(level, blood);
 		giblets.tick(level, blood);
+		burns.tick(level, blood);
 		if (tick % 8 != 0 || missing.isEmpty()) {
 			return;
 		}
@@ -320,12 +337,14 @@ public final class Dismemberment {
 		missing.remove(entityId);
 		vaporized.remove(entityId);
 		wounds.forget(entityId);
+		burns.forget(entityId);
 	}
 
 	public void onEntityUnload(int entityId) {
 		missing.remove(entityId);
 		vaporized.remove(entityId);
 		wounds.forget(entityId);
+		burns.forget(entityId);
 	}
 
 	public void clear() {
@@ -334,6 +353,7 @@ public final class Dismemberment {
 		wounds.clear();
 		giblets.clear();
 		vaporized.clear();
+		burns.clear();
 		parts.clear();
 	}
 }
