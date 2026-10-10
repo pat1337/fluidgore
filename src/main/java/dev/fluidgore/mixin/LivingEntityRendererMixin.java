@@ -4,16 +4,21 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import dev.fluidgore.GoreSystems;
 import dev.fluidgore.dismember.Dismemberment;
+import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.suffer.BodyPose;
 import dev.fluidgore.suffer.Corpse;
 import dev.fluidgore.suffer.Ragdoll;
 import dev.fluidgore.suffer.SufferPose;
 import dev.fluidgore.wound.Wounds;
+import net.minecraft.client.model.EntityModel;
+import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -25,6 +30,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(LivingEntityRenderer.class)
 public abstract class LivingEntityRendererMixin {
+	@Shadow
+	protected EntityModel model;
+
 	@Inject(
 			method = "extractRenderState(Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;F)V",
 			at = @At("TAIL")
@@ -35,6 +43,7 @@ public abstract class LivingEntityRendererMixin {
 		state.setData(Dismemberment.MISSING_PARTS, mask == 0 ? null : mask);
 		state.setData(SufferPose.KEY, GoreSystems.suffering().pose(entity.getId()));
 		state.setData(Wounds.KEY, GoreSystems.dismemberment().wounds().get(entity.getId()));
+		state.setData(ModelParts.ENTITY_ID, entity.getId());
 
 		Corpse corpse = GoreSystems.suffering().corpse(entity.getId());
 		if (corpse != null) {
@@ -52,6 +61,18 @@ public abstract class LivingEntityRendererMixin {
 			state.hasRedOverlay = corpse.age < 10;
 		} else {
 			state.setData(BodyPose.KEY, null);
+		}
+	}
+
+	/**
+	 * Remembers the model this entity is drawn with. Subclasses pick it (baby or adult, per variant) right before
+	 * calling this method, so here it is the right one for this entity.
+	 */
+	@Inject(method = "submit(Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;Lnet/minecraft/client/renderer/state/level/CameraRenderState;)V", at = @At("HEAD"))
+	private void fluidgore$recordModel(LivingEntityRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState camera, CallbackInfo ci) {
+		Integer id = state.getData(ModelParts.ENTITY_ID);
+		if (id != null) {
+			ModelParts.recordDrawn(id, model);
 		}
 	}
 

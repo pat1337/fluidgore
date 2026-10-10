@@ -3,6 +3,7 @@ package dev.fluidgore;
 import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.Dismemberment;
+import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.suffer.Suffering;
 import dev.fluidgore.trigger.DamageTracker;
 import net.minecraft.client.Minecraft;
@@ -92,6 +93,7 @@ public final class GoreSystems {
 
 	public static void onEntityUnload(int entityId) {
 		TRACKER.forget(entityId);
+		ModelParts.forgetDrawn(entityId);
 		// A body still going through its death throes keeps its missing parts until it is gone.
 		if (!SUFFERING.onEntityUnload(entityId)) {
 			DISMEMBERMENT.onEntityUnload(entityId);
@@ -99,6 +101,7 @@ public final class GoreSystems {
 	}
 
 	public static void clearAll() {
+		ModelParts.clearDrawn();
 		SUFFERING.clear();
 		BLOOD.clear();
 		DISMEMBERMENT.clear();

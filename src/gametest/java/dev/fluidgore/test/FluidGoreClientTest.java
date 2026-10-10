@@ -49,6 +49,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			singleplayer.getConnection().waitForChunksRender();
 			suffering(context, singleplayer.getServer());
 			hackModel(context, singleplayer.getServer());
+			babies(context, singleplayer.getServer());
 		}
 
 		screens(context);
@@ -510,6 +511,18 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");
 	}
 
+	/** The head, or for babies without one (a chick is a single block) the first part the model has. */
+	private static BodyPart severable(net.minecraft.world.entity.LivingEntity entity) {
+		var parts = ModelParts.index(ModelParts.pose(entity).model());
+		for (BodyPart part : BodyPart.values()) {
+			if (parts[part.ordinal()] != null) {
+				return part;
+			}
+		}
+
+		throw new AssertionError("no severable part on " + entity);
+	}
+
 	/** One axe blow on a body, aimed at a part from outside the body (away from its middle). */
 	private static void chop(net.minecraft.client.Minecraft mc, dev.fluidgore.suffer.Corpse corpse, BodyPart part) {
 		var target = ModelHit.centre(corpse.entity, ModelParts.pose(corpse.entity), part);
@@ -520,6 +533,103 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		var outward = target.subtract(dev.fluidgore.suffer.CorpseStrike.centre(corpse)).add(0.0, 0.3, 0.0).normalize();
 		var eye = target.add(outward.scale(1.5));
 		dev.fluidgore.suffer.CorpseStrike.strike(mc.level, GoreSystems.blood(), corpse, eye, target.subtract(eye).normalize(), Weapon.CHOP, 9.0F);
+	}
+
+	/**
+	 * Babies are drawn with their own models (and cows and pigs with per-variant ones). Wounds must be cut into the
+	 * model each baby is really drawn with, and parts cut off a baby must be baby-sized and start on the baby.
+	 */
+	private static void babies(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("tp @a 30.5 -60 0.5 0 15");
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:iron_sword");
+		String[] kinds = {"cow", "pig", "sheep", "chicken"};
+		for (int i = 0; i < kinds.length; i++) {
+			// An adult of each kind first, so the shared renderer's last-drawn model is the adult one.
+			server.runCommand("summon minecraft:" + kinds[i] + " " + (27.5 + i * 2) + " -60 6.5 {NoAI:1b,Rotation:[90f,0f]}");
+			server.runCommand("summon minecraft:" + kinds[i] + " " + (27.5 + i * 2) + " -60 3.5 {NoAI:1b,Age:-24000,Rotation:[90f,0f]}");
+		}
+
+		context.waitTicks(20);
+		java.util.List<Integer> ids = context.computeOnClient(mc -> {
+			java.util.List<Integer> found = new java.util.ArrayList<>();
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e instanceof net.minecraft.world.entity.AgeableMob baby && baby.isBaby()) {
+					found.add(e.getId());
+				}
+			}
+
+			return found;
+		});
+		check(ids.size() == kinds.length, "expected " + kinds.length + " babies, found " + ids.size());
+
+		for (int blow = 0; blow < 2; blow++) {
+			for (int id : ids) {
+				context.runOnClient(mc -> {
+					var baby = (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(id);
+					var at = ModelHit.centre(baby, ModelParts.pose(baby), severable(baby));
+					var eye = mc.player.getEyePosition();
+					GoreSystems.dismemberment().wounds().recordAim(baby, eye, at.subtract(eye).normalize());
+				});
+				server.runCommand("execute as @p run damage @e[type=!minecraft:player,limit=1,sort=nearest,x=" + context.computeOnClient(mc -> mc.level.getEntity(id).getX())
+						+ ",y=-60,z=3.5,distance=..0.6] 1 minecraft:player_attack by @s");
+				context.waitTicks(12);
+			}
+		}
+
+		context.takeScreenshot("baby_01_wounded");
+		for (int id : ids) {
+			String result = context.computeOnClient(mc -> {
+				var baby = mc.level.getEntity(id);
+				var set = GoreSystems.dismemberment().wounds().get(id);
+				var drawn = ModelParts.drawn(id);
+				return baby.getType().getDescriptionId() + " wounds=" + (set == null ? 0 : set.count())
+						+ " onDrawnModel=" + (set != null && drawn != null && set.drawsOn(drawn));
+			});
+			System.out.println("[FluidGoreTest] baby " + result);
+			check(result.contains("onDrawnModel=true") && !result.contains("wounds=0"), "baby wounds not on the model it is drawn with: " + result);
+		}
+
+		int partsBefore = context.computeOnClient(mc -> GoreSystems.dismemberment().parts().parts().size());
+		for (int id : ids) {
+			context.runOnClient(mc -> {
+				var baby = (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(id);
+				GoreSystems.dismemberment().severPart(GoreSystems.blood(), mc.level, baby, severable(baby), baby::position, Float.NaN, 0.0F, null);
+			});
+		}
+
+		String sizes = context.computeOnClient(mc -> {
+			StringBuilder out = new StringBuilder();
+			var parts = GoreSystems.dismemberment().parts().parts();
+			for (int i = partsBefore; i < parts.size(); i++) {
+				var part = parts.get(i);
+				double nearest = Double.MAX_VALUE;
+				for (int id : ids) {
+					nearest = Math.min(nearest, mc.level.getEntity(id).position().distanceTo(new net.minecraft.world.phys.Vec3(part.x, part.y, part.z)));
+				}
+
+				out.append(String.format(java.util.Locale.ROOT, "[half=%.3f dist=%.2f]", Math.max(part.halfExtents.x(), Math.max(part.halfExtents.y(), part.halfExtents.z())), nearest));
+			}
+
+			return out.toString();
+		});
+		System.out.println("[FluidGoreTest] parts cut off babies: " + sizes);
+		int heads = context.computeOnClient(mc -> GoreSystems.dismemberment().parts().parts().size()) - partsBefore;
+		check(heads == ids.size(), "not every baby lost a part: " + heads);
+		for (String entry : sizes.split("]")) {
+			if (entry.isEmpty()) {
+				continue;
+			}
+
+			double half = Double.parseDouble(entry.substring(entry.indexOf("half=") + 5, entry.indexOf(' ')));
+			double dist = Double.parseDouble(entry.substring(entry.indexOf("dist=") + 5));
+			check(half > 0.01 && half < 0.3, "part cut off a baby is not baby-sized: " + entry);
+			check(dist < 1.2, "part cut off a baby did not start on the baby: " + entry);
+		}
+
+		context.waitTicks(5);
+		context.takeScreenshot("baby_02_beheaded");
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");
 	}
 
 	private static void aimAt(net.minecraft.client.Minecraft mc, double x, double y, double z) {

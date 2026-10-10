@@ -140,10 +140,12 @@ public final class Dismemberment {
 		}
 
 		// Model space -> world, mirroring LivingEntityRenderer: rotate by body yaw, scale, flip X/Y, shift down.
-		float scale = state.scale * state.ageScale;
+		// The model-space centre already includes any scaling inside the model (baby models shrink their root);
+		// the loose copy has none of its parents, so it carries that scale itself.
 		float yaw = Float.isNaN(yawOverride) ? state.bodyRot : yawOverride;
 		Quaternionf bodyRotation = new Quaternionf().rotationY((float) Math.toRadians(180.0F - yaw));
-		Vector3f offset = new Vector3f(-modelCenter.x, MODEL_Y_OFFSET - modelCenter.y, modelCenter.z).mul(scale);
+		Vector3f offset = new Vector3f(-modelCenter.x, MODEL_Y_OFFSET - modelCenter.y, modelCenter.z).mul(state.scale);
+		float scale = state.scale * ModelParts.chainScale(model.root(), source);
 		if (roll != 0.0F) {
 			// A tipped-over body: lean about its feet like the renderer does, then lift it so it rests on the floor.
 			offset.rotateZ(roll);

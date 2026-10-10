@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import dev.fluidgore.mixin.ModelPartAccessor;
 import dev.fluidgore.suffer.BodyPose;
 import dev.fluidgore.suffer.Ragdoll;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -11,6 +12,7 @@ import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import net.fabricmc.fabric.api.client.rendering.v1.RenderStateDataKey;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.Model;
@@ -28,6 +30,9 @@ public final class ModelParts {
 	/** Per-model cache of severable parts, indexed by {@link BodyPart#ordinal()}. Weak so models can unload. */
 	private static final Map<Model<?>, ModelPart[]> INDEX = new WeakHashMap<>();
 	private static final Map<ModelPart, ModelPart[]> CHAINS = new WeakHashMap<>();
+	/** The entity's id, attached to its render state so the model it is drawn with can be recorded. */
+	public static final RenderStateDataKey<Integer> ENTITY_ID = RenderStateDataKey.create(() -> "fluidgore:entity_id");
+	private static final Int2ObjectOpenHashMap<EntityModel<?>> DRAWN = new Int2ObjectOpenHashMap<>();
 	/** Arm (or front leg) and leg slots in the order ragdoll joints use them. */
 	public static final BodyPart[] LIMBS = {BodyPart.RIGHT_ARM, BodyPart.LEFT_ARM, BodyPart.RIGHT_LEG, BodyPart.LEFT_LEG};
 
@@ -99,7 +104,13 @@ public final class ModelParts {
 			return null;
 		}
 
-		EntityModel model = livingRenderer.getModel();
+		// Many renderers swap models per entity while drawing (baby or adult, cow and pig variants), so the
+		// renderer's current model is whatever was drawn last. Use the one this entity was really drawn with.
+		EntityModel model = DRAWN.get(entity.getId());
+		if (model == null) {
+			model = livingRenderer.getModel();
+		}
+
 		model.setupAnim(state);
 		BodyPose body = state.getData(BodyPose.KEY);
 		if (body != null) {
@@ -110,11 +121,39 @@ public final class ModelParts {
 	}
 
 	/** The partial tick of the frame being drawn, which places and poses entities between ticks. */
-public static float partialTick() {
-	return Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(false);
-}
+	public static float partialTick() {
+		return Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(false);
+	}
 
-/** Adds a ragdoll's joint offsets to the head and limbs; {@code before} sees each part before it is changed. */
+	/** Called as each living entity is drawn, with the model its renderer picked for it. */
+	public static void recordDrawn(int entityId, EntityModel<?> model) {
+		DRAWN.put(entityId, model);
+	}
+
+	/** The model this entity was last drawn with, or null if it has not been drawn yet. */
+	public static @Nullable EntityModel<?> drawn(int entityId) {
+		return DRAWN.get(entityId);
+	}
+
+	public static void forgetDrawn(int entityId) {
+		DRAWN.remove(entityId);
+	}
+
+	public static void clearDrawn() {
+		DRAWN.clear();
+	}
+
+	/** Combined scale of {@code target} and every part above it (baby models shrink their root this way). */
+	public static float chainScale(ModelPart root, ModelPart target) {
+		float scale = 1.0F;
+		for (ModelPart part : chain(root, target)) {
+			scale *= part.xScale;
+		}
+
+		return scale;
+	}
+
+	/** Adds a ragdoll's joint offsets to the head and limbs; {@code before} sees each part before it is changed. */
 	public static void applyJoints(ModelPart[] parts, float[] j, @Nullable Consumer<ModelPart> before) {
 		ModelPart head = parts[BodyPart.HEAD.ordinal()];
 		if (head != null) {
