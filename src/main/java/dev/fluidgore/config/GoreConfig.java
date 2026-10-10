@@ -70,16 +70,25 @@ public final class GoreConfig {
 	public int maxScreams = 8;
 	/** Nearby animals of the same kind panic when one is hurt or killed. */
 	public boolean herdPanic = true;
-/** Every animal has its own voice, nerve and way of dying, derived from its species and UUID. */
-public boolean personality = true;
-/**
- * Animals remember killing for the session and react by role: prey cower, herds call, mothers search, predators
- * take interest, and bodies draw flies. Pose, sound and particles only.
- */
-public boolean ecology = true;
-/** How long a body stays on the ground after its death throes, in seconds. */
-public int corpseLingerSeconds = 45;
-/** Severed parts can be punched, kicked, picked up, thrown and stomped. */
+	/** Every animal has its own voice, nerve and way of dying, derived from its species and UUID. */
+	public boolean personality = true;
+	/**
+	 * Animals remember killing for the session and react by role: prey cower, herds call, mothers search, predators
+	 * take interest, and bodies draw flies. Pose, sound and particles only.
+	 */
+	public boolean ecology = true;
+	/** How long a body stays on the ground after its death throes, in seconds. */
+	public int corpseLingerSeconds = 45;
+	/**
+	 * Hack model: blows open wounds on the exact spot of the body they hit, deepening through bruise, gash, meat and
+	 * bone, and a blade through a wound that cannot get deeper takes that part off.
+	 */
+	public boolean wounds = true;
+	/** Wounds on hostile mobs as well as animals. */
+	public boolean woundHostiles = false;
+	/** Wounds on other players (only on your screen). */
+	public boolean woundPlayers = false;
+	/** Severed parts can be punched, kicked, picked up, thrown and stomped. */
 	public boolean playWithParts = true;
 	/** How hard the killing blow throws a body in the direction it was struck, in percent. 0 turns it off. */
 	public int deathLaunchPercent = 100;

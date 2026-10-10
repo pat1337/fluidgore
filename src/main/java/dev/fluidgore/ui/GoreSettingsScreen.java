@@ -70,7 +70,10 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 		this.list.addSmall(
 				scaledSlider("fluidgore.option.part_lifetime", 1, 120, 5, c.partLifetimeSeconds, "fluidgore.unit.seconds", v -> c.partLifetimeSeconds = v),
 				scaledSlider("fluidgore.option.max_parts", 1, 128, 1, c.maxDetachedParts, null, v -> c.maxDetachedParts = v),
-				OptionInstance.createBoolean("fluidgore.option.play_with_parts", c.playWithParts, v -> c.playWithParts = v)
+				OptionInstance.createBoolean("fluidgore.option.play_with_parts", c.playWithParts, v -> c.playWithParts = v),
+				OptionInstance.createBoolean("fluidgore.option.wounds", c.wounds, v -> c.wounds = v),
+				OptionInstance.createBoolean("fluidgore.option.wound_hostiles", c.woundHostiles, v -> c.woundHostiles = v),
+				OptionInstance.createBoolean("fluidgore.option.wound_players", c.woundPlayers, v -> c.woundPlayers = v)
 		);
 
 		this.list.addHeader(Component.translatable("fluidgore.header.suffering"));

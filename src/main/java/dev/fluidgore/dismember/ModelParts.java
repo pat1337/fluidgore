@@ -2,15 +2,24 @@ package dev.fluidgore.dismember;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import dev.fluidgore.mixin.ModelPartAccessor;
+import dev.fluidgore.suffer.BodyPose;
+import dev.fluidgore.suffer.Ragdoll;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.function.Consumer;
 import java.util.function.Function;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.Model;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartPose;
+import net.minecraft.client.renderer.entity.EntityRenderer;
+import net.minecraft.client.renderer.entity.LivingEntityRenderer;
+import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
+import net.minecraft.world.entity.LivingEntity;
 import org.joml.Vector3f;
 import org.jspecify.annotations.Nullable;
 
@@ -18,6 +27,9 @@ import org.jspecify.annotations.Nullable;
 public final class ModelParts {
 	/** Per-model cache of severable parts, indexed by {@link BodyPart#ordinal()}. Weak so models can unload. */
 	private static final Map<Model<?>, ModelPart[]> INDEX = new WeakHashMap<>();
+	private static final Map<ModelPart, ModelPart[]> CHAINS = new WeakHashMap<>();
+	/** Arm (or front leg) and leg slots in the order ragdoll joints use them. */
+	public static final BodyPart[] LIMBS = {BodyPart.RIGHT_ARM, BodyPart.LEFT_ARM, BodyPart.RIGHT_LEG, BodyPart.LEFT_LEG};
 
 	private ModelParts() {
 	}
@@ -62,6 +74,78 @@ public final class ModelParts {
 		copy.visible = source.visible;
 		copy.skipDraw = source.skipDraw;
 		return copy;
+	}
+
+
+
+	/** An entity's shared model, posed for that entity right now, with the render state used to pose it. */
+	public record Posed(EntityModel<?> model, LivingEntityRenderState state, LivingEntityRenderer<?, ?, ?> renderer) {
+	}
+
+	/**
+	 * Poses the shared model like this entity this frame, including a corpse's ragdoll joints, so measurements match
+	 * what the player sees. Every render calls {@code setupAnim} again before drawing, so this has no visible side
+	 * effect. Null for entities without a living-entity renderer.
+	 */
+	@SuppressWarnings({"unchecked", "rawtypes"})
+	public static @Nullable Posed pose(LivingEntity entity) {
+		Minecraft mc = Minecraft.getInstance();
+		EntityRenderer renderer = mc.getEntityRenderDispatcher().getRenderer(entity);
+		if (!(renderer instanceof LivingEntityRenderer livingRenderer)) {
+			return null;
+		}
+
+		if (!(renderer.createRenderState(entity, partialTick()) instanceof LivingEntityRenderState state)) {
+			return null;
+		}
+
+		EntityModel model = livingRenderer.getModel();
+		model.setupAnim(state);
+		BodyPose body = state.getData(BodyPose.KEY);
+		if (body != null) {
+			applyJoints(index(model), body.joints(), null);
+		}
+
+		return new Posed(model, state, livingRenderer);
+	}
+
+	/** The partial tick of the frame being drawn, which places and poses entities between ticks. */
+public static float partialTick() {
+	return Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(false);
+}
+
+/** Adds a ragdoll's joint offsets to the head and limbs; {@code before} sees each part before it is changed. */
+	public static void applyJoints(ModelPart[] parts, float[] j, @Nullable Consumer<ModelPart> before) {
+		ModelPart head = parts[BodyPart.HEAD.ordinal()];
+		if (head != null) {
+			if (before != null) {
+				before.accept(head);
+			}
+
+			head.xRot += j[Ragdoll.HEAD_X];
+			head.yRot += j[Ragdoll.HEAD_Y];
+			head.zRot += j[Ragdoll.HEAD_Z];
+		}
+
+		for (int i = 0; i < LIMBS.length; i++) {
+			ModelPart limb = parts[LIMBS[i].ordinal()];
+			if (limb != null) {
+				if (before != null) {
+					before.accept(limb);
+				}
+
+				limb.xRot += j[Ragdoll.LIMB_X + i];
+				limb.zRot += j[Ragdoll.LIMB_Z + i];
+			}
+		}
+	}
+
+	/** The parts from the root down to {@code target}, inclusive; empty if it is not in the model. Cached. */
+	public static ModelPart[] chain(ModelPart root, ModelPart target) {
+		return CHAINS.computeIfAbsent(target, t -> {
+			List<ModelPart> chain = new ArrayList<>();
+			return findChain(root, t, chain) ? chain.toArray(ModelPart[]::new) : new ModelPart[0];
+		});
 	}
 
 	/** Axis-aligned bounds (in blocks, in the part's own space) of a part's cubes and its direct children's cubes. */

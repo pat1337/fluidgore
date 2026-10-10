@@ -1,0 +1,232 @@
+package dev.fluidgore.wound;
+
+import dev.fluidgore.GoreSystems;
+import dev.fluidgore.blood.BloodEmitter;
+import dev.fluidgore.blood.BloodWorld;
+import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.config.GoreLevel;
+import dev.fluidgore.dismember.BodyPart;
+import dev.fluidgore.dismember.ModelParts;
+import dev.fluidgore.suffer.Corpse;
+import dev.fluidgore.trigger.EntityFilter;
+import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import net.fabricmc.fabric.api.client.rendering.v1.RenderStateDataKey;
+import net.minecraft.client.model.Model;
+import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.util.Mth;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.monster.Enemy;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.phys.Vec3;
+import org.jspecify.annotations.Nullable;
+
+/**
+ * The hack model: blows land on the exact spot of the model they hit and open wounds there that deepen with every
+ * blow on the same spot, on living animals mid-fight and on bodies after death. A blade through a wound that is
+ * already as deep as the gore level allows takes that part off. Cosmetic and client-side only.
+ */
+public final class Wounds {
+	public static final RenderStateDataKey<WoundSet> KEY = RenderStateDataKey.create(() -> "fluidgore:wounds");
+
+	/** How long an attack click is remembered while waiting for the server to report the damage. */
+	private static final int AIM_TICKS = 10;
+	private static final double REACH = 8.0;
+	private static final RandomSource RANDOM = RandomSource.create();
+
+	/** Where a swing of the local player landed on the model, resolved against the pose the player saw. */
+	private record Aim(Model<?> model, ModelHit.Result hit, float bodyYaw, int tick) {
+	}
+
+	/**
+	 * One blow resolved against the model.
+	 *
+	 * @param cut   true if a cutting blow went through a wound that could not get any deeper: the part comes off
+	 * @param aimed true if the spot is where the player really aimed; false if it was guessed for another attacker
+	 */
+	public record Strike(ModelHit.Result hit, float severity, boolean cut, boolean aimed) {
+	}
+
+	private final Int2ObjectOpenHashMap<WoundSet> sets = new Int2ObjectOpenHashMap<>();
+	private final Int2ObjectOpenHashMap<Aim> aims = new Int2ObjectOpenHashMap<>();
+	private int tick;
+
+	public @Nullable WoundSet get(int entityId) {
+		return sets.get(entityId);
+	}
+
+	/** True if this entity shows wounds under the current settings. */
+	public static boolean applies(LivingEntity entity) {
+		GoreConfig config = GoreConfig.get();
+		if (!config.wounds || !EntityFilter.affects(entity)) {
+			return false;
+		}
+
+		if (entity instanceof Player) {
+			return config.woundPlayers;
+		}
+
+		return !(entity instanceof Enemy) || config.woundHostiles;
+	}
+
+	/**
+	 * The local player swung at {@code target}. The spot is found now, against the pose the player is looking at:
+	 * the damage arrives a tick or more later, by when knockback has moved the body and its legs have swung. The spot
+	 * is kept in the struck part's own space, so it stays right however the body moves.
+	 */
+	public void recordAim(LivingEntity target, Vec3 eye, Vec3 dir) {
+		ModelParts.Posed posed = GoreConfig.get().goreLevel.enabled() && applies(target) ? ModelParts.pose(target) : null;
+		ModelHit.Result hit = posed != null ? ModelHit.cast(target, posed, eye, dir, REACH) : null;
+		if (hit != null) {
+			aims.put(target.getId(), new Aim(posed.model(), hit, posed.state().bodyRot, tick));
+		}
+	}
+
+	/**
+	 * A blow reported by the server. Uses the player's own aim if they swung at this entity, otherwise a ray from the
+	 * attacker to the middle of the victim.
+	 */
+	public @Nullable Strike onDamage(LivingEntity victim, @Nullable Entity attacker, Weapon weapon, float damage) {
+		if (attacker == null || !applies(victim)) {
+			return null;
+		}
+
+		Aim aim = aims.remove(victim.getId());
+		if (aim != null && tick - aim.tick() <= AIM_TICKS) {
+			Strike strike = open(victim, aim.model(), aim.hit(), aim.bodyYaw(), weapon, damage);
+			if (strike != null) {
+				return strike;
+			}
+		}
+
+		// Another player, a mob or a projectile: the server never says where it landed, so a spot is guessed.
+		Vec3 eye = attacker.getEyePosition();
+		Vec3 target = victim.position().add(
+				(RANDOM.nextDouble() - 0.5) * victim.getBbWidth() * 0.6,
+				victim.getBbHeight() * (0.3 + RANDOM.nextDouble() * 0.5),
+				(RANDOM.nextDouble() - 0.5) * victim.getBbWidth() * 0.6);
+		Vec3 dir = target.subtract(eye);
+		double length = dir.length();
+		Strike guessed = length < 1.0E-4 ? null : strike(victim, eye, dir.scale(1.0 / length), length + 2.0, weapon, damage);
+		return guessed == null ? null : new Strike(guessed.hit(), guessed.severity(), guessed.cut(), false);
+	}
+
+	/** Casts the blow against the model as posed now and opens or deepens the wound it lands on. */
+	public @Nullable Strike strike(LivingEntity victim, Vec3 from, Vec3 dir, double reach, Weapon weapon, float damage) {
+		if (!GoreConfig.get().goreLevel.enabled() || !applies(victim)) {
+			return null;
+		}
+
+		ModelParts.Posed posed = ModelParts.pose(victim);
+		ModelHit.Result hit = posed != null ? ModelHit.cast(victim, posed, from, dir, reach) : null;
+		return hit != null ? open(victim, posed.model(), hit, posed.state().bodyRot, weapon, damage) : null;
+	}
+
+	/** Opens or deepens the wound at {@code hit}, a spot on {@code model} found while the body yawed {@code bodyYaw}. */
+	private @Nullable Strike open(LivingEntity victim, Model<?> model, ModelHit.Result hit, float bodyYaw, Weapon weapon, float damage) {
+		GoreLevel level = GoreConfig.get().goreLevel;
+		if (!level.enabled() || !applies(victim)) {
+			return null;
+		}
+
+		WoundSet set = sets.get(victim.getId());
+		if (set == null || set.model != model) {
+			set = new WoundSet(model, Flesh.of(victim), EntityFilter.bloodType(victim).rgb);
+			sets.put(victim.getId(), set);
+		}
+
+		// Damage relative to how much the body can take: a sword on a chicken opens it up, on a horse it gashes.
+		float relative = damage / Math.max(4.0F, victim.getMaxHealth());
+		float amount = Math.max(0.12F, relative * 0.9F) * weapon.depth * level.woundRate;
+		float cap = Math.min(weapon.cap, level.woundDepth);
+		Vec3 offset = hit.point().subtract(victim.position());
+		WoundSet.Change change = set.add(hit, weapon, amount, cap, offset, bodyYaw, RANDOM);
+		boolean cut = weapon.cuts() && hit.bodyPart() != null && change.before() >= cap - 1.0E-3F
+				&& RANDOM.nextFloat() < Math.min(1.0F, level.partChance * 2.0F);
+		return new Strike(hit, change.after(), cut, true);
+	}
+
+	/** A part was just cut off {@code entity}: its wounds go with it and the body keeps a raw stump. */
+	public void onSevered(LivingEntity entity, ModelParts.Posed posed, ModelPart severed, BodyPart bodyPart) {
+		if (!applies(entity)) {
+			return;
+		}
+
+		WoundSet set = sets.get(entity.getId());
+		if (set == null || set.model != posed.model()) {
+			set = new WoundSet(posed.model(), Flesh.of(entity), EntityFilter.bloodType(entity).rgb);
+			sets.put(entity.getId(), set);
+		} else {
+			set.removePart(bodyPart);
+		}
+
+		ModelHit.Result at = ModelHit.stump(entity, posed, severed);
+		if (at != null) {
+			float[] b = ModelParts.bounds(severed);
+			float size = Math.min(b[3] - b[0], b[5] - b[2]) * 16.0F * 0.5F;
+			set.stump(at, size, RANDOM);
+		}
+	}
+
+	/** Open wounds on living animals and fresh bodies drip, so a wounded animal leaves a trail. */
+	public void tick(ClientLevel level, BloodWorld blood) {
+		tick++;
+		if (aims.size() > 64) {
+			aims.int2ObjectEntrySet().removeIf(e -> tick - e.getValue().tick() > AIM_TICKS);
+		}
+
+		if (tick % 5 != 0 || sets.isEmpty()) {
+			return;
+		}
+
+		float puddles = GoreConfig.get().goreLevel.puddles;
+		for (Int2ObjectMap.Entry<WoundSet> entry : sets.int2ObjectEntrySet()) {
+			WoundSet set = entry.getValue();
+			if (!set.flesh.bleeds()) {
+				continue;
+			}
+
+			Entity entity = level.getEntity(entry.getIntKey());
+			Corpse corpse = GoreSystems.suffering().corpse(entry.getIntKey());
+			Vec3 base;
+			float yaw;
+			if (corpse != null) {
+				// Bodies bleed out: fresh ones drip, old ones have stopped.
+				if (corpse.age > 600) {
+					continue;
+				}
+
+				base = corpse.position();
+				yaw = corpse.yaw();
+			} else if (entity instanceof LivingEntity living && living.isAlive()) {
+				base = living.position();
+				yaw = living.yBodyRot;
+			} else {
+				continue;
+			}
+
+			for (int i = 0; i < set.count; i++) {
+				float severity = set.severity[i];
+				if (severity < 0.25F || Float.isNaN(set.ox[i]) || RANDOM.nextFloat() > severity * 0.6F) {
+					continue;
+				}
+
+				Vec3 offset = new Vec3(set.ox[i], set.oy[i], set.oz[i]).yRot((set.yaw[i] - yaw) * Mth.DEG_TO_RAD);
+				BloodEmitter.drip(blood, base.add(offset), set.blood, 0.004F * severity * puddles);
+			}
+		}
+	}
+
+	public void forget(int entityId) {
+		sets.remove(entityId);
+		aims.remove(entityId);
+	}
+
+	public void clear() {
+		sets.clear();
+		aims.clear();
+	}
+}

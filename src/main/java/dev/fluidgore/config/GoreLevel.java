@@ -5,11 +5,11 @@ package dev.fluidgore.config;
  * so a single slider scales particles, puddles, dismemberment and effect duration together.
  */
 public enum GoreLevel {
-	OFF(0.0F, 0.0F, 0.0F, 0, 0.0F),
-	LOW(0.4F, 0.5F, 0.15F, 1, 0.5F),
-	MEDIUM(1.0F, 1.0F, 0.35F, 2, 1.0F),
-	HIGH(1.7F, 1.5F, 0.6F, 3, 1.5F),
-	EXTREME(2.6F, 2.2F, 1.0F, 5, 2.0F);
+	OFF(0.0F, 0.0F, 0.0F, 0, 0.0F, 0.0F, 0.0F),
+	LOW(0.4F, 0.5F, 0.15F, 1, 0.5F, 0.6F, 0.45F),
+	MEDIUM(1.0F, 1.0F, 0.35F, 2, 1.0F, 1.0F, 0.7F),
+	HIGH(1.7F, 1.5F, 0.6F, 3, 1.5F, 1.3F, 1.0F),
+	EXTREME(2.6F, 2.2F, 1.0F, 5, 2.0F, 1.8F, 1.0F);
 
 	/** Multiplier for droplet and mist particle counts. */
 	public final float particles;
@@ -21,13 +21,22 @@ public enum GoreLevel {
 	public final int maxPartsPerHit;
 	/** Multiplier for how long decals, puddles and parts stay before fading. */
 	public final float duration;
+	/** Multiplier for how fast blows deepen wounds. */
+	public final float woundRate;
+	/**
+	 * Deepest a wound may get: Low stops at gashes, Medium at open meat, High and Extreme reach the bone. Parts come
+	 * off when a blade goes through a wound already this deep.
+	 */
+	public final float woundDepth;
 
-	GoreLevel(float particles, float puddles, float partChance, int maxPartsPerHit, float duration) {
+	GoreLevel(float particles, float puddles, float partChance, int maxPartsPerHit, float duration, float woundRate, float woundDepth) {
 		this.particles = particles;
 		this.puddles = puddles;
 		this.partChance = partChance;
 		this.maxPartsPerHit = maxPartsPerHit;
 		this.duration = duration;
+		this.woundRate = woundRate;
+		this.woundDepth = woundDepth;
 	}
 
 	public boolean enabled() {

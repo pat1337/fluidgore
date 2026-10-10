@@ -1,19 +1,25 @@
 package dev.fluidgore.mixin;
 
+import com.mojang.blaze3d.vertex.PoseStack;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.suffer.BodyPose;
-import dev.fluidgore.suffer.Ragdoll;
 import dev.fluidgore.suffer.SufferPose;
+import dev.fluidgore.wound.WoundRenderer;
+import dev.fluidgore.wound.WoundSet;
+import dev.fluidgore.wound.Wounds;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.model.Model;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.client.renderer.feature.ModelFeatureRenderer;
+import net.minecraft.client.renderer.feature.RenderTypeFeatureRenderer;
 import net.minecraft.util.Mth;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -23,12 +29,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * Adjusts an entity's model right before it is drawn: hides severed parts and adds suffering motion (head
  * thrashing, legs kicking, shivering). Models are shared between all entities of a type and drawn later than
  * they are submitted, so the only safe moment is here: after {@code setupAnim} has posed the model for this
- * entity and immediately around {@code renderToBuffer}. Everything is restored right after drawing so other
+ * entity and immediately around {@code renderToBuffer}. Wounds are drawn right after the model, in the same part
+ * transforms, so they follow the animation. Everything is restored right after drawing so other
  * entities using the same model are unaffected. Armour and other layers reuse the entity's render state, so a
  * severed head takes its helmet with it.
  */
 @Mixin(ModelFeatureRenderer.class)
-public abstract class ModelFeatureRendererMixin {
+public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRenderer<ModelFeatureRenderer.Submit<?>> {
+	@Shadow
+	@Final
+	private PoseStack poseStack;
 	@Unique
 	private final List<ModelPart> fluidgore$hidden = new ArrayList<>();
 	@Unique
@@ -70,7 +80,8 @@ public abstract class ModelFeatureRendererMixin {
 		}
 
 		if (body != null) {
-			fluidgore$joints(parts, body.joints());
+			// The head and each limb are free-swinging springs.
+			ModelParts.applyJoints(parts, body.joints(), this::fluidgore$save);
 		}
 	}
 
@@ -79,6 +90,16 @@ public abstract class ModelFeatureRendererMixin {
 			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/model/Model;renderToBuffer(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;III)V", shift = At.Shift.AFTER)
 	)
 	private void fluidgore$afterDraw(ModelFeatureRenderer.Submit<?> submit, CallbackInfo ci) {
+		// Wounds go on the body model only (not armour sharing its state), not on ghostly see-through bodies or the
+		// block-breaking overlay, and while the parts are still posed and severed parts still hidden.
+		if (submit.state() instanceof LivingEntityRenderState state && submit.sheetedDecalPose() == null
+				&& submit.tintedColor() >>> 24 == 0xFF) {
+			WoundSet wounds = state.getData(Wounds.KEY);
+			if (wounds != null && wounds.count() > 0 && wounds.drawsOn(submit.model())) {
+				WoundRenderer.draw(wounds, poseStack, getVertexBuilder(WoundRenderer.renderType()), submit.lightCoords(), submit.overlayCoords());
+			}
+		}
+
 		fluidgore$restore();
 	}
 
@@ -109,28 +130,6 @@ public abstract class ModelFeatureRendererMixin {
 				float phase = i * 1.9F;
 				leg.xRot += Mth.sin(t * pose.kickRate() + phase) * pose.kick() * 0.9F;
 				leg.zRot += SufferPose.noise(t * 2.0F, phase) * pose.kick() * 0.2F;
-			}
-		}
-	}
-
-	/** Applies a ragdoll's joint offsets: the head and each limb are free-swinging springs. */
-	@Unique
-	private void fluidgore$joints(ModelPart[] parts, float[] j) {
-		ModelPart head = parts[BodyPart.HEAD.ordinal()];
-		if (head != null) {
-			fluidgore$save(head);
-			head.xRot += j[Ragdoll.HEAD_X];
-			head.yRot += j[Ragdoll.HEAD_Y];
-			head.zRot += j[Ragdoll.HEAD_Z];
-		}
-
-		BodyPart[] limbs = {BodyPart.RIGHT_ARM, BodyPart.LEFT_ARM, BodyPart.RIGHT_LEG, BodyPart.LEFT_LEG};
-		for (int i = 0; i < limbs.length; i++) {
-			ModelPart limb = parts[limbs[i].ordinal()];
-			if (limb != null) {
-				fluidgore$save(limb);
-				limb.xRot += j[Ragdoll.LIMB_X + i];
-				limb.zRot += j[Ragdoll.LIMB_Z + i];
 			}
 		}
 	}

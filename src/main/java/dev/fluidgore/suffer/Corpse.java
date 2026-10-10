@@ -2,6 +2,7 @@ package dev.fluidgore.suffer;
 
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * The body of a slaughtered animal, kept on the client after the server removes the entity so its death can
@@ -92,6 +93,15 @@ public final class Corpse {
 	/** Ticks spent on the ground so far (negative while still running). */
 	int groundTicks() {
 		return age - collapseAt;
+	}
+
+	/** Where the body is now (its feet), after everything the ragdoll has done to it. */
+	public Vec3 position() {
+		return new Vec3(body.x, body.y, body.z);
+	}
+
+	public float yaw() {
+		return body.yaw;
 	}
 
 	public boolean done() {

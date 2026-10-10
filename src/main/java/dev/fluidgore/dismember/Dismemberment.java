@@ -6,17 +6,16 @@ import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.config.GoreLevel;
 import dev.fluidgore.suffer.Voice;
 import dev.fluidgore.trigger.EntityFilter;
+import dev.fluidgore.wound.Wounds;
 import it.unimi.dsi.fastutil.ints.Int2IntMap;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
 import net.fabricmc.fabric.api.client.rendering.v1.RenderStateDataKey;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.resources.Identifier;
@@ -43,11 +42,16 @@ public final class Dismemberment {
 	private final Int2IntOpenHashMap missing = new Int2IntOpenHashMap();
 	private final GorePartManager parts = new GorePartManager();
 	private final PartInteraction interaction = new PartInteraction(parts);
+	private final Wounds wounds = new Wounds();
+	private int tick;
 
 	public PartInteraction interaction() {
 		return interaction;
 	}
-	private int tick;
+
+	public Wounds wounds() {
+		return wounds;
+	}
 
 	public GorePartManager parts() {
 		return parts;
@@ -58,7 +62,8 @@ public final class Dismemberment {
 	}
 
 	/**
-	 * Called for a hit with a bladed weapon. Lethal hits can take several parts; heavy non-lethal hits take one.
+	 * Called for a hit with a bladed weapon whose spot on the body is not known. Lethal hits can take several parts;
+	 * heavy non-lethal hits take one.
 	 */
 	public void onBladedHit(BloodWorld blood, ClientLevel level, LivingEntity entity, boolean lethal, @Nullable Vec3 away) {
 		GoreLevel preset = GoreConfig.get().goreLevel;
@@ -68,9 +73,7 @@ public final class Dismemberment {
 
 		int maxParts = lethal ? preset.maxPartsPerHit : 1;
 		int count = 1 + (maxParts > 1 ? RANDOM.nextInt(maxParts) : 0);
-		List<BodyPart> candidates = new ArrayList<>(List.of(BodyPart.values()));
-		int already = missing.get(entity.getId());
-		candidates.removeIf(p -> (already & p.bit()) != 0);
+		List<BodyPart> candidates = remaining(entity);
 		for (int i = 0; i < count && !candidates.isEmpty(); i++) {
 			// The head is the most dramatic cut, so it is favoured on kills.
 			BodyPart chosen = lethal && candidates.contains(BodyPart.HEAD) && RANDOM.nextFloat() < 0.45F
@@ -86,39 +89,48 @@ public final class Dismemberment {
 	 * since the server last placed the entity, so the caller says where the body is now.
 	 */
 	public void severOnBody(BloodWorld blood, ClientLevel level, LivingEntity entity, Supplier<Vec3> origin, float yaw, float roll, @Nullable Vec3 away) {
-		List<BodyPart> candidates = new ArrayList<>(List.of(BodyPart.values()));
-		int already = missing.get(entity.getId());
-		candidates.removeIf(p -> (already & p.bit()) != 0);
+		List<BodyPart> candidates = remaining(entity);
 		if (!candidates.isEmpty()) {
 			sever(blood, level, entity, candidates.get(RANDOM.nextInt(candidates.size())), away, origin, yaw, roll);
 		}
 	}
 
+	/**
+	 * Cuts off exactly the part that was struck. {@code origin}, {@code yaw} and {@code roll} place the body as for
+	 * {@link #severOnBody}; a living entity passes its own position and NaN yaw.
+	 */
+	public void severPart(BloodWorld blood, ClientLevel level, LivingEntity entity, BodyPart part, Supplier<Vec3> origin, float yaw,
+			float roll, @Nullable Vec3 away) {
+		if ((missing.get(entity.getId()) & part.bit()) == 0) {
+			sever(blood, level, entity, part, away, origin, yaw, roll);
+		}
+	}
+
+	private List<BodyPart> remaining(LivingEntity entity) {
+		List<BodyPart> candidates = new ArrayList<>(List.of(BodyPart.values()));
+		int already = missing.get(entity.getId());
+		candidates.removeIf(p -> (already & p.bit()) != 0);
+		return candidates;
+	}
+
 	@SuppressWarnings({"unchecked", "rawtypes"})
 	private void sever(BloodWorld blood, ClientLevel level, LivingEntity entity, BodyPart bodyPart, @Nullable Vec3 away,
 			Supplier<Vec3> origin, float yawOverride, float roll) {
-		Minecraft mc = Minecraft.getInstance();
-		EntityRenderer renderer = mc.getEntityRenderDispatcher().getRenderer(entity);
-		if (!(renderer instanceof LivingEntityRenderer livingRenderer)) {
+		ModelParts.Posed posed = ModelParts.pose(entity);
+		if (posed == null) {
 			return;
 		}
 
-		float partialTick = mc.getDeltaTracker().getGameTimeDeltaPartialTick(false);
-		Object rawState = renderer.createRenderState(entity, partialTick);
-		if (!(rawState instanceof LivingEntityRenderState state)) {
-			return;
-		}
-
-		EntityModel model = livingRenderer.getModel();
+		EntityModel model = posed.model();
+		LivingEntityRenderState state = posed.state();
 		ModelPart source = ModelParts.index(model)[bodyPart.ordinal()];
 		if (source == null) {
 			return;
 		}
 
-		// Pose the shared model like this entity so the measured position matches what the player sees.
-		// Every render calls setupAnim again before drawing, so this has no visible side effect.
-		model.setupAnim(state);
-		Identifier texture = livingRenderer.getTextureLocation(state);
+		Identifier texture = ((LivingEntityRenderer) posed.renderer()).getTextureLocation(state);
+		// Before the part is marked missing, while the stump's neighbours are still found around it.
+		wounds.onSevered(entity, posed, source, bodyPart);
 
 		float[] b = ModelParts.bounds(source);
 		Vector3f localCenter = new Vector3f((b[0] + b[3]) * 0.5F, (b[1] + b[4]) * 0.5F, (b[2] + b[5]) * 0.5F);
@@ -185,6 +197,7 @@ public final class Dismemberment {
 		tick++;
 		interaction.tick(level, blood);
 		parts.tick(level, blood);
+		wounds.tick(level, blood);
 		if (tick % 8 != 0 || missing.isEmpty()) {
 			return;
 		}
@@ -207,15 +220,18 @@ public final class Dismemberment {
 	/** An entity respawned or healed from death: give it its parts back. */
 	public void restore(int entityId) {
 		missing.remove(entityId);
+		wounds.forget(entityId);
 	}
 
 	public void onEntityUnload(int entityId) {
 		missing.remove(entityId);
+		wounds.forget(entityId);
 	}
 
 	public void clear() {
 		interaction.clear();
 		missing.clear();
+		wounds.clear();
 		parts.clear();
 	}
 }

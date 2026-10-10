@@ -70,6 +70,16 @@ Mod Menu 21.0.0 (compile-only, soft dependency).
   - `Corpse` keeps a body on screen after server removal for its death throes (QUICK/NORMAL/BRUTAL/HEADLESS_RUN).
   - `ScreamManager` + `ScreamSound` are pitch-bent, layered vanilla sounds. `Voice` is the entity's own sounds.
   - `SufferPose` holds animation amplitudes.
+- `wound/` (the hack model, 1.3):
+  - `ModelHit` raycasts against the real posed model cubes (mirrors `LivingEntityRenderer` plus our ragdoll
+    offset/lean) and returns part, cube, face and the point in part-local pixels. Also finds stump spots and part
+    centres. `ModelParts.pose(entity)` poses the shared model for one entity (including ragdoll joints).
+  - `WoundSet` is one body's wounds (flat arrays, cap 32): spot on a cube face, radius, severity 0..1 through four
+    layers (bruise, gash 0.25, meat 0.5, bone 0.75). `Wounds` owns them, resolves the player's swing at click time
+    (the damage packet arrives later, after knockback has moved the legs), applies the gore-level depth cap and
+    decides targeted cuts. Only aimed blows sever precisely; guessed spots (other attackers) keep random severing.
+  - `WoundRenderer` draws from `ModelFeatureRendererMixin` right after `renderToBuffer`, in the same part
+    transforms (`entityCutoutZOffset`, `wounds.png`). `Weapon` (blunt/blade/chop/pierce), `Flesh` (meat/bone/dried).
 - `render/GoreRenderer`: draws decals, puddles, droplets, parts and removed corpses via
   `LevelRenderEvents.COLLECT_SUBMITS` and `submitCustomGeometry` / `submitModelPart` / the entity dispatcher.
 - `mixin/` (`fluidgore.mixins.json`, all client):
@@ -83,7 +93,8 @@ Mod Menu 21.0.0 (compile-only, soft dependency).
 `assets/fluidgore/textures/misc/blood.png` is a 4x4 atlas of 64px tiles, white/grey with alpha, tinted by vertex
 colour. Tiles 0-9 are smooth (splats 0-3, puddle 4, pool 5, droplet 6, footprint 7, streak 8, small splat 9) and
 10-15 are pixel-art "redstone" (splats 10-13, puddle 14, droplet 15). **The atlas is full.** Adding a tile means
-growing the grid (e.g. 8x4) and updating `BloodTextures.GRID` math and the generator. All PNGs come from
+growing the grid (e.g. 8x4) and updating `BloodTextures.GRID` math and the generator. `wounds.png` is separate: a
+4x4 grid of 16px pixel-art tiles, one row per wound layer (bruise, gash, meat, bone), four variants. All PNGs come from
 `tools/GenerateTextures.java` (deterministic seeds). Never hand-edit the PNG.
 
 ## Looking up APIs
@@ -107,3 +118,6 @@ severable parts; severed heads can't blink.
   + meat items), arterial spurts, log-normal random wound severity, satellite splats, colour variation, crunch
   sounds. Inspired by the block-crumble particles and break sounds in the user's Clay mod
   (`C:\Users\Thele\ClaySoldiersMod`).
+- **1.3.0**: bone bodies (skeletons chip and shatter), hitting bodies after death, death launch, per-animal
+  personalities, scrubbing blood, and the hack model (Slaughterhouse stage 1): blows land on the exact spot of the
+  model and open wounds that deepen through bruise, gash, meat and bone; targeted severing, stumps, dripping wounds.

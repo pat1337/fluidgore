@@ -3,12 +3,16 @@ package dev.fluidgore.trigger;
 import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.suffer.Suffering;
+import dev.fluidgore.wound.Weapon;
+import dev.fluidgore.wound.Wounds;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -29,6 +33,7 @@ public final class DamageTracker {
 	/** Ticks to wait for a health update after a damage event before treating it as a light hit. */
 	private static final int PENDING_TIMEOUT = 4;
 	private static final double EFFECT_RANGE_SQ = 96.0 * 96.0;
+	private static final RandomSource RANDOM = RandomSource.create();
 
 	private record PendingHit(int attackerId, boolean melee, int tick) {
 	}
@@ -117,9 +122,19 @@ public final class DamageTracker {
 
 		if (gore) {
 			BloodEmitter.bleed(blood, level, victim, damage, lethal, away);
-			// Bone does not need a blade: any hard blow can snap a bone off.
-			boolean breaks = EntityFilter.isBone(victim) && (meleeAttacker != null || lethal);
-			if (breaks || meleeAttacker != null && EntityFilter.isBladed(meleeAttacker.getMainHandItem())) {
+			Weapon weapon = meleeAttacker != null ? Weapon.of(meleeAttacker.getMainHandItem()) : Weapon.PIERCE;
+			Wounds.Strike wound = dismemberment.wounds().onDamage(victim, attacker, weapon, damage);
+			if (wound != null && wound.aimed()) {
+				// The player aimed this blow: only the part that was struck can come off.
+				BodyPart struck = wound.hit().bodyPart();
+				boolean heavy = damage >= GoreConfig.get().heavyHitDamage && !(victim instanceof Player);
+				boolean chop = weapon.cuts() && (lethal || heavy) && RANDOM.nextFloat() < GoreConfig.get().goreLevel.partChance;
+				if (struck != null && (wound.cut() || chop)) {
+					dismemberment.severPart(blood, level, victim, struck, victim::position, Float.NaN, 0.0F, away);
+				}
+			} else if (EntityFilter.isBone(victim) && (meleeAttacker != null || lethal)
+					|| meleeAttacker != null && EntityFilter.isBladed(meleeAttacker.getMainHandItem())) {
+				// Spot unknown or guessed. Bone does not need a blade: any hard blow can snap a bone off.
 				// Players only lose parts on death; mobs can also lose one to a heavy hit and keep walking.
 				boolean heavy = damage >= GoreConfig.get().heavyHitDamage && !(victim instanceof Player);
 				if (lethal || heavy) {

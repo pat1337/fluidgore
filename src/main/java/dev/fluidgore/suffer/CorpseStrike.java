@@ -4,8 +4,13 @@ import dev.fluidgore.GoreSystems;
 import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.dismember.BodyPart;
+import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.trigger.EntityFilter;
+import dev.fluidgore.wound.Weapon;
+import dev.fluidgore.wound.Wounds;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -16,6 +21,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.component.SwingAnimation;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.HitResult;
@@ -54,13 +60,11 @@ public final class CorpseStrike {
 		}
 
 		Corpse best = null;
-		Vec3 point = null;
 		for (Corpse corpse : corpses) {
 			Optional<Vec3> clip = box(corpse).clip(eye, end);
 			if (clip.isPresent() && clip.get().distanceToSqr(eye) < limit) {
 				limit = clip.get().distanceToSqr(eye);
 				best = corpse;
-				point = clip.get();
 			}
 		}
 
@@ -71,24 +75,35 @@ public final class CorpseStrike {
 		player.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
 		if (level.getGameTime() - lastStrike >= COOLDOWN) {
 			lastStrike = (int) level.getGameTime();
-			strike(level, blood, best, point, player.getViewVector(1.0F), EntityFilter.isBladed(player.getMainHandItem()));
+			strike(level, blood, best, eye, player.getViewVector(1.0F), Weapon.of(player.getMainHandItem()),
+					(float) player.getAttributeValue(Attributes.ATTACK_DAMAGE));
 		}
 
 		return true;
 	}
 
 	/**
-	 * One blow on a body at {@code point} travelling along {@code look}: blood and a sound, a shove and a jolt through
-	 * the ragdoll, and with a blade a chance to take a part off.
+	 * One blow on a body from {@code eye} along {@code look}. It lands on the spot of the model it hits and opens or
+	 * deepens the wound there; blood and a sound, a shove through the ragdoll and a jolt in the struck limb; a blade
+	 * through a wound that is already as deep as it can get takes that part off.
 	 */
-	public static void strike(ClientLevel level, BloodWorld blood, Corpse corpse, Vec3 point, Vec3 look, boolean blade) {
+	public static void strike(ClientLevel level, BloodWorld blood, Corpse corpse, Vec3 eye, Vec3 look, Weapon weapon, float damage) {
 		LivingEntity entity = corpse.entity;
 		Ragdoll body = corpse.body;
+		boolean blade = weapon.cuts();
+		Wounds.Strike wound = GoreSystems.dismemberment().wounds().strike(entity, eye, look, REACH + 2.0, weapon, damage);
+		Vec3 point = wound != null ? wound.hit().point() : box(corpse).clip(eye, eye.add(look.scale(REACH + 2.0))).orElse(centre(corpse));
 		int rgb = EntityFilter.bloodColor(entity);
 		BloodEmitter.burst(blood, level, point, rgb, blade ? 0.07F : 0.025F, blade ? 14 : 5);
 		BloodEmitter.slash(level, point, blade ? 0.9F : 0.5F);
+		boolean bone = wound != null && wound.severity() >= 0.75F;
 		level.playLocalSound(point.x, point.y, point.z, blade ? SoundEvents.PLAYER_ATTACK_SWEEP : SoundEvents.PLAYER_ATTACK_WEAK,
 				SoundSource.PLAYERS, 0.8F, 0.8F, false);
+		if (bone) {
+			// Down to the bone: the blade grates and cracks on it.
+			level.playLocalSound(point.x, point.y, point.z, SoundEvents.BONE_BLOCK_BREAK, SoundSource.PLAYERS, 0.9F,
+					0.6F + RANDOM.nextFloat() * 0.25F, false);
+		}
 
 		// The body takes the blow where it was struck: shoved along the swing, and rolled if hit off-centre.
 		double push = blade ? 0.1 : 0.14;
@@ -98,12 +113,22 @@ public final class CorpseStrike {
 		float yawRad = body.yaw * Mth.DEG_TO_RAD;
 		double lateral = look.x * Mth.cos(yawRad) + look.z * Mth.sin(yawRad);
 		body.rollV += (float) Math.max(-0.1, Math.min(0.1, lateral * 0.08));
-		body.spasm(RANDOM, blade ? 0.7F : 0.5F);
+		BodyPart struck = wound != null ? wound.hit().bodyPart() : null;
+		if (struck != null) {
+			body.strikeJoint(struck == BodyPart.HEAD ? -1 : List.of(ModelParts.LIMBS).indexOf(struck), blade ? 0.6F : 0.45F, RANDOM);
+		} else {
+			body.spasm(RANDOM, blade ? 0.7F : 0.5F);
+		}
 
-		if (blade && RANDOM.nextFloat() < 0.4F * GoreConfig.get().goreLevel.partChance + 0.15F) {
-			Vec3 away = new Vec3(look.x, 0.0, look.z);
-			GoreSystems.dismemberment().severOnBody(blood, level, entity, () -> new Vec3(body.x, body.y, body.z), body.yaw, body.roll,
-					away.lengthSqr() > 1.0E-6 ? away.normalize() : null);
+		Vec3 flat = new Vec3(look.x, 0.0, look.z);
+		Vec3 away = flat.lengthSqr() > 1.0E-6 ? flat.normalize() : null;
+		if (wound != null) {
+			if (struck != null && wound.cut()) {
+				GoreSystems.dismemberment().severPart(blood, level, entity, struck, () -> new Vec3(body.x, body.y, body.z), body.yaw, body.roll, away);
+			}
+		} else if (blade && RANDOM.nextFloat() < 0.4F * GoreConfig.get().goreLevel.partChance + 0.15F) {
+			// Wounds are off for this body, so the spot is unknown: a random part.
+			GoreSystems.dismemberment().severOnBody(blood, level, entity, () -> new Vec3(body.x, body.y, body.z), body.yaw, body.roll, away);
 		}
 	}
 

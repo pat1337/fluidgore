@@ -34,6 +34,9 @@ saved to `.minecraft\config\fluidgore.json` when the screen closes.
 | Rain Washes Blood | On | Blood in the rain fades much faster. Blood in water always disperses. |
 | Scrub Blood | On | Hold a sponge, wet sponge or brush (`cleaningItems` in the config) and hold the use key on blood to wipe it away. Sneak to use the item normally. |
 | Death Launch | 100% | Percent. The killing blow throws a body along the direction it was struck. 0 turns it off. A dead or dying animal can also be hit again: swing at the body to spray blood, shove it, and with a blade cut parts off. |
+| Wounds | On | The hack model. Every blow lands on the exact spot of the model you aimed at (leg, head, flank, neck) and leaves a wound there that gets worse with each blow to the same spot: bruise, gash, open meat, then bone. Open wounds drip, so a hurt animal leaves a trail. A blade through a wound that cannot get any deeper takes that limb or the head off and leaves a raw stump. Works on living animals mid-fight and on bodies after death. The Gore Level sets how far it goes: Low stops at gashes, Medium at open meat, High and Extreme reach the bone. Fists only bruise and split skin, swords cut, axes chop deep, arrows punch small deep holes. |
+| Wounds on Monsters | Off | Wounds on hostile mobs too. Husks are dried leather that splits to a sickly ooze, skeletons scuff and crack. |
+| Wounds on Players | Off | Wounds on other players, on your screen only. |
 | Bone bodies | skeleton, stray, wither skeleton, bogged, parched, skeleton horse | `boneEntities` in the config. These never bleed: hits chip them into bone shards and dust with hard cracking sounds, any melee weapon can snap a bone off, and loose bones shatter when thrown, dropped hard, stomped or punched twice. |
 | Fluid Cells/Tick | 64 | Fluid simulation budget per tick. Lower if you have a weak CPU. |
 | Max Droplets | 600 | Cap on flying droplets. |

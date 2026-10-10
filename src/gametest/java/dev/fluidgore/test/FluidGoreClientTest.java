@@ -4,7 +4,11 @@ import dev.fluidgore.GoreSystems;
 import dev.fluidgore.blood.BloodCell;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.config.GoreLevel;
+import dev.fluidgore.dismember.BodyPart;
+import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.ui.GoreSettingsScreen;
+import dev.fluidgore.wound.ModelHit;
+import dev.fluidgore.wound.Weapon;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerConnection;
@@ -44,6 +48,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		try (TestSingleplayerContext singleplayer = context.worldBuilder().create()) {
 			singleplayer.getConnection().waitForChunksRender();
 			suffering(context, singleplayer.getServer());
+			hackModel(context, singleplayer.getServer());
 		}
 
 		screens(context);
@@ -344,7 +349,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			}
 
 			for (int i = 0; i < 40 && GoreSystems.dismemberment().missingMask(cowId) == 0; i++) {
-				dev.fluidgore.suffer.CorpseStrike.strike(mc.level, GoreSystems.blood(), corpse, dev.fluidgore.suffer.CorpseStrike.centre(corpse), new net.minecraft.world.phys.Vec3(0.0, 0.0, 1.0), true);
+				chop(mc, corpse, BodyPart.RIGHT_ARM);
 			}
 
 			return GoreSystems.dismemberment().missingMask(cowId) != 0;
@@ -412,6 +417,109 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		context.waitTicks(120);
 		context.takeScreenshot("indiv_7_aftermath");
 		context.runOnClient(mc -> GoreConfig.get().sufferingLevel = GoreLevel.MEDIUM);
+	}
+
+	/**
+	 * The hack model on a living cow and then its body: sword blows aimed at one hind leg must all land on that leg
+	 * and deepen one wound down to the bone; after death, chopping at the head must take the head off and leave a
+	 * stump wound on the body.
+	 */
+	private static void hackModel(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("tp @a 20.5 -60 0.5 0 15");
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:iron_sword");
+		server.runCommand("summon minecraft:cow 20.5 -60 3.5 {NoAI:1b,Rotation:[90f,0f]}");
+		context.waitTicks(15);
+		int cowId = context.computeOnClient(mc -> {
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e instanceof net.minecraft.world.entity.animal.cow.Cow && Math.abs(e.getX() - 20.5) < 0.3) {
+					return e.getId();
+				}
+			}
+
+			return -1;
+		});
+		check(cowId >= 0, "hack test cow not found");
+		// The hind leg on the side facing the player; the far one is hidden behind it.
+		BodyPart leg = context.computeOnClient(mc -> {
+			var cow = (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(cowId);
+			var posed = ModelParts.pose(cow);
+			var eye = mc.player.getEyePosition();
+			return ModelHit.centre(cow, posed, BodyPart.LEFT_LEG).distanceToSqr(eye) < ModelHit.centre(cow, posed, BodyPart.RIGHT_LEG).distanceToSqr(eye)
+					? BodyPart.LEFT_LEG : BodyPart.RIGHT_LEG;
+		});
+
+		float[] severity = new float[3];
+		String[] parts = new String[3];
+		for (int i = 0; i < 3; i++) {
+			int hit = i;
+			context.runOnClient(mc -> {
+				var cow = (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(cowId);
+				var posed = ModelParts.pose(cow);
+				var at = ModelHit.centre(cow, posed, leg);
+				aimAt(mc, at.x, at.y, at.z);
+				var eye = mc.player.getEyePosition();
+				GoreSystems.dismemberment().wounds().recordAim(cow, eye, at.subtract(eye).normalize());
+			});
+			server.runCommand("execute as @p run damage @e[type=minecraft:cow,limit=1,sort=nearest] 2 minecraft:player_attack by @s");
+			context.waitTicks(15);
+			context.runOnClient(mc -> {
+				var set = GoreSystems.dismemberment().wounds().get(cowId);
+				severity[hit] = set == null ? 0.0F : set.severity(leg);
+				StringBuilder all = new StringBuilder(set == null ? "none" : set.count() + " wounds");
+				for (BodyPart part : BodyPart.values()) {
+					all.append(' ').append(part).append('=').append(set == null ? 0.0F : set.severity(part));
+				}
+
+				parts[hit] = all.toString();
+			});
+			if (hit == 1) {
+				context.takeScreenshot("hack_01_leg_open");
+			}
+		}
+
+		System.out.println("[FluidGoreTest] " + leg + " wound severity per blow: " + java.util.Arrays.toString(severity) + " (" + parts[2] + ")");
+		check(severity[0] >= 0.25F, "a sword blow on the leg did not cut it: " + severity[0]);
+		check(severity[1] > severity[0] && severity[2] > severity[1], "repeated blows did not deepen the leg wound: " + java.util.Arrays.toString(severity));
+		check(severity[2] >= 0.75F, "three sword blows at Extreme did not reach the bone: " + severity[2]);
+		context.takeScreenshot("hack_02_leg_bone");
+
+		server.runCommand("execute as @p run damage @e[type=minecraft:cow,limit=1,sort=nearest] 100 minecraft:player_attack by @s");
+		context.waitTicks(30);
+		boolean headOff = context.computeOnClient(mc -> {
+			var corpse = GoreSystems.suffering().corpse(cowId);
+			if (corpse == null) {
+				return false;
+			}
+
+			for (int i = 0; i < 30 && (GoreSystems.dismemberment().missingMask(cowId) & BodyPart.HEAD.bit()) == 0; i++) {
+				chop(mc, corpse, BodyPart.HEAD);
+			}
+
+			return (GoreSystems.dismemberment().missingMask(cowId) & BodyPart.HEAD.bit()) != 0;
+		});
+		check(headOff, "chopping at a body's head never took the head off");
+		int wounds = context.computeOnClient(mc -> {
+			var set = GoreSystems.dismemberment().wounds().get(cowId);
+			return set == null ? 0 : set.count();
+		});
+		System.out.println("[FluidGoreTest] head chopped off the body, wounds left on it: " + wounds);
+		check(wounds > 0, "the body kept no wounds or stump after its head came off");
+		context.waitTicks(10);
+		context.takeScreenshot("hack_03_beheaded_body");
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");
+	}
+
+	/** One axe blow on a body, aimed at a part from outside the body (away from its middle). */
+	private static void chop(net.minecraft.client.Minecraft mc, dev.fluidgore.suffer.Corpse corpse, BodyPart part) {
+		var target = ModelHit.centre(corpse.entity, ModelParts.pose(corpse.entity), part);
+		if (target == null) {
+			return;
+		}
+
+		var outward = target.subtract(dev.fluidgore.suffer.CorpseStrike.centre(corpse)).add(0.0, 0.3, 0.0).normalize();
+		var eye = target.add(outward.scale(1.5));
+		dev.fluidgore.suffer.CorpseStrike.strike(mc.level, GoreSystems.blood(), corpse, eye, target.subtract(eye).normalize(), Weapon.CHOP, 9.0F);
 	}
 
 	private static void aimAt(net.minecraft.client.Minecraft mc, double x, double y, double z) {

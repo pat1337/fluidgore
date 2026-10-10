@@ -183,6 +183,22 @@ public final class Ragdoll {
 		}
 	}
 
+	/**
+	 * A blow on one joint: -1 for the head, 0-3 for the limbs in {@code ModelParts.LIMBS} order. The struck part
+	 * swings away and the rest of the body twitches a little with it.
+	 */
+	void strikeJoint(int slot, float strength, RandomSource random) {
+		if (slot < 0) {
+			jointV[HEAD_X] += (random.nextFloat() - 0.3F) * strength;
+			jointV[HEAD_Y] += (random.nextFloat() - 0.5F) * strength;
+		} else {
+			jointV[LIMB_X + slot] += (random.nextBoolean() ? 1.0F : -1.0F) * strength * 1.4F;
+			jointV[LIMB_Z + slot] += (random.nextFloat() - 0.5F) * strength * 0.6F;
+		}
+
+		spasm(random, strength * 0.25F);
+	}
+
 	/** Passes an impact or sudden movement of the whole body on to the joints, which then swing on their own. */
 	private void jolt(float amount) {
 		for (int i = LIMB_X; i < LIMB_X + 4; i++) {

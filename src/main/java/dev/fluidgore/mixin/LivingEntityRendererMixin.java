@@ -8,6 +8,7 @@ import dev.fluidgore.suffer.BodyPose;
 import dev.fluidgore.suffer.Corpse;
 import dev.fluidgore.suffer.Ragdoll;
 import dev.fluidgore.suffer.SufferPose;
+import dev.fluidgore.wound.Wounds;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.util.Mth;
@@ -19,7 +20,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * Copies per-entity gore state into the render state (rendering only sees render states, never the entity):
- * the missing-part mask for {@link ModelFeatureRendererMixin}, the suffering pose, and for dying animals the
+ * the missing-part mask and wounds for {@link ModelFeatureRendererMixin}, the suffering pose, and for dying animals the
  * corpse's own death animation, which replaces vanilla's fixed one-second tip-over.
  */
 @Mixin(LivingEntityRenderer.class)
@@ -33,6 +34,7 @@ public abstract class LivingEntityRendererMixin {
 		// Always write, so a reused render state never keeps stale data from another entity.
 		state.setData(Dismemberment.MISSING_PARTS, mask == 0 ? null : mask);
 		state.setData(SufferPose.KEY, GoreSystems.suffering().pose(entity.getId()));
+		state.setData(Wounds.KEY, GoreSystems.dismemberment().wounds().get(entity.getId()));
 
 		Corpse corpse = GoreSystems.suffering().corpse(entity.getId());
 		if (corpse != null) {

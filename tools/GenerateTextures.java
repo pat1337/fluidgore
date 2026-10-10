@@ -47,6 +47,7 @@ public final class GenerateTextures {
 		drawPixelArt(atlas, 14, pixelPuddle(new Random(9300)), new Random(9301));
 		drawPixelArt(atlas, 15, pixelDroplet(), new Random(9400));
 		ImageIO.write(atlas, "png", new File(misc, "blood.png"));
+		ImageIO.write(wounds(), "png", new File(misc, "wounds.png"));
 
 		ImageIO.write(icon(), "png", new File(root, "icon.png"));
 		System.out.println("Wrote textures to " + root.getAbsolutePath());
@@ -404,6 +405,88 @@ public final class GenerateTextures {
 		}
 
 		return out;
+	}
+
+
+
+	/**
+	 * wounds.png: a 4x4 grid of 16px pixel-art tiles, one row per wound layer (bruise, gash, open meat, bone), four
+	 * variants each. Greyscale with hard alpha; the game tints each layer by the creature's blood and flesh colour.
+	 */
+	private static BufferedImage wounds() {
+		BufferedImage image = new BufferedImage(64, 64, BufferedImage.TYPE_INT_ARGB);
+		for (int v = 0; v < 4; v++) {
+			woundTile(image, 0, v, new Random(11000 + v));
+			woundTile(image, 1, v, new Random(12000 + v));
+			woundTile(image, 2, v, new Random(13000 + v));
+			woundTile(image, 3, v, new Random(14000 + v));
+		}
+
+		return image;
+	}
+
+	private static void woundTile(BufferedImage image, int layer, int variant, Random random) {
+		int ox = variant * 16;
+		int oy = layer * 16;
+		// A slash runs at one of four angles; the other layers are lumpy blobs.
+		double angle = variant * Math.PI / 4.0 + (random.nextDouble() - 0.5) * 0.3;
+		double ca = Math.cos(angle);
+		double sa = Math.sin(angle);
+		double[] lumps = new double[8];
+		for (int i = 0; i < lumps.length; i++) {
+			lumps[i] = 0.8 + random.nextDouble() * 0.35;
+		}
+
+		for (int y = 0; y < 16; y++) {
+			for (int x = 0; x < 16; x++) {
+				double dx = (x + 0.5 - 8.0) / 8.0;
+				double dy = (y + 0.5 - 8.0) / 8.0;
+				double along = dx * ca + dy * sa;
+				double across = -dx * sa + dy * ca;
+				double theta = Math.atan2(dy, dx) / (Math.PI * 2.0) * lumps.length;
+				int li = Math.floorMod((int) Math.floor(theta), lumps.length);
+				double lump = lerp(theta - Math.floor(theta), lumps[li], lumps[(li + 1) % lumps.length]);
+				double r = Math.sqrt(dx * dx + dy * dy) / lump;
+				double noise = random.nextDouble();
+				double light;
+				boolean inside;
+				switch (layer) {
+					case 0 -> {
+						// Bruise: a mottled blob whose rim breaks up into scattered pixels.
+						inside = r < 0.75 || r < 0.98 && noise < 0.45;
+						light = 0.55 + noise * 0.35 - r * 0.2;
+					}
+					case 1 -> {
+						// Gash: a lens along the cut, dark at the split, ragged raised edges.
+						double width = 0.32 * (1.0 - along * along) + (noise - 0.5) * 0.08;
+						inside = Math.abs(along) < 0.95 && Math.abs(across) < width;
+						light = Math.abs(across) < width * 0.4 ? 0.25 + noise * 0.1 : 0.75 + noise * 0.25;
+					}
+					case 2 -> {
+						// Open meat: a wet blob with darker muscle fibres and bright wet highlights.
+						inside = r < 0.82 || r < 0.95 && noise < 0.5;
+						boolean fibre = Math.floorMod((int) Math.floor((along * 6.0 + across * 1.5) + noise * 0.6), 3) == 0;
+						light = fibre ? 0.55 + noise * 0.1 : 0.8 + noise * 0.2;
+						if (noise > 0.94) {
+							light = 1.0;
+						}
+					}
+					default -> {
+						// Bone: a pale knob with a grey rim, a crack and a dark marrow pixel at the centre.
+						inside = r < 0.6;
+						light = r > 0.45 ? 0.7 : 0.92 + noise * 0.08;
+						if (Math.abs(across) < 0.07 && along > -0.1 && r < 0.55) {
+							light = 0.45;
+						}
+						if (r < 0.14) {
+							light = 0.3;
+						}
+					}
+				}
+
+				image.setRGB(ox + x, oy + y, inside ? argb(1.0, light) : 0);
+			}
+		}
 	}
 
 	private static int argb(double alpha, double light) {

@@ -95,6 +95,14 @@ applies joint offsets and hides severed parts; `dismember/` has `GorePart` sever
 - Performance budget: measure with the game test (log frame time or sim time per tick); must stay flat with the chunk
   cap reached.
 
+## Progress
+- **Stage 1 done (1.3.0)**: `wound/` package. Model raycast against the posed cubes, wound layers drawn in part
+  space, on live and dead animals, targeted severing through a fully opened wound, stumps, drips from open wounds,
+  `Weapon` and `Flesh` (meat / bone / dried husk). Settings: Wounds, Wounds on Monsters, Wounds on Players; depth
+  per gore level in `GoreLevel.woundDepth`. Game test: `hackModel`. Left over from stage 1: per-zone, per-weapon
+  sounds (only a bone crack on bodies so far) and blood sprayed along the blade. Wounds do not travel with a severed
+  `GorePart` yet; they are dropped from the body. Next: stage 2 (segment severing, chunk physics).
+
 ## Process
 Do it in stages, committing each: (1) zone raycast + wound decals on a living and dead animal, (2) segment severing and
 chunk physics, (3) articulated ragdoll replacing `Ragdoll`, (4) hanging/carrying, (5) species materials (skeleton,
