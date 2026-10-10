@@ -6,7 +6,6 @@ import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.GorePart;
 import dev.fluidgore.dismember.ModelParts;
-import dev.fluidgore.trigger.DamageTracker;
 import dev.fluidgore.trigger.EntityFilter;
 import dev.fluidgore.trigger.Fate;
 import dev.fluidgore.wound.Weapon;
@@ -36,7 +35,6 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.shapes.CollisionContext;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -45,7 +43,7 @@ import org.jspecify.annotations.Nullable;
  * <p>Everything here is client-side and visual. A client cannot change how an animal really moves on a server
  * (vanilla animals already run away when hit), so "acting insane" is done through the render pose: shaking, head
  * thrashing, leg kicking, sagging and tilting. The exception is the dead body: once the server removes the
- * entity, the body is ours, so a beheaded animal can keep running and a beaten one can keep kicking.
+ * entity, the body is ours, so it can go down and die out on the ground the way a real animal does (see Deaths).
  */
 public final class Suffering {
 	private static final double ACTIVE_RANGE_SQ = 48.0 * 48.0;
@@ -244,128 +242,43 @@ public final class Suffering {
 		}
 
 		float intensity = intensity();
-		Personality self = state.voice.self();
-		boolean personal = GoreConfig.get().personality;
-		int ordeal = tick - state.firstHitTick;
 		float blowShare = lastBlow / Math.max(1.0F, entity.getMaxHealth());
-		Corpse.Kind kind;
 		Corpse.Kind forced = forcedKind;
 		boolean pops = forcing ? forcedPop : random.nextFloat() < Deaths.popChance();
 		forcing = false;
 		forcedKind = null;
 		boolean burnt = GoreSystems.dismemberment().burns().burnt(entity);
-		if (forced != null) {
-			kind = forced;
-		} else if (blast >= DamageTracker.TEAR_IMPACT) {
-			// Torn open by a blast close by: dead before it lands. A few kicks of the legs, nothing more.
-			kind = Corpse.Kind.QUICK;
-		} else if (headless) {
-			kind = Corpse.Kind.HEADLESS_RUN;
-		} else if (burnt) {
-			// Burnt alive: it writhes and screams to the end.
-			kind = Corpse.Kind.BRUTAL;
-		} else if (pops) {
-			kind = classic(state, self, personal, ordeal, blowShare);
-		} else {
-			kind = deaths.choose(self, personal, weapon, zone, fall, state.hits, state.beatenHits, blowShare, state.dying, ordeal,
-					ModelParts.legs(entity.getId()).four());
-		}
+		Corpse.Kind kind = forced != null ? forced
+				: deaths.choose(weapon, zone, fall, headless, burnt, blast, state.hits, state.beatenHits, blowShare, ModelParts.legs(entity.getId()).four());
 
-		int run = 0;
-		int throes;
-		switch (kind) {
-			case QUICK -> throes = 30 + random.nextInt(20);
-			case NORMAL -> throes = 80 + random.nextInt(40);
-			case BRUTAL -> throes = Math.min(240, 140 + 25 * state.hits + 40 * state.beatenHits + ordeal / 4);
-			case BOLT -> {
-				run = Math.max(8, Math.round((16 + random.nextInt(20) + 14 * self.frantic()) * intensity));
-				throes = 70 + random.nextInt(40);
-			}
-			case COLLAPSE -> {
-				run = Math.max(10, Math.round((36 + random.nextInt(30)) * intensity));
-				throes = 70 + random.nextInt(30);
-			}
-			case CURL -> {
-				run = Math.max(10, Math.round((40 + random.nextInt(20)) * intensity));
-				throes = 90 + random.nextInt(40);
-			}
-			case HEADLESS_RUN -> {
-				run = Math.min(140, Math.round((40 + random.nextInt(50)) * intensity));
-				throes = 40;
-			}
-			default -> {
-				run = deaths.run(kind, intensity);
-				throes = deaths.throes(kind);
-			}
-		}
-
-		throes = Math.max(20, Math.round(throes * intensity * self.endurance()));
-		// A small body is left lying longer, and on High and Extreme a body that was beaten or burnt to death lies there
-		// a good while: the evidence of what was done to it.
-		float evidence = kind == Corpse.Kind.BRUTAL || burnt ? EVIDENCE_LINGER : 1.0F;
+		// On High and Extreme a body that was beaten or burnt to death lies there a good while: the evidence of what was
+		// done to it. A small body is left lying longer too.
+		float evidence = kind == Corpse.Kind.BEATEN || burnt ? EVIDENCE_LINGER : 1.0F;
 		int linger = Math.round(GoreConfig.get().corpseLingerSeconds * 20 * (entity.isBaby() ? 1.5F : 1.0F) * GoreConfig.get().goreLevel.linger
 				* (GoreConfig.get().goreLevel.linger > 1.0F ? evidence : 1.0F));
-		Corpse corpse = new Corpse(entity, kind, state.voice, run, throes, linger, random.nextFloat() * 100.0F);
+		Corpse corpse = new Corpse(entity, kind, state.voice, deaths.collapse(kind), linger, random.nextFloat() * 100.0F);
 		corpse.pops = pops;
+		deaths.plan(corpse);
 		corpses.put(entity.getId(), corpse);
 		evictOldCorpses();
 		boolean gore = GoreConfig.get().goreLevel.enabled() && !EntityFilter.isBloodless(entity);
-		if (kind.scripted()) {
-			deaths.begin(level, corpse, EntityFilter.bloodColor(entity), gore);
-		}
+		deaths.begin(corpse, EntityFilter.bloodColor(entity), gore);
 
 		// The killing blow throws the body the way it was struck, harder the bigger the share of its health.
 		int launch = GoreConfig.get().deathLaunchPercent;
 		if (launch > 0 && strike != null) {
-			float share = Math.min(1.0F, lastBlow / Math.max(1.0F, entity.getMaxHealth()));
+			float share = Math.min(1.0F, blowShare);
 			// A blast throws a body far harder than any blow: up and out, over walls and out of pits.
 			double speed = blast > 0.0F ? 0.15 + 0.85 * blast : 0.1 + 0.3 * share;
 			corpse.body.launch(strike, speed * launch / 100.0);
 		}
 
-		float length = switch (kind) {
-			case QUICK -> 0.0F;
-			case NORMAL -> 0.4F;
-			case BRUTAL -> 1.0F;
-			case HEADLESS_RUN -> -1.0F;
-			case BOLT -> 0.7F;
-			case COLLAPSE -> 0.1F;
-			case CURL -> 0.2F;
-			default -> Deaths.cry(kind);
-		};
-		if (length >= 0.0F) {
-			screams.death(follow(entity), state.voice, intensity, length);
+		float cry = Deaths.cry(kind);
+		if (cry >= 0.0F) {
+			screams.death(follow(entity), state.voice, intensity, cry);
 		}
 
 		mourn(level, entity);
-	}
-
-	/**
-	 * The death throes as they were before the realistic deaths, kept for the rare body that bursts at the end: chosen
-	 * by how it was killed and its temperament alone.
-	 */
-	private static Corpse.Kind classic(State state, Personality self, boolean personal, int ordeal, float blowShare) {
-		Corpse.Kind kind;
-		if (state.beatenHits >= 2 || state.hits >= 5 || ordeal > 100) {
-			kind = Corpse.Kind.BRUTAL;
-		} else if (state.hits <= 1 && blowShare >= 0.6F) {
-			kind = Corpse.Kind.QUICK;
-		} else if (personal && self.frantic() > 0.68F) {
-			kind = Corpse.Kind.BOLT;
-		} else if (personal && self.frantic() < 0.32F) {
-			kind = Corpse.Kind.COLLAPSE;
-		} else if (personal && state.hits >= 3) {
-			kind = Corpse.Kind.CURL;
-		} else {
-			kind = Corpse.Kind.NORMAL;
-		}
-
-		if (state.dying && (kind == Corpse.Kind.QUICK || kind == Corpse.Kind.NORMAL)) {
-			// It was already on its way down: the legs give out instead of an instant fall.
-			kind = Corpse.Kind.COLLAPSE;
-		}
-
-		return kind;
 	}
 
 	/** For tests and demos: the next animal to die dies this way (null: as it would), and bursts at the end or not. */
@@ -377,7 +290,7 @@ public final class Suffering {
 
 	/** A body was struck while it dies: the death answers in its own way. */
 	public void struck(ClientLevel level, Corpse corpse, Vec3 look) {
-		deaths.struck(level, corpse, look, EntityFilter.bloodColor(corpse.entity));
+		deaths.struck(corpse);
 	}
 
 	/** {@code entity} has been killed: its mother (or its young) starts to grieve. */
@@ -643,22 +556,17 @@ public final class Suffering {
 			c.flash--;
 		}
 
-		c.walkPosO = c.walkPos;
 		Ragdoll body = c.body;
 		body.beginTick();
 		LivingEntity entity = c.entity;
 		GoreConfig config = GoreConfig.get();
-		boolean gore = config.goreLevel.enabled();
+		boolean gore = config.goreLevel.enabled() && !EntityFilter.isBloodless(entity);
 		int color = EntityFilter.bloodColor(entity);
-		Personality self = c.self();
 
 		// The collision box follows the body, not the entity: until the server removes it, the entity still sits
 		// wherever the server last put it.
 		AABB box = entity.getBoundingBox().move(body.x - entity.getX(), body.y - entity.getY(), body.z - entity.getZ());
-		boolean running = c.running();
-		boolean scripted = c.kind.scripted() && c.upright();
-		body.move(level, box, running ? steer(level, c, box) : scripted ? deaths.drive(c) : 0.0);
-
+		body.move(level, box, 0.0);
 		if (c.age >= c.collapseAt && !c.toppled) {
 			c.toppled = true;
 			topple(c);
@@ -670,121 +578,13 @@ public final class Suffering {
 			slam(level, c, landing, color, gore);
 		}
 
-		// Legs follow distance actually covered (as vanilla does), so feet never slide; none while down.
-		if ((running || scripted) && body.onGround) {
-			double travelled = Math.hypot(body.x - body.px, body.z - body.pz);
-			c.walkSpeed += (Math.min(1.0F, (float) travelled * 4.0F) - c.walkSpeed) * 0.4F;
-		} else {
-			c.walkSpeed = 0.0F;
-		}
-
-		c.walkPos += c.walkSpeed;
-
 		Deaths.Posture p = posture.reset();
-		boolean curl = c.kind == Corpse.Kind.CURL;
-		// How far the legs have given out. The posture is kept through the first moments of the fall and fades as
-		// the body rolls onto its side, so there is no pop when the buckling ends.
-		float buckle = 0.0F;
-		if (c.kind == Corpse.Kind.COLLAPSE || curl) {
-			buckle = c.buckling() ? c.prefall() : Math.max(0.0F, Mth.cos(body.roll));
-		}
-
-		int ground = c.groundTicks();
-		if (scripted) {
-			deaths.upright(level, c, p, color, gore);
-		} else if (running) {
-			float pressure = 1.0F - c.age / (float) Math.max(1, c.runTicks);
-			if (c.kind == Corpse.Kind.HEADLESS_RUN) {
-				if (gore && c.age % 4 == 0) {
-					BloodEmitter.burst(GoreSystems.blood(), level, neck(c), color, 0.05F * pressure + 0.01F, 4);
-				}
-			} else {
-				// A bolting animal screams as it goes and leaves a trail, and at the end its front legs fold under it and it
-				// goes down nose first.
-				if (gore && c.age % 5 == 0) {
-					BloodEmitter.drip(GoreSystems.blood(), centre(c), color, 0.02F);
-				}
-
-				if (c.age % 9 == 3) {
-					screams.pain(follow(entity), c.voice, 0.0F, 1.0F);
-				}
-
-				p.thrash = 0.5F;
-				Deaths.fold(c, p, Mth.clamp((c.age - c.runTicks + 6) / 6.0F, 0.0F, 1.0F), 0.0F);
-			}
-
-			p.tremble = 0.4F;
-		} else if (c.buckling()) {
-			// Legs going out from under it. A collapsing animal breathes hard; a curled one whimpers over the wound.
-			p.tremble = (curl ? 0.6F + 0.3F * buckle : 0.5F);
-			p.kick = 0.3F * buckle;
-			if (curl && c.age % 18 == 4) {
-				screams.whimper(follow(entity), c.voice);
-			} else if (!curl && c.age % 14 == 5) {
-				screams.breath(follow(entity), c.voice, buckle);
-			}
-
-			if (gore && c.age % (curl ? 6 : 8) == 0) {
-				BloodEmitter.drip(GoreSystems.blood(), centre(c), color, 0.02F);
-			}
-		} else if (ground >= 0) {
-			// Agonal throes: sudden convulsions that get rarer as life runs out, flinging the joints and body.
-			float life = 1.0F - Math.min(1.0F, ground / (float) c.throeTicks);
-			float envelope = (float) Math.exp(-ground / Math.max(1.0, c.throeTicks / 3.0));
-			boolean convulses = !c.kind.scripted() || deaths.ground(level, c, p, ground, life, color, gore);
-			if (c.kind == Corpse.Kind.BOLT) {
-				Deaths.fold(c, p, Math.max(0.0F, Mth.cos(body.roll)), 0.0F);
-			}
-
-			float spasmRate = 0.07F * (0.4F + 1.2F * self.frantic()) * (c.kind == Corpse.Kind.COLLAPSE ? 0.5F : 1.0F);
-			if (convulses && life > 0.0F && c.random.nextFloat() < spasmRate * life) {
-				body.spasm(c.random, 0.5F + c.random.nextFloat() * 0.5F);
-			}
-
-			if (convulses) {
-				p.tremble = life <= 0.0F ? 0.0F : Math.min(1.0F, envelope * 0.8F * self.shake());
-			}
-
-			boolean voiced = c.kind != Corpse.Kind.HEADLESS_RUN && c.kind != Corpse.Kind.QUICK && Deaths.voiced(c);
-			boolean breathes = voiced && (c.kind != Corpse.Kind.BRUTAL || ground > c.throeTicks / 2);
-			if (life > 0.0F && voiced && c.kind != Corpse.Kind.COLLAPSE && c.random.nextFloat() < 0.045F * envelope + 0.01F * life) {
-				if (entity.isBaby() && config.ecology) {
-					// A dying young animal still calls for its mother, weaker each time.
-					if (c.random.nextBoolean()) {
-						screams.weakCall(follow(entity), c.voice, envelope);
-					}
-				} else {
-					screams.gurgle(follow(entity), c.voice, envelope);
-				}
-			}
-
-			// Breaths get further apart, then there is one last long one.
-			if (breathes && ground >= c.nextBreath && ground < c.throeTicks + c.stillTicks / 2) {
-				screams.breath(follow(entity), c.voice, envelope);
-				c.nextBreath = ground + Math.round(16.0F + 8.0F * self.endurance() + ground * 0.08F);
-			}
-
-			if (voiced && !c.lastBreathTaken && ground >= c.throeTicks) {
-				c.lastBreathTaken = true;
-				screams.lastBreath(follow(entity), c.voice);
-			}
-
-			if (gore && c.kind == Corpse.Kind.HEADLESS_RUN && life > 0.0F && c.age % 7 == 0) {
-				BloodEmitter.drip(GoreSystems.blood(), neck(c), color, 0.01F);
-			}
-
-			if (config.ecology && ground > c.throeTicks) {
-				attractFlies(level, c, ground - c.throeTicks);
-			}
+		deaths.tick(level, c, p, color, gore);
+		if (config.ecology && c.lifeless()) {
+			attractFlies(level, c, c.groundTicks() - c.throeTicks);
 		}
 
 		body.stepJoints();
-		if (buckle > 0.0F) {
-			p.tiltX += (curl ? 26.0F : 6.0F) * buckle;
-			p.drop += entity.getBbHeight() * (curl ? 0.12F : 0.25F) * buckle * (curl ? 1.0F : buckle);
-			p.stagger += curl ? 0.0F : 3.0F * buckle;
-		}
-
 		c.pose = p.build();
 		if (c.unloaded) {
 			// Keep the entity (culling, shadow, bounding box) with the body; no offset is then needed to draw it.
@@ -886,38 +686,7 @@ public final class Suffering {
 		float forward = (float) Math.hypot(body.vx, body.vz);
 		// A firm push, so it keels over about as fast as vanilla's tip-over instead of teetering.
 		body.topple(side, 0.05F + Math.min(0.2F, forward * 0.5F + (float) Math.abs(lateral)));
-		body.spasm(c.random, c.kind == Corpse.Kind.QUICK ? 1.0F : 0.6F);
-	}
-
-	/**
-	 * Headless reflex run: a jog with a smoothly wandering heading. Blocked by a wall it hops a one-block step if
-	 * there is room, otherwise it turns away over several ticks (no snapping), so it never passes through blocks.
-	 * Returns the wanted speed.
-	 */
-	private double steer(ClientLevel level, Corpse c, AABB box) {
-		Ragdoll body = c.body;
-		if (body.blocked && body.onGround && c.turnTicks == 0) {
-			float yawRad = body.yaw * Mth.DEG_TO_RAD;
-			AABB raised = box.move(0.0, 1.0, 0.0);
-			Vec3 ahead = new Vec3(-Mth.sin(yawRad) * 0.4, 0.0, Mth.cos(yawRad) * 0.4);
-			Vec3 reach = Entity.collideBoundingBox(CollisionContext.empty(), ahead, raised, level, List.of());
-			if (reach.horizontalDistanceSqr() > ahead.horizontalDistanceSqr() - 1.0E-6) {
-				body.vy = 0.42;
-			} else {
-				c.turnDir = c.random.nextBoolean() ? 1.0F : -1.0F;
-				c.turnTicks = 12 + c.random.nextInt(10);
-			}
-		}
-
-		float wanted = SufferPose.noise(c.age * 0.12F, c.seed) * 5.0F;
-		if (c.turnTicks > 0) {
-			c.turnTicks--;
-			wanted = c.turnDir * 14.0F;
-		}
-
-		body.yawV += (wanted - body.yawV) * 0.2F;
-		body.yaw += body.yawV;
-		return ((c.kind == Corpse.Kind.BOLT ? 0.22 : 0.15) + 0.03 * Math.sin(c.age * 0.4)) * Math.min(1.0, c.age / 6.0);
+		body.spasm(c.random, c.kind == Corpse.Kind.TRAUMA ? 0.2F : 0.4F);
 	}
 
 	/** Severed heads twitch (rendered by GoreRenderer) and let out a few weak moans. */

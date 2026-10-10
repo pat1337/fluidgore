@@ -84,8 +84,12 @@ Mod Menu 21.0.0 (compile-only, soft dependency).
   - `BodyPart` maps parts to model-part names.
 - `suffer/`:
   - `Suffering` handles per-animal fear and pain, herd panic, corpses and severed-head moans.
-  - `Corpse` keeps a body on screen after server removal for its death throes; `Deaths` picks and plays the nine realistic
-    deaths (see its javadoc and `Corpse`).
+  - `Corpse` keeps a body on screen after server removal while it dies. `Deaths` (2.1) chooses the cause
+    (`Corpse.Kind`: CONCUSSION, EXSANGUINATION, SPINAL, DECAPITATION, CHEST, TRAUMA, BURN, BEATEN), `plan`s the death
+    from `Corpse.random` (tonic/clonic/gasps/fasciculation/heart, ground ticks, 60-100 total) and plays it in `tick`.
+    Every body drops within `collapse()` ticks; nothing happens upright. Pose channels for this: `SufferPose.hindLimp`,
+    `legSeed` (per-leg kick strength/phase), `gaspAt`/`gasp` (chest heave + head lift, shaped at render time) and
+    `SufferPose.CLOCK` (corpse age + partial tick; removed entities stop ticking, so never use `ageInTicks` for them).
   - `ScreamManager` + `ScreamSound` are pitch-bent, layered vanilla sounds. `Voice` is the entity's own sounds.
   - `SufferPose` holds animation amplitudes.
 - `wound/` (the hack model, 1.3):
@@ -175,3 +179,6 @@ severable parts; severed heads can't blink.
 - **2.0.0**: multiplayer agreement with no server mod: `trigger/Fate` shared dice (see `trigger/`), `Corpse.random`
   per-body throes dice, seeded death pop, `woundPlayers` on by default (`configVersion` 3). Game test: `sharedFate`
   (same fight twice on a fixed-UUID cow must match). `deaths` test now samples the broken back at 70 ticks.
+- **2.1.0**: deaths overhauled (see `suffer/` above): the nine upright/running deaths and the headless run are gone;
+  every body drops at once and dies on the ground in 3-5 s, shaped by eight causes. Corpse render clock fixes frozen
+  kicking after server removal. Game test `deaths` rewritten (one cow per cause, sampled every tick). Demo: `deaths`.

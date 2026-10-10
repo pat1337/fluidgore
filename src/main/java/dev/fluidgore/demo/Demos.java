@@ -22,7 +22,7 @@ import org.jspecify.annotations.Nullable;
  */
 public final class Demos {
 	public static final List<Demo> ALL = List.of(
-			new Demo("deaths", "1.8.0", "Ten cows, nine realistic deaths side by side, and the rare one that bursts", false, Demos::deaths),
+			new Demo("deaths", "2.1.0", "Eight cows, eight causes of death: each drops at once, then rigid, paddling, gasps, still", false, Demos::deaths),
 			new Demo("burnt", "1.8.0", "A chicken and a pig burnt alive: they char black, smoke and leave scorch marks", false, Demos::burnt),
 			new Demo("evidence", "1.8.0", "A pig beaten to death on Extreme: the body and the blood stay as evidence", false, Demos::evidence),
 			new Demo("death", "1.7.0", "A cow dies red and keels over, is knocked about, then pops into pieces", false, Demos::death),
@@ -34,7 +34,7 @@ public final class Demos {
 			new Demo("personalities", "1.3.0", "Six animals, wounded and killed alike, die their own way", false, Demos::personalities),
 			new Demo("bones", "1.3.0", "A skeleton and a parched shatter", false, Demos::bones),
 			new Demo("launch", "1.3.0", "An axe kill throws the body, then the body is hacked", false, Demos::launch),
-			new Demo("headless", "1.1.0", "A beheaded cow runs on without its head", false, Demos::headless),
+			new Demo("headless", "1.1.0", "A beheaded cow drops and kicks hard while the neck pumps", false, Demos::headless),
 			new Demo("beating", "1.1.0", "A cow beaten to death in front of its herd", false, Demos::beating));
 
 	private Demos() {
@@ -50,35 +50,42 @@ public final class Demos {
 		return null;
 	}
 
-	/** A row of cows, each killed with one blow and made to die a different one of the nine ways, then one that bursts. */
+	/**
+	 * A row of cows, each killed with one blow and made to die of a different cause. Every one drops at once; what
+	 * follows on the ground is what the cause brings. Then one that bursts at the end.
+	 */
 	private static void deaths(Script s, Stage st) {
-		Corpse.Kind[] kinds = {Corpse.Kind.STUNNED, Corpse.Kind.BLEED_OUT, Corpse.Kind.BOLT, Corpse.Kind.DOWNER, Corpse.Kind.BROKEN_BACK,
-				Corpse.Kind.CHOKING, Corpse.Kind.CURL, Corpse.Kind.BRUTAL, Corpse.Kind.CIRCLING};
-		String[] names = {"Stunned: drops like a sack, rigid, then the legs paddle", "Bled out: pumps its blood out where it stands, then sinks",
-				"The death run: bolts blind and crashes nose first", "The downer: down on its chest, trying again and again to get up",
-				"Broken back: drags itself on its front legs", "Drowning in blood: coughs it up with every breath",
-				"Gut-shot: curls over the wound", "Agonal thrashing on its side", "Brain hurt: walks in circles, ends on its back, legs up"};
+		Corpse.Kind[] kinds = Corpse.Kind.values();
+		String[] names = {
+				"Head blow: unconscious before it lands. Rigid, head arched back, then the legs paddle and stop",
+				"Cut open: it lies bleeding with every heartbeat, weaker and slower, then a last paddle",
+				"Broken back: the hind end is dead, the forelegs go rigid, laboured gasps",
+				"Beheaded: the hardest kicking of all and the neck pumping, without a breath",
+				"Through the lungs: wet gasps, blood from the mouth, weak kicks",
+				"Blast: limp at once, a few twitches",
+				"Burnt: the heat draws the limbs in, and they twitch",
+				"Beaten to death: violent, disorganised kicking and gurgling"};
 		for (int i = 0; i <= kinds.length; i++) {
-			s.summon(st, "cow", "fgd_cow" + i, -11.0 + i * 2.2, 0, 9, 90.0F, "");
+			s.summon(st, "cow", "fgd_cow" + i, -10.0 + i * 2.4, 0, 9, 90.0F, "");
 		}
 
-		s.pause(20).hold("minecraft:iron_sword").say("Ten cows, one blow each. Nine ways a cow really dies:");
+		s.pause(20).hold("minecraft:iron_sword").say("One blow each, and each made to die of a different cause:");
 		for (int i = 0; i < kinds.length; i++) {
-			double right = -11.0 + i * 2.2;
+			double right = -10.0 + i * 2.4;
 			Corpse.Kind kind = kinds[i];
 			s.client(mc -> {
 				aim(mc, st.find(mc.level, EntityTypes.COW, right, 0, 9), null);
 				GoreSystems.suffering().forceNextDeath(kind, false);
 			});
-			s.hit("fgd_cow" + i, 100.0F).say(names[i]).pause(45);
+			s.hit("fgd_cow" + i, 100.0F).say(names[i]).pause(110);
 		}
 
-		double last = -11.0 + kinds.length * 2.2;
+		double last = -10.0 + kinds.length * 2.4;
 		s.client(mc -> {
 			aim(mc, st.find(mc.level, EntityTypes.COW, last, 0, 9), null);
 			GoreSystems.suffering().forceNextDeath(null, true);
 		});
-		s.hit("fgd_cow" + kinds.length, 100.0F).say("And the rare tenth (one in twenty): when this one finally goes, it bursts").pause(400);
+		s.hit("fgd_cow" + kinds.length, 100.0F).say("And the rare one (one in twenty): when it finally goes, it bursts").pause(300);
 	}
 
 	/** Set alight where they stand: they char as they burn, writhe, and lie charred and smoking. */

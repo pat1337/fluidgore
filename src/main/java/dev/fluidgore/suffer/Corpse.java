@@ -2,68 +2,56 @@ package dev.fluidgore.suffer;
 
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.trigger.Fate;
-import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * The body of a slaughtered animal, kept on the client after the server removes the entity so its death can
- * last as long as the way it was killed warrants.
+ * The body of a slaughtered animal, kept on the client after the server removes the entity so it can die out on
+ * screen.
  *
- * <p>How animals really die, chosen by how the animal was killed and who it is (see {@link Deaths#choose}):
+ * <p>Every body goes down at once: the legs give way within a few ticks and it falls onto its side, as an animal does
+ * when a fatal blow takes its brain or its blood pressure. Everything after that happens on the ground and follows
+ * what slaughterhouse and veterinary staff see in a dying animal, compressed to a few seconds (see {@link Deaths}):
+ * <ol>
+ * <li><b>Tonic phase</b>: rigid, legs locked straight out, head arched back, not breathing.</li>
+ * <li><b>Clonic phase</b>: involuntary paddling and kicking in bursts, uncoordinated, fading.</li>
+ * <li><b>Agonal gasps</b>: a few irregular gasps, further and further apart; the chest heaves and the head lifts.</li>
+ * <li><b>Fasciculation</b>: fine flickers of muscle, then nothing. The body lies limp.</li>
+ * </ol>
+ * The heart pumps blood out in slowing beats until it stops. How the animal was killed decides the mix:
  * <ul>
- * <li>{@link Kind#STUNNED}: a heavy blow to the head. It drops where it stands like a sack, lies rigid with its legs
- *     locked out and its head arched back, then the legs paddle on their own and slowly stop. Not a sound.</li>
- * <li>{@link Kind#BLEED_OUT}: an opened artery. It stands swaying while its blood pumps out with every heartbeat,
- *     the beats slowing, into a pool that keeps growing; the knees go, it sinks onto its chest, then onto its side.</li>
- * <li>{@link Kind#BOLT}: the death run. It bolts blind, screaming and bleeding, until it crashes nose first.</li>
- * <li>{@link Kind#DOWNER}: down and unable to rise. Front knees first, then the hind end, it lies on its chest with
- *     its head turned back against its flank, and keeps trying to get up, groaning, until it rolls onto its side.</li>
- * <li>{@link Kind#BROKEN_BACK}: the spine gone. The hind end drops into a dog-sit and it drags itself on its front
- *     legs, bellowing and smearing blood behind it, until the front gives out too.</li>
- * <li>{@link Kind#CHOKING}: blood in the lungs. Neck stretched low, it coughs up froth and blood with every heave,
- *     gasps, sinks onto its chest and coughs there until it drowns.</li>
- * <li>{@link Kind#CURL}: gut-shot. It hunches over the wound, whimpering and shaking, and folds before it falls.</li>
- * <li>{@link Kind#BRUTAL}: beaten with bare hands, burnt, or a long drawn-out fight. A long wail sagging into gurgles,
- *     and agonal kicking with sudden spasms that can go on for many seconds.</li>
- * <li>{@link Kind#CIRCLING}: the brain hurt. It walks in tight circles with its head cocked, crashes over, rolls onto
- *     its back kicking at the sky, and stiffens there, legs up.</li>
+ * <li>{@link Kind#CONCUSSION}: a heavy blow to the head. The full rigid phase, then strong paddling. Silent: it is
+ *     unconscious before it lands.</li>
+ * <li>{@link Kind#EXSANGUINATION}: cut open. Blood jets with every heartbeat while it lies quiet and weakening; the
+ *     paddling comes late, as the brain runs out of blood. A weak cry at first.</li>
+ * <li>{@link Kind#SPINAL}: the spine broken (a fall, a heavy blow to the back). The hind end is dead and limp while
+ *     the front legs go rigid (Schiff-Sherrington), with a weak paddle of the forelegs and laboured breathing.</li>
+ * <li>{@link Kind#DECAPITATION}: beheaded. The strongest reflex kicking of all, from a spinal cord with no brain to
+ *     stop it, and the neck pumping. No breaths and no sound.</li>
+ * <li>{@link Kind#CHEST}: pierced through the lungs. Wet, gurgling gasps and blood from the mouth; weak kicks.</li>
+ * <li>{@link Kind#TRAUMA}: a close blast. The body is limp at once: a few twitches and nothing else.</li>
+ * <li>{@link Kind#BURN}: burnt. The heat draws the limbs in (the pugilistic pose) and they twitch; a weak cry.</li>
+ * <li>{@link Kind#BEATEN}: beaten to death or a long fight. Disorganised, violent kicking and gurgling.</li>
  * </ul>
- * And the rest, chosen by the killing alone or for the rare body that bursts at the end ({@link #pops}):
- * <ul>
- * <li>{@link Kind#HEADLESS_RUN}: beheaded. Spinal reflexes keep the body running blindly while the neck pumps
- *     blood, then it collapses and twitches. Silent: there is no head left to scream with.</li>
- * <li>{@link Kind#QUICK}: one clean, heavy blow or a close blast. A short violent spasm and a cut-off cry.</li>
- * <li>{@link Kind#NORMAL}: screams, then kicking that dies away over a few seconds.</li>
- * <li>{@link Kind#COLLAPSE}: a stoic animal that does not run. Its legs buckle slowly, it goes down on its knees
- *     and then onto its side, and breathes laboured breaths until the last one.</li>
- * </ul>
- *
- * <p>Every one of them can be struck while it dies, and answers in its own way (see {@link Deaths#struck}).
+ * The lengths, the strength and rhythm of the kicks, the number and timing of gasps are all rolled from the body's
+ * own dice ({@link #random}), seeded by the killing blow, so every player with the mod sees the same death.
  */
 public final class Corpse {
 	public enum Kind {
-		QUICK, NORMAL, BRUTAL, HEADLESS_RUN, BOLT, COLLAPSE, CURL, STUNNED, BLEED_OUT, DOWNER, BROKEN_BACK, CHOKING, CIRCLING;
-
-		/** Played out by {@link Deaths} rather than by the older throes in {@link Suffering}. */
-		boolean scripted() {
-			return ordinal() >= STUNNED.ordinal();
-		}
+		CONCUSSION, EXSANGUINATION, SPINAL, DECAPITATION, CHEST, TRAUMA, BURN, BEATEN
 	}
 
-	/** Length of the vanilla tip-over animation in ticks. */
-	static final float FALL_TICKS = 20.0F;
+	/** Length of the fall onto its side, roughly, in ticks. */
+	static final float FALL_TICKS = 12.0F;
 
 	public final LivingEntity entity;
 	public final Kind kind;
 	public final Voice voice;
-	/**
-	 * Ticks before the body goes over onto its side: a headless run or a bolt, the buckling of a collapse or a curl, or
-	 * for the scripted deaths everything it does on its feet and on its chest first.
-	 */
-	public final int runTicks;
-	public final int throeTicks;
+	/** Ticks while the legs give way, before the body goes over onto its side. */
+	public final int collapseAt;
+	/** Ticks of dying on the ground after the fall, until the body lies still. */
+	public int throeTicks;
 	public final int stillTicks;
 	public final float seed;
 	public int age;
@@ -71,21 +59,10 @@ public final class Corpse {
 	public boolean unloaded;
 
 	public final Ragdoll body;
-	/** This body's own dice for its throes, seeded by the killing blow: the same on every client (see Fate). */
+	/** This body's own dice for its death, seeded by the killing blow: the same on every client (see Fate). */
 	public final RandomSource random;
-	float walkPos;
-	float walkPosO;
-	float walkSpeed;
-	/** Tick at which the body starts falling over (after the headless run, otherwise immediately). */
-	int collapseAt;
 	boolean toppled;
-	/** Next tick (on the ground) a laboured breath is due, and whether the last breath has been taken. */
-	int nextBreath;
-	boolean lastBreathTaken;
 	int nextFly;
-	/** Remaining ticks of a deliberate turn away from a wall, and its direction. */
-	int turnTicks;
-	float turnDir;
 	/** Ticks left of the red flash from a blow, as vanilla flashes a mob when it is hurt. */
 	public int flash;
 	/** Extra ticks on the ground, added by blows after the throes so a body being knocked about does not vanish. */
@@ -94,54 +71,62 @@ public final class Corpse {
 	public boolean pops;
 	/** Its legs, measured from its model at death. */
 	final ModelParts.Legs legs;
-	/** Where a scripted death is in its own story; see {@link Deaths}. */
-	int phaseAt;
-	int nextBeat;
-	int nextCough;
-	int attempts;
-	int attemptAt = -100;
-	float circleDir;
 	SufferPose pose = SufferPose.IDLE;
 
-	Corpse(LivingEntity entity, Kind kind, Voice voice, int runTicks, int throeTicks, int stillTicks, float seed) {
+	// The plan for this death, rolled by Deaths.begin. Times are ground ticks (since the fall began).
+	/** End of the rigid phase. */
+	public int tonicEnd;
+	/** Start and end of the paddling. */
+	public int clonicStart;
+	public int clonicEnd;
+	/** End of the last flickers of muscle. */
+	int fasciculationEnd;
+	/** Peak strength and starting speed of the paddling. */
+	float kickPeak;
+	float kickRate;
+	/** The hind end is dead (a broken spine). */
+	float hindLimp;
+	float legSeed;
+	/** Ground ticks of each agonal gasp, in order, and the next one due. */
+	int[] gasps = new int[0];
+	int nextGasp;
+	/** Clock time (age) of the gasp being taken, and its strength. */
+	float gaspAt = -1000.0F;
+	float gaspStrength;
+	/** When the heart stops (ground ticks), and the next beat (age). */
+	int heartEnd;
+	int nextBeat;
+	/** The paddling comes in bursts: whether one is on, until when (age), and the kick as it is now (smoothed). */
+	boolean burst;
+	int burstUntil;
+	float kickNow;
+	/** Ground ticks until which it can still make a sound. */
+	int voiceEnd;
+	boolean lastBreathTaken;
+
+	Corpse(LivingEntity entity, Kind kind, Voice voice, int collapseAt, int stillTicks, float seed) {
 		this.entity = entity;
 		this.kind = kind;
 		this.voice = voice;
-		this.runTicks = runTicks;
-		this.throeTicks = throeTicks;
+		this.collapseAt = collapseAt;
 		this.stillTicks = stillTicks;
 		this.seed = seed;
 		this.random = Fate.body(entity);
 		this.body = new Ragdoll(entity);
-		this.collapseAt = runTicks;
 		this.legs = ModelParts.legs(entity.getId());
 	}
 
-	public boolean running() {
-		return (kind == Kind.HEADLESS_RUN || kind == Kind.BOLT) && age < runTicks;
-	}
-
-	/** Not yet gone over onto its side. */
+	/** Still on its feet, the legs giving way. Only for the first few ticks. */
 	public boolean upright() {
 		return age < collapseAt;
-	}
-
-	/** The legs are giving out but the body is still on its feet. */
-	public boolean buckling() {
-		return (kind == Kind.COLLAPSE || kind == Kind.CURL) && age < runTicks;
-	}
-
-	/** How far into the run or the buckling the body is, 0..1 (1 once it has gone down). */
-	public float prefall() {
-		return runTicks <= 0 ? 1.0F : Math.min(1.0F, age / (float) runTicks);
 	}
 
 	public Personality self() {
 		return voice.self();
 	}
 
-	/** Ticks spent on the ground so far (negative while still running). */
-	int groundTicks() {
+	/** Ticks since the fall began (negative while the legs are still giving way). */
+	public int groundTicks() {
 		return age - collapseAt;
 	}
 
@@ -154,26 +139,18 @@ public final class Corpse {
 		return body.yaw;
 	}
 
-	/** The throes are over: the body lies still from now on. */
+	/** The dying is over: the body lies still from now on. */
 	public boolean lifeless() {
-		return groundTicks() > Math.round(FALL_TICKS) + throeTicks;
+		return groundTicks() > throeTicks;
 	}
 
 	public boolean done() {
-		return groundTicks() > Math.round(FALL_TICKS) + throeTicks + stillTicks + extraTicks;
+		return groundTicks() > throeTicks + stillTicks + extraTicks;
 	}
 
 	/** Keeps the body on screen for at least {@code ticks} more. */
 	void keepFor(int ticks) {
-		extraTicks = Math.max(extraTicks, groundTicks() - Math.round(FALL_TICKS) - throeTicks - stillTicks + ticks);
-	}
-
-	public float walkPos(float partialTick) {
-		return Mth.lerp(partialTick, walkPosO, walkPos);
-	}
-
-	public float walkSpeed() {
-		return walkSpeed;
+		extraTicks = Math.max(extraTicks, groundTicks() - throeTicks - stillTicks + ticks);
 	}
 
 	public SufferPose pose() {

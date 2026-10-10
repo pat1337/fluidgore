@@ -61,13 +61,15 @@ public abstract class LivingEntityRendererMixin {
 			state.xRot = 0.0F;
 			state.setData(BodyPose.KEY, new BodyPose(body.x(partialTicks) - state.x, body.y(partialTicks) - state.y,
 					body.z(partialTicks) - state.z, body.roll(partialTicks), body.joints(partialTicks)));
-			state.walkAnimationPos = corpse.walkPos(partialTicks);
-			state.walkAnimationSpeed = corpse.walkSpeed();
+			// It went down at once: no walking legs, only what the dying body does itself.
+			state.walkAnimationSpeed = 0.0F;
+			state.setData(SufferPose.CLOCK, corpse.age + partialTicks);
 			// Vanilla keeps a dying mob red while it dies. Red Death does the same for the whole of the throes; after that
 			// (and without it) only the first moments and fresh blows are red.
 			state.hasRedOverlay = GoreConfig.get().redDeath && !corpse.lifeless() || corpse.age < 10 || corpse.flash > 0;
 		} else {
 			state.setData(BodyPose.KEY, null);
+			state.setData(SufferPose.CLOCK, null);
 		}
 	}
 
@@ -120,7 +122,14 @@ public abstract class LivingEntityRendererMixin {
 			return;
 		}
 
-		float t = state.ageInTicks;
+		Float clock = state.getData(SufferPose.CLOCK);
+		float t = clock != null ? clock : state.ageInTicks;
+		float gasp = pose.gaspAmount(t);
+		if (gasp > 0.0F) {
+			// An agonal gasp: the chest heaves out and sags back.
+			poseStack.scale(1.0F + 0.07F * gasp, 1.0F + 0.03F * gasp, 1.0F + 0.02F * gasp);
+		}
+
 		float shiverZ = SufferPose.noise(t * 4.0F, 3.0F) * pose.tremble() * 3.0F;
 		float shiverX = SufferPose.noise(t * 4.3F, 7.0F) * pose.tremble() * 2.0F;
 		float convulse = SufferPose.noise(t * 1.1F, 11.0F) * pose.kick() * 4.0F;

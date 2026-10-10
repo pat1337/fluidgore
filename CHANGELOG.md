@@ -2,6 +2,31 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.1.0]
+
+Deaths overhauled: every animal now goes down at once and dies out on the ground, the way real animals do.
+
+### Changed
+- Every death starts with the body dropping: the legs give way within a third of a second and it falls onto its side.
+  The standing, running, kneeling, dragging and circling deaths are gone.
+- On the ground it goes through what slaughterhouse and veterinary staff see in a dying animal, in three to five
+  seconds: a rigid (tonic) phase with the legs locked out and the head arched back; involuntary paddling (clonic) in
+  bursts with pauses, each leg in its own rhythm, fading and slowing; a few agonal gasps, further apart and weaker,
+  with the chest heaving and the head lifting; fine flickers of muscle; then limp.
+- The heart pumps blood out of the worst wound (or the neck, or the mouth) in beats that start fast and weaken and
+  slow until it stops, and the pool grows under the body.
+- Eight causes of death shape all of it: head blow (silent, rigid, hard paddling), cut open (lies bleeding, kicks
+  late), broken back (hind end limp, forelegs rigid), beheaded (hardest kicking, no breath, neck pumping), through
+  the lungs (wet gasps, blood from the mouth), blast (limp, a few twitches), burnt (limbs drawn in), beaten (violent,
+  disorganised kicking). Only a conscious animal cries out, and weakly.
+- Every length, kick strength, rhythm and gasp is rolled from the body's own shared dice, so no two deaths are alike
+  and every player with the mod sees the same one.
+- The `deaths` demo shows the eight causes side by side.
+
+### Fixed
+- Bodies the server had removed froze mid-kick: their animation ran on the entity's age, which stops when the game
+  stops ticking it. Dying bodies now run on their own clock, the same on every client.
+
 ## [2.0.0]
 
 The multiplayer release: everyone on a server with the mod sees the same gore, still with nothing on the server.

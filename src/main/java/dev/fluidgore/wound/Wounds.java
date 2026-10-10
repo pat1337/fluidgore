@@ -303,6 +303,28 @@ public final class Wounds {
 		}
 	}
 
+	/**
+	 * Where the deepest open wound on this body is now, for a body whose feet are at {@code base} facing {@code yaw};
+	 * null if it has none that bleeds (a bruise does not).
+	 */
+	public @Nullable Vec3 deepest(int entityId, Vec3 base, float yaw) {
+		WoundSet set = sets.get(entityId);
+		if (set == null) {
+			return null;
+		}
+
+		int best = -1;
+		float deepest = 0.25F;
+		for (int i = 0; i < set.count; i++) {
+			if (!Float.isNaN(set.ox[i]) && set.severity[i] >= deepest) {
+				deepest = set.severity[i];
+				best = i;
+			}
+		}
+
+		return best < 0 ? null : base.add(new Vec3(set.ox[best], set.oy[best], set.oz[best]).yRot((set.yaw[best] - yaw) * Mth.DEG_TO_RAD));
+	}
+
 	/** The front underside of the head as posed now, or null if the model has no head (or it is gone). */
 	private static @Nullable Vec3 mouth(LivingEntity entity) {
 		ModelParts.Posed posed = ModelParts.pose(entity);

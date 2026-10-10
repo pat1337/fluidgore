@@ -5,24 +5,28 @@ import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.ModelParts;
+import dev.fluidgore.trigger.DamageTracker;
 import dev.fluidgore.wound.Weapon;
+import java.util.function.Supplier;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 /**
- * How animals really die. Nine deaths, each what a stockman or a hunter would recognise, chosen by where and with
- * what the killing blow landed and by who the animal is, with enough chance in it that a herd killed the same way
- * still dies a dozen different ways. The tenth, the body that bursts when it finally goes, is rare
- * ({@link #popChance}).
- *
- * <p>This class plays out the part of each death before the body goes over onto its side: standing, staggering,
- * kneeling, lying on its chest, dragging itself, circling. The throes on the ground are shared and live in
- * {@link Suffering}; {@link #ground} only adds what is particular to a death. See {@link Corpse} for the list.
+ * How an animal dies once it is down, modelled on what slaughterhouse and veterinary staff see after a fatal blow or
+ * a stun, compressed into three to five seconds:
+ * <ol>
+ * <li>Collapse: the legs go at once and the body falls onto its side.</li>
+ * <li>Tonic phase: rigid, legs locked out, head arched back (opisthotonus), no breathing.</li>
+ * <li>Clonic phase: involuntary paddling in bursts with pauses, uncoordinated, each leg on its own, fading out.</li>
+ * <li>Agonal gasps: a few irregular gasps, further and further apart, weaker each time.</li>
+ * <li>Fasciculation: fine flickers of muscle, then the body is limp.</li>
+ * </ol>
+ * Meanwhile the heart pumps blood out of the worst wound in beats that start fast and weaken and slow until it stops.
+ * The cause of death ({@link Corpse.Kind}) shapes all of it, and every length, strength and rhythm is rolled from the
+ * body's own dice, so no two deaths are alike but every player sees the same one.
  */
 public final class Deaths {
 	/** Where the killing blow landed on the body. */
@@ -30,24 +34,28 @@ public final class Deaths {
 		HEAD, BODY, LEG, UNKNOWN
 	}
 
-	/** The pose being built up for one body this tick; each death sets only what it needs. */
+	/** The pose being built up for one body this tick. */
 	static final class Posture {
-		float tremble, thrash, kick, kickRate, tiltX, tiltZ, drop, stagger, headDip, lookYaw, foldFront, foldHind, stiff, headTilt;
+		float tremble, thrash, kick, kickRate, tiltX, tiltZ, drop, stagger, headDip, lookYaw, foldFront, foldHind, stiff, headTilt, hindLimp,
+				legSeed, gaspAt, gasp;
 
 		Posture reset() {
-			tremble = thrash = kick = tiltX = tiltZ = drop = stagger = headDip = lookYaw = foldFront = foldHind = stiff = headTilt = 0.0F;
+			tremble = thrash = kick = tiltX = tiltZ = drop = stagger = headDip = lookYaw = foldFront = foldHind = stiff = headTilt = hindLimp = 0.0F;
+			legSeed = gasp = 0.0F;
+			gaspAt = -1000.0F;
 			kickRate = 0.6F;
 			return this;
 		}
 
 		SufferPose build() {
 			return new SufferPose(tremble, thrash, kick, kickRate, tiltX, tiltZ, drop, stagger, headDip, lookYaw, foldFront, foldHind, stiff,
-					headTilt);
+					headTilt, hindLimp, legSeed, gaspAt, gasp);
 		}
 	}
 
-	/** Length of one rise attempt of a downer, in ticks. */
-	private static final int ATTEMPT_TICKS = 26;
+	/** The fewest and most ticks a body spends dying on the ground: three to five seconds. */
+	static final int MIN_THROES = 60;
+	static final int MAX_THROES = 100;
 
 	private final ScreamManager screams;
 	private final RandomSource random;
@@ -64,36 +72,44 @@ public final class Deaths {
 	}
 
 	/**
-	 * Picks one of the nine deaths. Every one has a small base weight so any of them can happen; the blow and the
-	 * animal make some far more likely.
+	 * What killed it. Some causes are certain (a head off, a close blast, fire, a beating); the rest are weighed by the
+	 * weapon and where it landed, with a little of each always possible.
 	 *
-	 * @param weapon    what struck the killing blow, null for none (a fall, fire)
-	 * @param fall      it died of a fall
-	 * @param four      it stands on four legs (a broken back or a downer needs a hind end to fail)
+	 * @param weapon what struck the killing blow, null for none (a fall, fire)
+	 * @param blast  how hard a blast hit it, 0..1
+	 * @param four   it stands on four legs (a broken back needs a hind end to lose)
 	 */
-	Corpse.Kind choose(Personality self, boolean personal, @Nullable Weapon weapon, Zone zone, boolean fall, int hits, int beatenHits,
-			float blowShare, boolean dying, int ordeal, boolean four) {
-		if (beatenHits >= 2) {
-			// Beaten to death: the worst of them, and no chance about it.
-			return Corpse.Kind.BRUTAL;
+	Corpse.Kind choose(@Nullable Weapon weapon, Zone zone, boolean fall, boolean headless, boolean burnt, float blast, int hits,
+			int beatenHits, float blowShare, boolean four) {
+		if (headless) {
+			return Corpse.Kind.DECAPITATION;
 		}
 
-		float frantic = personal ? self.frantic() : 0.5F;
+		if (blast >= DamageTracker.TEAR_IMPACT) {
+			return Corpse.Kind.TRAUMA;
+		}
+
+		if (burnt) {
+			return Corpse.Kind.BURN;
+		}
+
+		if (beatenHits >= 2) {
+			return Corpse.Kind.BEATEN;
+		}
+
 		boolean heavy = weapon == Weapon.BLUNT || weapon == Weapon.CHOP || weapon == Weapon.PICK;
 		boolean edge = weapon == Weapon.BLADE || weapon == Weapon.CHOP || weapon == Weapon.FLINT || weapon == Weapon.BITE;
 		boolean oneBlow = hits <= 1 && blowShare >= 0.6F;
-		Corpse.Kind[] kinds = {Corpse.Kind.STUNNED, Corpse.Kind.BLEED_OUT, Corpse.Kind.BOLT, Corpse.Kind.DOWNER, Corpse.Kind.BROKEN_BACK,
-				Corpse.Kind.CHOKING, Corpse.Kind.CURL, Corpse.Kind.BRUTAL, Corpse.Kind.CIRCLING};
+		Corpse.Kind[] kinds = {Corpse.Kind.CONCUSSION, Corpse.Kind.EXSANGUINATION, Corpse.Kind.SPINAL, Corpse.Kind.CHEST, Corpse.Kind.BEATEN,
+				Corpse.Kind.TRAUMA};
 		float[] weight = {
-				1.0F + (oneBlow ? 5.0F : 0.0F) + (zone == Zone.HEAD && heavy ? 4.0F : 0.0F),
-				1.0F + (edge ? 4.0F : 0.0F) + (zone == Zone.LEG ? 1.0F : 0.0F),
-				1.0F + (weapon == Weapon.PIERCE ? 2.0F : 0.0F) + 6.0F * Math.max(0.0F, frantic - 0.5F),
-				four ? 1.0F + 6.0F * Math.max(0.0F, 0.5F - frantic) + (dying ? 2.0F : 0.0F) + (ordeal > 60 ? 1.0F : 0.0F) : 0.0F,
-				four ? 0.8F + (fall ? 8.0F : 0.0F) + (zone == Zone.BODY && heavy ? 2.0F : 0.0F) : 0.0F,
-				1.0F + (weapon == Weapon.PIERCE ? 4.0F : 0.0F) + (zone == Zone.BODY && edge ? 2.0F : 0.0F),
-				0.8F + (hits >= 3 ? 2.0F : 0.0F) + (zone == Zone.BODY ? 1.5F : 0.0F),
-				0.6F + (hits >= 5 ? 4.0F : 0.0F) + (ordeal > 100 ? 3.0F : 0.0F),
-				0.8F + (zone == Zone.HEAD && !edge ? 4.0F : 0.0F)
+				0.6F + (zone == Zone.HEAD ? 2.0F : 0.0F) + (zone == Zone.HEAD && heavy ? 6.0F : 0.0F) + (oneBlow && heavy ? 2.0F : 0.0F)
+						+ (weapon == Weapon.BLUNT ? 1.5F : 0.0F),
+				0.6F + (edge ? 5.0F : 0.0F) + (zone == Zone.LEG ? 1.0F : 0.0F),
+				four ? 0.3F + (fall ? 8.0F : 0.0F) + (zone == Zone.BODY && heavy ? 2.0F : 0.0F) : 0.0F,
+				0.4F + (weapon == Weapon.PIERCE ? 6.0F : 0.0F) + (zone == Zone.BODY && edge ? 1.5F : 0.0F),
+				0.3F + (hits >= 5 ? 3.0F : 0.0F),
+				blast > 0.0F ? 3.0F : 0.0F
 		};
 		float total = 0.0F;
 		for (float w : weight) {
@@ -108,365 +124,358 @@ public final class Deaths {
 			}
 		}
 
-		return Corpse.Kind.BLEED_OUT;
+		return Corpse.Kind.EXSANGUINATION;
 	}
 
-	/** Ticks a scripted death spends before it goes over onto its side. */
-	int run(Corpse.Kind kind, float intensity) {
-		return switch (kind) {
-			case STUNNED -> 5;
-			case BLEED_OUT -> Math.round((100 + random.nextInt(60)) * intensity);
-			case DOWNER -> Math.round((170 + random.nextInt(90)) * intensity);
-			case BROKEN_BACK -> Math.round((130 + random.nextInt(60)) * intensity);
-			case CHOKING -> Math.round((120 + random.nextInt(50)) * intensity);
-			case CIRCLING -> Math.round((70 + random.nextInt(40)) * intensity);
-			default -> 0;
-		};
+	/** Ticks the legs take to give way before the body goes over: a few, never more than about a third of a second. */
+	int collapse(Corpse.Kind kind) {
+		return kind == Corpse.Kind.DECAPITATION || kind == Corpse.Kind.TRAUMA ? 2 + random.nextInt(2) : 3 + random.nextInt(5);
 	}
 
-	/** Ticks of throes on the ground for a scripted death, before intensity and endurance. */
-	int throes(Corpse.Kind kind) {
-		return switch (kind) {
-			case STUNNED -> 110 + random.nextInt(40);
-			case BLEED_OUT -> 50 + random.nextInt(30);
-			case DOWNER -> 50 + random.nextInt(20);
-			case BROKEN_BACK -> 60 + random.nextInt(30);
-			case CHOKING -> 60 + random.nextInt(30);
-			case CIRCLING -> 130 + random.nextInt(40);
-			default -> 60;
-		};
-	}
-
-	/** Length of the death cry, 0..1, or negative for none. */
+	/** Length of the death cry, 0..1, or negative for none: only a conscious animal cries out, and only weakly. */
 	static float cry(Corpse.Kind kind) {
 		return switch (kind) {
-			case STUNNED -> -1.0F;
-			case BLEED_OUT -> 0.3F;
-			case DOWNER -> 0.2F;
-			case BROKEN_BACK -> 0.6F;
-			case CHOKING -> 0.05F;
-			case CIRCLING -> 0.15F;
-			default -> 0.4F;
+			case EXSANGUINATION -> 0.15F;
+			case SPINAL -> 0.3F;
+			case CHEST -> 0.05F;
+			case BURN -> 0.2F;
+			case BEATEN -> 0.25F;
+			case CONCUSSION, DECAPITATION, TRAUMA -> -1.0F;
 		};
 	}
 
-	/** The moment of death. */
-	void begin(ClientLevel level, Corpse c, int color, boolean gore) {
-		c.circleDir = c.random.nextBoolean() ? 1.0F : -1.0F;
-		switch (c.kind) {
-			case STUNNED -> c.phaseAt = Math.round((35 + c.random.nextInt(25)) * Suffering.intensity());
-			case BLEED_OUT -> {
-				if (gore && GoreConfig.get().arterialSpurts) {
-					// The opened artery jets with each beat, and blood runs down the body to the feet.
-					float yawRad = c.body.yaw * Mth.DEG_TO_RAD;
-					Vec3 side = new Vec3(Mth.cos(yawRad) * c.circleDir, 0.4, Mth.sin(yawRad) * c.circleDir);
-					BloodWorld blood = GoreSystems.blood();
-					blood.spurts().start(() -> Suffering.neck(c), side, color, c.runTicks, 0.9F);
-					blood.spurts().ooze(() -> Suffering.neck(c), () -> c.position(), c.entity.getBbWidth() * 0.5, color, c.runTicks + c.throeTicks, 0.8F);
-				}
-
-				c.nextBeat = 0;
-			}
-			case DOWNER -> c.attemptAt = -100;
-			case CHOKING -> c.nextCough = 4;
-			default -> {
-			}
-		}
-	}
-
 	/**
-	 * Wanted speed along the heading while the body is still up; some deaths also steer. Zero for those that do not
-	 * go anywhere.
+	 * Rolls this death from the body's own dice: how long each phase lasts, how hard and fast it kicks, when it gasps
+	 * and when the heart stops. Times are ground ticks, counted from when the body starts to fall (it lands about
+	 * {@link Corpse#FALL_TICKS} later).
 	 */
-	double drive(Corpse c) {
-		Ragdoll body = c.body;
-		float progress = c.prefall();
-		return switch (c.kind) {
-			case CIRCLING -> {
-				// Tight circles one way, as a brain-hurt animal does, wandering a little.
-				float wanted = c.circleDir * (7.0F + 3.0F * SufferPose.noise(c.age * 0.1F, c.seed));
-				body.yawV += (wanted - body.yawV) * 0.2F;
-				body.yaw += body.yawV;
-				yield 0.085 * (1.0 - 0.5 * progress);
-			}
-			case BROKEN_BACK -> {
-				// Hauling itself on its front legs, slower as it tires; a little swing of the forequarters with each pull.
-				body.yaw += SufferPose.noise(c.age * 0.07F, c.seed) * 1.5F;
-				yield progress < 0.85F ? 0.05 * (1.0 - 0.6 * progress) * (0.6 + 0.4 * Math.max(0.0F, Mth.sin(c.age * 0.5F))) : 0.0;
-			}
-			case BLEED_OUT -> progress < 0.5F ? 0.01 * Math.max(0.0F, SufferPose.noise(c.age * 0.05F, c.seed)) : 0.0;
-			default -> 0.0;
-		};
-	}
-
-	/** One tick of a scripted death while the body is still up (on its feet, knees or chest). */
-	void upright(ClientLevel level, Corpse c, Posture p, int color, boolean gore) {
-		float progress = c.prefall();
-		int age = c.age;
-		BloodWorld blood = GoreSystems.blood();
+	void plan(Corpse c) {
+		RandomSource r = c.random;
+		float frantic = c.self().frantic();
+		int land = Math.round(Corpse.FALL_TICKS);
+		int gasps;
+		int gaspFrom;
+		c.legSeed = r.nextFloat() * 100.0F;
 		switch (c.kind) {
-			case STUNNED -> {
-				// Dropped like a sack: every leg goes at once.
-				fold(c, p, ramp(age, 0, 4), ramp(age, 1, 5));
-				p.tremble = 0.2F;
+			case CONCUSSION -> {
+				c.tonicEnd = land + 10 + r.nextInt(15);
+				c.clonicStart = c.tonicEnd;
+				c.clonicEnd = c.clonicStart + 28 + r.nextInt(21);
+				c.kickPeak = 0.8F + 0.2F * r.nextFloat();
+				c.kickRate = 0.75F + 0.2F * r.nextFloat();
+				gasps = 2 + r.nextInt(3);
+				gaspFrom = c.clonicEnd - 12 + r.nextInt(8);
+				c.heartEnd = c.clonicEnd;
+				c.voiceEnd = 0;
 			}
-			case BLEED_OUT -> {
-				bleedOut(level, c, p, progress, color, gore, blood);
-				// On its feet it sways and its head sinks; then the front knees, the hind end, and it lies on its chest.
-				float front = ramp(progress, 0.55F, 0.68F);
-				float hind = ramp(progress, 0.68F, 0.8F);
-				fold(c, p, front, hind);
-				p.stagger = 2.0F + 8.0F * Math.min(progress / 0.55F, 1.0F) * (1.0F - front);
-				p.tremble = 0.3F + 0.4F * progress;
-				p.headDip = 0.5F * progress + 0.5F * ramp(progress, 0.8F, 1.0F);
-				if (age % 22 == 11) {
-					screams.breath(Suffering.follow(c.entity), c.voice, 1.0F - progress);
-				}
+			case EXSANGUINATION -> {
+				c.tonicEnd = land + r.nextInt(5);
+				// It lies quiet while it bleeds; the paddling comes as the brain runs out of blood.
+				c.clonicStart = c.tonicEnd + 14 + r.nextInt(13);
+				c.clonicEnd = c.clonicStart + 20 + r.nextInt(15);
+				c.kickPeak = 0.5F + 0.25F * r.nextFloat();
+				c.kickRate = 0.65F + 0.2F * r.nextFloat();
+				gasps = 3 + r.nextInt(3);
+				gaspFrom = c.tonicEnd + 6 + r.nextInt(6);
+				c.heartEnd = c.clonicEnd + 5;
+				c.voiceEnd = land + 10;
 			}
-			case DOWNER -> downer(c, p, progress);
-			case BROKEN_BACK -> {
-				// The hind end drops at once and stays down; it hauls itself along until the front gives out too.
-				float front = ramp(progress, 0.85F, 1.0F);
-				fold(c, p, front, ramp(age, 0, 6));
-				p.tremble = 0.5F;
-				p.thrash = 0.3F * (1.0F - front);
-				p.headDip = -0.2F + 0.8F * front;
-				if (age % 30 == 7 && front < 0.5F) {
-					screams.bellow(Suffering.follow(c.entity), c.voice, 1.0F);
-				}
-
-				if (gore && age % 3 == 0 && c.body.onGround) {
-					// Smeared behind it as it drags.
-					BloodEmitter.drip(blood, behind(c), color, 0.03F);
-				}
+			case SPINAL -> {
+				c.hindLimp = 1.0F;
+				c.tonicEnd = land + 4 + r.nextInt(7);
+				c.clonicStart = c.tonicEnd;
+				c.clonicEnd = c.clonicStart + 30 + r.nextInt(16);
+				c.kickPeak = 0.3F + 0.15F * r.nextFloat();
+				c.kickRate = 0.6F + 0.15F * r.nextFloat();
+				gasps = 3 + r.nextInt(3);
+				gaspFrom = c.tonicEnd + r.nextInt(8);
+				c.heartEnd = c.clonicEnd;
+				c.voiceEnd = land + 18;
 			}
-			case CHOKING -> {
-				coughing(level, c, p, progress, color, gore, blood, 1.0F);
-				float front = ramp(progress, 0.6F, 0.7F);
-				fold(c, p, front, ramp(progress, 0.7F, 0.8F));
-				// Neck stretched out low, mouth open, fighting for air.
-				p.headDip += 0.45F + 0.35F * front;
-				p.tiltX += 4.0F * (1.0F - front);
-				p.stagger = 2.0F * (1.0F - front);
-				p.tremble = 0.4F;
+			case DECAPITATION -> {
+				// No brain to hold the spinal cord back: the hardest kicking of all, and no breath.
+				c.tonicEnd = land + 2 + r.nextInt(5);
+				c.clonicStart = c.tonicEnd;
+				c.clonicEnd = c.clonicStart + 40 + r.nextInt(21);
+				c.kickPeak = 1.0F;
+				c.kickRate = 0.9F + 0.2F * r.nextFloat();
+				gasps = 0;
+				gaspFrom = 0;
+				c.heartEnd = c.clonicEnd - 10;
+				c.voiceEnd = 0;
 			}
-			case CIRCLING -> {
-				p.headTilt = 0.5F * c.circleDir;
-				p.headDip = 0.25F;
-				p.stagger = 5.0F + 6.0F * progress;
-				p.tremble = 0.3F;
-				if (age % 40 == 13) {
-					screams.bellow(Suffering.follow(c.entity), c.voice, 0.3F);
-				}
+			case CHEST -> {
+				c.tonicEnd = land + 2 + r.nextInt(5);
+				c.clonicStart = c.tonicEnd + 6 + r.nextInt(9);
+				c.clonicEnd = c.clonicStart + 18 + r.nextInt(13);
+				c.kickPeak = 0.4F + 0.2F * r.nextFloat();
+				c.kickRate = 0.65F + 0.15F * r.nextFloat();
+				gasps = 4 + r.nextInt(3);
+				gaspFrom = c.tonicEnd + r.nextInt(4);
+				c.heartEnd = c.clonicEnd;
+				c.voiceEnd = land + 14;
 			}
-			default -> {
+			case TRAUMA -> {
+				// Torn open by a blast: limp at once, a few twitches.
+				c.tonicEnd = land;
+				c.clonicStart = land;
+				c.clonicEnd = land + 10 + r.nextInt(9);
+				c.kickPeak = 0.25F + 0.15F * r.nextFloat();
+				c.kickRate = 0.7F + 0.2F * r.nextFloat();
+				gasps = r.nextInt(2);
+				gaspFrom = land + 4 + r.nextInt(6);
+				c.heartEnd = land + 8;
+				c.voiceEnd = 0;
 			}
-		}
-	}
-
-	/**
-	 * Adds what is particular to a scripted death once the body is on the ground; {@code life} runs from 1 at the
-	 * start of the throes to 0 at their end. Returns false if the shared throes should stay still (no spasms).
-	 */
-	boolean ground(ClientLevel level, Corpse c, Posture p, int ground, float life, int color, boolean gore) {
-		Ragdoll body = c.body;
-		if (c.kind != Corpse.Kind.CIRCLING) {
-			// It went over from its chest: the folded legs straighten out as it rolls onto its side.
-			float folded = Math.max(0.0F, Mth.cos(body.roll));
-			fold(c, p, folded, folded);
-		}
-
-		switch (c.kind) {
-			case STUNNED -> {
-				if (ground < c.phaseAt) {
-					// The rigid phase: legs locked straight out, head arched back, a fine quiver and nothing else.
-					p.stiff = 1.0F;
-					p.tremble = 0.25F;
-					return false;
-				}
-
-				// Then the legs paddle on their own, steady at first, slowing and stopping.
-				float left = life <= 0.0F ? 0.0F : Math.min(1.0F, (c.throeTicks - ground) / (float) Math.max(1, c.throeTicks - c.phaseAt));
-				p.stiff = Math.max(0.0F, 1.0F - (ground - c.phaseAt) / 6.0F);
-				p.kick = Math.max(p.kick, 0.9F * left * left);
-				p.kickRate = 0.5F + 0.4F * left;
-				if (life > 0.0F && c.random.nextFloat() < 0.012F) {
-					screams.gasp(Suffering.follow(c.entity), c.voice, left);
-				}
-
-				return false;
+			case BURN -> {
+				c.tonicEnd = land;
+				c.clonicStart = land + 4 + r.nextInt(5);
+				c.clonicEnd = c.clonicStart + 20 + r.nextInt(11);
+				c.kickPeak = 0.3F + 0.15F * r.nextFloat();
+				c.kickRate = 0.6F + 0.2F * r.nextFloat();
+				gasps = 1 + r.nextInt(3);
+				gaspFrom = c.clonicStart + r.nextInt(10);
+				c.heartEnd = 0;
+				c.voiceEnd = land + 8;
 			}
-			case BLEED_OUT -> {
-				if (gore && life > 0.0F && ground % Math.round(14.0F + 20.0F * (1.0F - life)) == 0) {
-					BloodEmitter.drip(GoreSystems.blood(), Suffering.neck(c), color, 0.03F * life + 0.01F);
-				}
+			case BEATEN -> {
+				c.tonicEnd = land + 2 + r.nextInt(7);
+				c.clonicStart = c.tonicEnd;
+				c.clonicEnd = c.clonicStart + 36 + r.nextInt(21);
+				c.kickPeak = Math.min(1.0F, 0.85F + 0.15F * r.nextFloat() + 0.1F * frantic);
+				c.kickRate = 0.8F + 0.25F * r.nextFloat();
+				gasps = 2 + r.nextInt(3);
+				gaspFrom = c.clonicEnd - 16 + r.nextInt(10);
+				c.heartEnd = c.clonicEnd;
+				c.voiceEnd = land + 20;
 			}
-			case CHOKING -> {
-				if (life > 0.5F) {
-					coughing(level, c, p, 1.0F, color, gore, GoreSystems.blood(), (life - 0.5F) * 2.0F);
-				}
-			}
-			case CIRCLING -> {
-				if (ground > 15 && body.rollLimit < Mth.PI) {
-					// It rolls on over onto its back.
-					body.rollLimit = Mth.PI;
-					body.rollV += Math.signum(body.roll) * 0.06F;
-				}
-
-				// Legs up, kicking at the sky, then locking stiff there.
-				float kicking = ramp(ground, 15, 25) * (1.0F - ramp(ground, c.throeTicks * 0.5F, c.throeTicks * 0.75F));
-				p.kick = Math.max(p.kick, kicking);
-				p.kickRate = 0.8F;
-				p.stiff = ramp(ground, c.throeTicks * 0.55F, c.throeTicks * 0.85F);
-			}
-			default -> {
-			}
+			default -> throw new IllegalStateException();
 		}
 
-		return true;
-	}
-
-	/** The voice still works on the ground. */
-	static boolean voiced(Corpse c) {
-		return c.kind != Corpse.Kind.STUNNED;
-	}
-
-	/** Struck while it dies: each death answers a blow in its own way, on top of the knock every body takes. */
-	void struck(ClientLevel level, Corpse c, Vec3 look, int color) {
-		boolean gore = GoreConfig.get().goreLevel.enabled();
-		BloodWorld blood = GoreSystems.blood();
-		switch (c.kind) {
-			case STUNNED -> {
-				// A blow while it lies rigid sets the legs paddling at once.
-				int ground = c.age - c.collapseAt;
-				if (ground >= 0 && ground < c.phaseAt) {
-					c.phaseAt = ground;
-				}
-
-				c.body.spasm(c.random, 0.8F);
-			}
-			case BLEED_OUT -> {
-				if (gore) {
-					BloodEmitter.burst(blood, level, Suffering.neck(c), color, 0.08F, 10);
-				}
-
-				if (c.upright()) {
-					screams.pain(Suffering.follow(c.entity), c.voice, 0.5F, 1.0F);
-				}
-			}
-			case DOWNER -> {
-				// A desperate heave to get up, away from the blows.
-				if (c.upright() && c.age - c.attemptAt > ATTEMPT_TICKS) {
-					c.attemptAt = c.age;
-					screams.strain(Suffering.follow(c.entity), c.voice, 1.0F);
-				}
-			}
-			case BROKEN_BACK -> {
-				if (c.upright()) {
-					// It hauls itself away from whoever is hitting it.
-					float away = (float) (Mth.atan2(-look.x, look.z) * Mth.RAD_TO_DEG);
-					c.body.yaw += Mth.wrapDegrees(away - c.body.yaw) * 0.5F;
-					c.body.vx += look.x * 0.06;
-					c.body.vz += look.z * 0.06;
-					screams.pain(Suffering.follow(c.entity), c.voice, 1.0F, 1.0F);
-				}
-			}
-			case CHOKING -> c.nextCough = c.age;
-			case CIRCLING -> {
-				if (c.upright()) {
-					c.circleDir = -c.circleDir;
-					c.body.yawV = c.circleDir * 20.0F;
-				}
-			}
-			default -> {
-				if (!c.lifeless() && c.kind != Corpse.Kind.HEADLESS_RUN && c.kind != Corpse.Kind.QUICK) {
-					screams.gurgle(Suffering.follow(c.entity), c.voice, 1.0F);
-				}
-			}
+		// A frantic animal kicks harder; a stoic one lies quieter.
+		c.kickPeak = Mth.clamp(c.kickPeak * (0.85F + 0.3F * frantic), 0.0F, 1.0F);
+		c.gasps = new int[gasps];
+		int at = gaspFrom;
+		float gap = 9.0F + r.nextInt(6);
+		for (int i = 0; i < gasps; i++) {
+			c.gasps[i] = at;
+			at += Math.round(gap);
+			gap *= 1.3F + 0.3F * r.nextFloat();
 		}
+
+		int last = gasps > 0 ? c.gasps[gasps - 1] : 0;
+		c.fasciculationEnd = Math.max(c.clonicEnd, last) + 12 + r.nextInt(13);
+		int end = c.fasciculationEnd;
+		if (end > MAX_THROES) {
+			// Squeezed into five seconds, keeping the proportions.
+			float k = MAX_THROES / (float) end;
+			c.tonicEnd = Math.round(c.tonicEnd * k);
+			c.clonicStart = Math.round(c.clonicStart * k);
+			c.clonicEnd = Math.round(c.clonicEnd * k);
+			c.heartEnd = Math.round(c.heartEnd * k);
+			c.voiceEnd = Math.round(c.voiceEnd * k);
+			for (int i = 0; i < gasps; i++) {
+				c.gasps[i] = Math.round(c.gasps[i] * k);
+			}
+
+			c.fasciculationEnd = MAX_THROES;
+		}
+
+		c.fasciculationEnd = Math.max(c.fasciculationEnd, MIN_THROES);
+		c.throeTicks = c.fasciculationEnd;
+		c.nextBeat = 0;
+		c.burstUntil = c.collapseAt + c.clonicStart;
 	}
 
-	/** The heart pumping the body empty: strong, fast gushes at first, then weaker and further apart. */
-	private void bleedOut(ClientLevel level, Corpse c, Posture p, float progress, int color, boolean gore, BloodWorld blood) {
-		if (c.age < c.nextBeat) {
+	/** The moment of death: an opened throat or neck starts to jet with the heartbeat. */
+	void begin(Corpse c, int color, boolean gore) {
+		if (!gore || !GoreConfig.get().arterialSpurts || (c.kind != Corpse.Kind.EXSANGUINATION && c.kind != Corpse.Kind.DECAPITATION)) {
 			return;
 		}
 
-		c.nextBeat = c.age + Math.round(8.0F + 22.0F * progress);
-		if (gore) {
-			float strength = 1.0F - 0.8F * progress;
-			Vec3 neck = Suffering.neck(c);
-			BloodEmitter.burst(blood, level, neck, color, 0.05F * strength + 0.01F, Math.round(4 + 6 * strength));
-			// What runs straight down: the pool under it grows with every beat.
-			BloodEmitter.drip(blood, new Vec3(neck.x, c.body.y + 0.15, neck.z), color, 0.08F * strength + 0.02F);
-		}
-
-		p.tremble += 0.2F;
+		float yawRad = c.body.yaw * Mth.DEG_TO_RAD;
+		float side = c.random.nextBoolean() ? 1.0F : -1.0F;
+		Vec3 out = new Vec3(Mth.cos(yawRad) * side, 0.4, Mth.sin(yawRad) * side);
+		Supplier<Vec3> wound = c.kind == Corpse.Kind.DECAPITATION ? () -> Suffering.neck(c) : () -> bleedPoint(c);
+		int life = c.collapseAt + c.heartEnd;
+		BloodWorld blood = GoreSystems.blood();
+		blood.spurts().start(wound, out, color, life, c.kind == Corpse.Kind.DECAPITATION ? 1.0F : 0.8F);
+		blood.spurts().ooze(wound, c::position, c.entity.getBbWidth() * 0.5, color, life + 20, 0.7F);
 	}
 
-	/** Down on its chest, trying again and again to get its hind end up, until it gives up and rolls over. */
-	private void downer(Corpse c, Posture p, float progress) {
-		int age = c.age;
-		float front = ramp(age, 0, 15);
-		float hind = ramp(age, 12, 30);
-		boolean down = age > 40;
-		if (down && age - c.attemptAt > ATTEMPT_TICKS && age < c.runTicks - 40 && c.random.nextFloat() < 0.025F) {
-			c.attemptAt = age;
-			c.attempts++;
-			screams.strain(Suffering.follow(c.entity), c.voice, 1.0F / c.attempts);
+	/** One tick of dying, from the moment of death until the body is still. */
+	void tick(ClientLevel level, Corpse c, Posture p, int color, boolean gore) {
+		RandomSource r = c.random;
+		Ragdoll body = c.body;
+		int ground = c.groundTicks();
+		p.legSeed = c.legSeed;
+		p.hindLimp = c.hindLimp;
+		if (ground < 0) {
+			// The legs give way, all at once, and it goes over.
+			float limp = c.kind == Corpse.Kind.DECAPITATION || c.kind == Corpse.Kind.TRAUMA ? 1.0F : ramp(c.age, 0, c.collapseAt);
+			fold(c, p, limp, Math.max(limp, ramp(c.age, 0, c.collapseAt - 1)));
+			p.tremble = 0.2F;
+			return;
 		}
 
-		float heave = 0.0F;
-		int into = age - c.attemptAt;
-		if (into >= 0 && into < ATTEMPT_TICKS) {
-			heave = Mth.sin(Mth.PI * into / ATTEMPT_TICKS) * Math.max(0.35F, 1.0F - 0.15F * c.attempts);
-			if (into == ATTEMPT_TICKS - 4) {
-				// Back down, hard.
-				c.body.spasm(c.random, 0.3F);
-				Vec3 at = c.position();
-				if (c.random.nextInt(4) == 0) {
-					c.entity.level().playLocalSound(at.x, at.y, at.z, SoundEvents.GENERIC_SMALL_FALL, SoundSource.NEUTRAL, 0.6F, 0.7F, false);
+		// The folded legs straighten out as it rolls onto its side; a burnt body draws its limbs in with the heat.
+		float folded = Math.max(0.0F, Mth.cos(body.roll));
+		float drawn = c.kind == Corpse.Kind.BURN ? 0.55F * ramp(ground, 10, 50) : 0.0F;
+		fold(c, p, Math.max(folded, drawn), Math.max(folded, drawn));
+
+		if (c.lifeless()) {
+			return;
+		}
+
+		// Tonic: rigid, legs locked out, head arched back, a fine quiver. A broken back keeps its forelegs rigid.
+		float tonic = c.kind == Corpse.Kind.TRAUMA || c.kind == Corpse.Kind.BURN ? 0.0F
+				: ramp(ground, 0, 5) * (1.0F - ramp(ground, c.tonicEnd, c.tonicEnd + 6));
+		float strength = switch (c.kind) {
+			case CONCUSSION -> 1.0F;
+			case SPINAL -> 0.9F;
+			case DECAPITATION -> 0.6F;
+			default -> 0.5F;
+		};
+		p.stiff = tonic * strength;
+		if (c.kind == Corpse.Kind.SPINAL) {
+			p.stiff = Math.max(p.stiff, 0.6F * (1.0F - ramp(ground, c.clonicEnd - 6, c.clonicEnd + 6)));
+		}
+
+		if (ground < c.tonicEnd) {
+			p.tremble = 0.2F;
+		}
+
+		// Clonic: paddling in bursts with pauses, each leg on its own, fading and slowing.
+		float target = 0.0F;
+		if (ground >= c.clonicStart && ground < c.clonicEnd) {
+			float x = (ground - c.clonicStart) / (float) Math.max(1, c.clonicEnd - c.clonicStart);
+			float envelope = (float) Math.pow(1.0F - x, 1.4) * ramp(ground, c.clonicStart, c.clonicStart + 3);
+			if (c.age >= c.burstUntil) {
+				c.burst = !c.burst;
+				c.burstUntil = c.age + (c.burst ? 5 + r.nextInt(8) + Math.round(6 * (1.0F - x)) : 2 + r.nextInt(4) + Math.round(10 * x));
+				if (c.burst) {
+					// Each burst starts with a jerk of the whole body.
+					body.spasm(r, 0.25F * envelope * c.kickPeak);
 				}
 			}
+
+			target = c.kickPeak * envelope * (c.burst ? 0.75F + 0.25F * r.nextFloat() : 0.12F);
+			p.kickRate = c.kickRate * (1.0F - 0.4F * x);
+			p.thrash = c.kind == Corpse.Kind.BEATEN || c.kind == Corpse.Kind.DECAPITATION ? 0.15F * envelope : 0.0F;
+		} else if (c.kind == Corpse.Kind.EXSANGUINATION && ground >= c.tonicEnd && ground < c.clonicStart) {
+			// Lying there bleeding, weakening: a shiver and a feeble stir of the legs.
+			p.tremble = 0.25F;
+			target = 0.06F;
 		}
 
-		fold(c, p, front, hind * (1.0F - 0.8F * heave));
-		// Between attempts the head lies turned back against its flank.
-		float rest = down ? ramp(age, 40, 60) * (1.0F - heave) : 0.0F;
-		p.lookYaw = 1.3F * c.circleDir * rest;
-		p.headDip = 0.35F * rest - 0.2F * heave;
-		p.tremble = 0.25F + 0.6F * heave;
-		p.kick = 0.25F * heave;
-		if (down && age % 30 == 0 && heave == 0.0F) {
-			screams.breath(Suffering.follow(c.entity), c.voice, 1.0F - progress);
+		c.kickNow += (target - c.kickNow) * 0.4F;
+		p.kick = c.kickNow;
+
+		// Fasciculation: fine flickers of muscle after the paddling stops, the odd twitch, then nothing.
+		if (ground >= c.clonicEnd) {
+			float left = 1.0F - ramp(ground, c.clonicEnd, c.fasciculationEnd);
+			p.tremble = Math.max(p.tremble, 0.15F * left);
+			if (r.nextFloat() < 0.04F * left) {
+				body.spasm(r, 0.08F);
+			}
+		}
+
+		gasp(level, c, color, gore, ground);
+		p.gaspAt = c.gaspAt;
+		p.gasp = c.gaspStrength;
+		heart(level, c, color, gore, ground);
+
+		if (ground < c.voiceEnd && r.nextFloat() < 0.05F) {
+			// Conscious for a moment yet: a weak, wet cry.
+			screams.gurgle(Suffering.follow(c.entity), c.voice, 1.0F - ground / (float) c.voiceEnd);
+		}
+
+		if (!c.lastBreathTaken && c.gasps.length > 0 && ground >= c.throeTicks - 4) {
+			c.lastBreathTaken = true;
+			screams.lastBreath(Suffering.follow(c.entity), c.voice);
 		}
 	}
 
-	/** Coughing up blood: a heave, a jerk of the head and a spray of froth out of the mouth, then gasping. */
-	private void coughing(ClientLevel level, Corpse c, Posture p, float progress, int color, boolean gore, BloodWorld blood, float strength) {
-		int since = c.age - c.phaseAt;
-		if (c.age >= c.nextCough) {
-			c.phaseAt = c.age;
-			since = 0;
-			c.nextCough = c.age + 12 + c.random.nextInt(20) + Math.round(progress * 15.0F);
-			screams.cough(Suffering.follow(c.entity), c.voice, strength);
-			if (gore) {
-				Vec3 mouth = Suffering.neck(c);
-				float yawRad = c.body.yaw * Mth.DEG_TO_RAD;
-				Vec3 out = new Vec3(-Mth.sin(yawRad), -0.3, Mth.cos(yawRad));
-				BloodEmitter.cut(blood, level, mouth, out.normalize(), color, 0.02F + 0.03F * strength, Math.round(5 + 7 * strength));
-			}
-		} else if (since == 8) {
-			screams.gasp(Suffering.follow(c.entity), c.voice, strength);
+	/** An agonal gasp when one is due: the chest heaves, the head lifts. Lungs full of blood bring some up. */
+	private void gasp(ClientLevel level, Corpse c, int color, boolean gore, int ground) {
+		if (c.nextGasp >= c.gasps.length || ground < c.gasps[c.nextGasp]) {
+			return;
 		}
 
-		p.headDip -= 0.35F * (float) Math.exp(-since / 3.0);
-		p.thrash = Math.max(p.thrash, 0.3F * (float) Math.exp(-since / 4.0));
+		float strength = Math.max(0.4F, 1.0F - 0.15F * c.nextGasp);
+		c.nextGasp++;
+		c.gaspAt = c.age;
+		c.gaspStrength = strength;
+		screams.gasp(Suffering.follow(c.entity), c.voice, strength * 0.7F);
+		if (c.kind == Corpse.Kind.CHEST && gore) {
+			Vec3 mouth = Suffering.neck(c);
+			float yawRad = c.body.yaw * Mth.DEG_TO_RAD;
+			Vec3 out = new Vec3(-Mth.sin(yawRad), -0.3, Mth.cos(yawRad)).normalize();
+			BloodEmitter.cut(GoreSystems.blood(), level, mouth, out, color, 0.015F + 0.02F * strength, Math.round(3 + 5 * strength));
+		}
+	}
+
+	/** A heartbeat: fast and strong at first, weaker and slower until it stops. Each one pushes blood out and down. */
+	private void heart(ClientLevel level, Corpse c, int color, boolean gore, int ground) {
+		if (!gore || ground >= c.heartEnd || c.age < c.nextBeat) {
+			return;
+		}
+
+		float progress = ground / (float) Math.max(1, c.heartEnd);
+		c.nextBeat = c.age + Math.round(7.0F + 16.0F * (float) Math.pow(progress, 1.2));
+		float strength = 1.0F - 0.85F * progress;
+		float flow = switch (c.kind) {
+			case EXSANGUINATION, DECAPITATION -> 1.6F;
+			case TRAUMA, BEATEN -> 1.0F;
+			case CHEST -> 0.5F;
+			default -> 0.6F;
+		};
+		Vec3 from = bleedPoint(c);
+		BloodWorld blood = GoreSystems.blood();
+		BloodEmitter.burst(blood, level, from, color, (0.03F * strength + 0.008F) * flow, Math.round((3 + 5 * strength) * flow));
+		// What runs down pools under the body, and the pool grows with every beat.
+		BloodEmitter.drip(blood, new Vec3(from.x, c.body.y + 0.1, from.z), color, (0.05F * strength + 0.01F) * flow);
+	}
+
+	/** Where the blood comes from: the deepest wound, the neck of a beheaded body, or the mouth and nose. */
+	private static Vec3 bleedPoint(Corpse c) {
+		if (c.kind != Corpse.Kind.DECAPITATION && c.kind != Corpse.Kind.CHEST) {
+			Vec3 wound = GoreSystems.dismemberment().wounds().deepest(c.entity.getId(), c.position(), c.yaw());
+			if (wound != null) {
+				// Lying on its side, the wound is near the ground.
+				return new Vec3(wound.x, Math.min(wound.y, c.body.y + c.entity.getBbHeight() * 0.4), wound.z);
+			}
+		}
+
+		return Suffering.neck(c);
+	}
+
+	/** Struck while it dies: a blow breaks the rigid phase and sets it kicking, and a conscious one cries out. */
+	void struck(Corpse c) {
+		if (c.lifeless()) {
+			return;
+		}
+
+		int ground = c.groundTicks();
+		if (ground >= 0 && ground < c.tonicEnd) {
+			c.tonicEnd = ground;
+			c.clonicStart = Math.min(c.clonicStart, ground);
+		}
+
+		if (ground >= c.clonicStart && ground < c.clonicEnd) {
+			c.burst = true;
+			c.burstUntil = c.age + 6 + c.random.nextInt(6);
+		}
+
+		c.body.spasm(c.random, 0.5F);
+		if (ground < c.voiceEnd) {
+			screams.gurgle(Suffering.follow(c.entity), c.voice, 1.0F);
+		}
 	}
 
 	/**
 	 * Folds the legs under the body: {@code front} and {@code hind} 0..1. The body sinks and pitches with them, so a
-	 * kneeling cow goes nose down and a broken-backed one sits like a dog. Two-legged bodies sit straight down.
+	 * kneeling cow goes nose down. Two-legged bodies sit straight down.
 	 */
 	static void fold(Corpse c, Posture p, float front, float hind) {
 		ModelParts.Legs legs = c.legs;
@@ -485,16 +494,8 @@ public final class Deaths {
 		}
 	}
 
-	/** Under the hind end of a body. */
-	private static Vec3 behind(Corpse c) {
-		Ragdoll b = c.body;
-		float yawRad = b.yaw * Mth.DEG_TO_RAD;
-		double back = c.entity.getBbWidth() * 0.5;
-		return new Vec3(b.x + Mth.sin(yawRad) * back, b.y + 0.1, b.z - Mth.cos(yawRad) * back);
-	}
-
 	/** 0 before {@code from}, 1 after {@code to}, linear between. */
 	private static float ramp(float x, float from, float to) {
-		return Mth.clamp((x - from) / (to - from), 0.0F, 1.0F);
+		return to <= from ? (x >= to ? 1.0F : 0.0F) : Mth.clamp((x - from) / (to - from), 0.0F, 1.0F);
 	}
 }

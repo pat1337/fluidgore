@@ -225,7 +225,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			return "none";
 		});
 		System.out.println("[FluidGoreTest] beaten cow corpse kind: " + kind);
-		check("BRUTAL".equals(kind), "beaten-to-death cow should get BRUTAL throes, got " + kind);
+		check("BEATEN".equals(kind), "beaten-to-death cow should die BEATEN, got " + kind);
 		context.waitTicks(10);
 		context.takeScreenshot("cow_02_brutal_throes");
 
@@ -280,7 +280,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			context.waitTicks(3);
 			headless = context.computeOnClient(mc -> {
 				for (var corpse : GoreSystems.suffering().corpses()) {
-					if (corpse.kind == dev.fluidgore.suffer.Corpse.Kind.HEADLESS_RUN && corpse.running()) {
+					if (corpse.kind == dev.fluidgore.suffer.Corpse.Kind.DECAPITATION) {
 						return true;
 					}
 				}
@@ -289,8 +289,8 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			});
 		}
 
-		System.out.println("[FluidGoreTest] headless run seen: " + headless);
-		check(headless, "no beheaded cow ran headless in 5 sword kills at Extreme");
+		System.out.println("[FluidGoreTest] beheaded body seen: " + headless);
+		check(headless, "no cow was beheaded in 5 sword kills at Extreme");
 		context.waitTicks(15);
 		context.takeScreenshot("cow_04_headless_run");
 		context.waitTicks(40);
@@ -419,7 +419,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			kinds.addAll(context.computeOnClient(mc -> {
 				java.util.Set<String> now = new java.util.TreeSet<>();
 				for (var corpse : GoreSystems.suffering().corpses()) {
-					now.add(corpse.kind.name());
+					now.add(corpse.kind.name() + "/" + corpse.throeTicks + "/" + corpse.clonicEnd);
 				}
 
 				return now;
@@ -427,8 +427,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		}
 
 		System.out.println("[FluidGoreTest] death styles seen among 12 animals: " + kinds);
-		check(kinds.size() >= 2, "every animal died the same way: " + kinds);
-		check(kinds.size() >= 3, "too few ways of dying among 12 animals: " + kinds);
+		check(kinds.size() >= 8, "too few different deaths among 12 animals: " + kinds);
 		context.waitTicks(120);
 		context.takeScreenshot("indiv_7_aftermath");
 		context.runOnClient(mc -> GoreConfig.get().sufferingLevel = GoreLevel.MEDIUM);
@@ -582,7 +581,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 				}
 
 				s.append(" missing=").append(GoreSystems.dismemberment().missingMask(cowId));
-				s.append(corpse == null ? " no body" : " body=" + corpse.kind + " run=" + corpse.runTicks + " throes=" + corpse.throeTicks + " pops=" + corpse.pops);
+				s.append(corpse == null ? " no body" : " body=" + corpse.kind + " collapse=" + corpse.collapseAt + " throes=" + corpse.throeTicks + " pops=" + corpse.pops);
 				outcome[r] = s.toString();
 				onHead[0] = set != null && set.severity(BodyPart.HEAD) > 0.0F || (GoreSystems.dismemberment().missingMask(cowId) & BodyPart.HEAD.bit()) != 0;
 			});
@@ -1010,19 +1009,17 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 	}
 
 	/**
-	 * The realistic deaths, one cow each, side by side: each must play out as it should (a stunned cow drops where it
-	 * stands, a broken-backed one drags itself, a brain-hurt one circles and ends on its back), none may burst, and the
-	 * burst must stay rare.
+	 * The deaths, one cow per cause, side by side, sampled every tick. Every body must be down within half a second
+	 * and lie where it dropped; a head blow goes rigid and a blast leaves it limp; all of them paddle, a broken back with
+	 * its hind end hanging dead; those that still breathe gasp and a beheaded one never does; every body is still
+	 * within three to five and a half seconds; and a blow during the rigid phase sets the legs going.
 	 */
 	private static void deaths(ClientGameTestContext context, TestServerContext server) {
 		server.runCommand("kill @e[type=!minecraft:player]");
 		server.runCommand("tp @a 168.5 -60 -9.5 0 22");
-		dev.fluidgore.suffer.Corpse.Kind[] kinds = {
-				dev.fluidgore.suffer.Corpse.Kind.BOLT, dev.fluidgore.suffer.Corpse.Kind.STUNNED, dev.fluidgore.suffer.Corpse.Kind.BLEED_OUT,
-				dev.fluidgore.suffer.Corpse.Kind.DOWNER, dev.fluidgore.suffer.Corpse.Kind.BROKEN_BACK, dev.fluidgore.suffer.Corpse.Kind.CHOKING,
-				dev.fluidgore.suffer.Corpse.Kind.CIRCLING};
-		for (int i = 0; i < kinds.length; i++) {
-			server.runCommand("summon minecraft:cow " + (161.5 + i * 2.5) + " -60 0.5 {NoAI:1b,Tags:[\"death" + i + "\"],Rotation:[90f,0f]}");
+		dev.fluidgore.suffer.Corpse.Kind[] kinds = dev.fluidgore.suffer.Corpse.Kind.values();
+		for (int i = 0; i <= kinds.length; i++) {
+			server.runCommand("summon minecraft:cow " + (158.5 + i * 2.5) + " -60 0.5 {NoAI:1b,Tags:[\"death" + i + "\"],Rotation:[90f,0f]}");
 		}
 
 		context.runOnClient(mc -> {
@@ -1034,119 +1031,133 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		context.waitTicks(20);
 		check(context.computeOnClient(mc -> GoreConfig.get().deathPop && GoreConfig.get().deathPopPercent == 5), "the death pop is not a 5% chance by default");
 
-		int[] ids = new int[kinds.length];
-		double[][] start = new double[kinds.length][];
-		for (int i = 0; i < kinds.length; i++) {
+		int[] ids = new int[kinds.length + 1];
+		for (int i = 0; i <= kinds.length; i++) {
 			int n = i;
 			ids[i] = context.computeOnClient(mc -> {
 				for (Entity e : mc.level.entitiesForRendering()) {
-					if (e instanceof net.minecraft.world.entity.animal.cow.Cow && Math.abs(e.getX() - (161.5 + n * 2.5)) < 0.3) {
+					if (e instanceof net.minecraft.world.entity.animal.cow.Cow && Math.abs(e.getX() - (158.5 + n * 2.5)) < 0.3) {
 						return e.getId();
 					}
 				}
 
 				return -1;
 			});
-			check(ids[i] >= 0, "no cow for death " + kinds[i]);
+			check(ids[i] >= 0, "no cow for death " + i);
+		}
+
+		double[][] start = new double[kinds.length][];
+		for (int i = 0; i < kinds.length; i++) {
+			int n = i;
 			context.runOnClient(mc -> GoreSystems.suffering().forceNextDeath(kinds[n], false));
-			// No weapon: nothing is cut off, so the body itself can be seen.
 			server.runCommand("damage @e[tag=death" + i + ",limit=1] 100 minecraft:generic");
-			context.waitTicks(3);
-			int id = ids[i];
+			context.waitTicks(2);
 			start[i] = context.computeOnClient(mc -> {
-				var corpse = GoreSystems.suffering().corpse(id);
-				return corpse == null ? null : new double[]{corpse.position().x, corpse.position().z, corpse.yaw()};
+				var corpse = GoreSystems.suffering().corpse(ids[n]);
+				return corpse == null ? null : new double[]{corpse.position().x, corpse.position().z};
 			});
 			check(start[i] != null, kinds[i] + ": the killed cow left no body");
 		}
 
-		java.util.function.IntFunction<String> state = i -> context.computeOnClient(mc -> {
-			var c = GoreSystems.suffering().corpse(ids[i]);
-			if (c == null) {
-				return "gone";
+		int[] downAt = new int[kinds.length];
+		int[] stillAt = new int[kinds.length];
+		float[] stiff = new float[kinds.length];
+		float[] kick = new float[kinds.length];
+		float[] gasp = new float[kinds.length];
+		float[] limp = new float[kinds.length];
+		boolean[] onSide = new boolean[kinds.length];
+		java.util.Arrays.fill(downAt, -1);
+		java.util.Arrays.fill(stillAt, -1);
+		for (int tick = 0; tick < 130; tick++) {
+			context.waitTicks(1);
+			if (tick == 6 || tick == 30 || tick == 60) {
+				context.takeScreenshot("deaths_t" + tick);
 			}
 
-			return c.kind + " age=" + c.age + " run=" + c.runTicks + " upright=" + c.upright() + " pops=" + c.pops + " moved=" + String.format("%.2f", Math.hypot(c.position().x - start[i][0], c.position().z - start[i][1]))
-					+ " turned=" + String.format("%.0f", c.yaw() - start[i][2]) + " roll=" + String.format("%.2f", c.body.roll(1.0F));
-		});
+			context.runOnClient(mc -> {
+				for (int i = 0; i < kinds.length; i++) {
+					var c = GoreSystems.suffering().corpse(ids[i]);
+					if (c == null) {
+						continue;
+					}
 
-		int[] moments = {25, 70, 130, 200, 300};
-		int waited = 0;
-		java.util.List<String[]> seen = new java.util.ArrayList<>();
-		for (int m = 0; m < moments.length; m++) {
-			context.waitTicks(moments[m] - waited);
-			waited = moments[m];
-			context.takeScreenshot("deaths_" + (m + 1) + "_t" + moments[m]);
-			for (int i = 0; i < kinds.length; i++) {
-				int n = i;
-				double[] at = context.computeOnClient(mc -> {
-					var c = GoreSystems.suffering().corpse(ids[n]);
-					return c == null ? null : new double[]{c.position().x, c.position().z};
-				});
-				if (at != null) {
-					server.runCommand(String.format(java.util.Locale.ROOT, "tp @a %.2f -60 %.2f 0 25", at[0] + 0.5, at[1] - 3.2));
-					context.waitTicks(1);
-					context.takeScreenshot("deaths_" + (m + 1) + "_" + kinds[i].name().toLowerCase(java.util.Locale.ROOT));
+					var pose = c.pose();
+					// When its legs gave way, and whether it is really lying on its side by a second and a half.
+					downAt[i] = c.collapseAt;
+					if (c.age <= 30 && Math.abs(c.body.roll(1.0F)) > 1.2F) {
+						onSide[i] = true;
+					}
+
+					if (stillAt[i] < 0 && c.lifeless()) {
+						stillAt[i] = c.age;
+					}
+
+					stiff[i] = Math.max(stiff[i], pose.stiff());
+					kick[i] = Math.max(kick[i], pose.kick());
+					gasp[i] = Math.max(gasp[i], pose.gasp());
+					limp[i] = Math.max(limp[i], pose.hindLimp());
+					check(!c.pops, kinds[i] + ": a body forced not to burst is set to burst");
 				}
-			}
-
-			server.runCommand("tp @a 168.5 -60 -9.5 0 22");
-			String[] now = new String[kinds.length];
-			for (int i = 0; i < kinds.length; i++) {
-				now[i] = state.apply(i);
-				System.out.println("[FluidGoreTest] deaths t=" + moments[m] + ": " + now[i]);
-			}
-
-			seen.add(now);
+			});
 		}
 
 		for (int i = 0; i < kinds.length; i++) {
-			for (String[] now : seen) {
-				check(!now[i].contains("pops=true"), kinds[i] + ": a body forced not to burst is set to burst");
-			}
+			int n = i;
+			double moved = context.computeOnClient(mc -> {
+				var c = GoreSystems.suffering().corpse(ids[n]);
+				return c == null ? -1.0 : Math.hypot(c.position().x - start[n][0], c.position().z - start[n][1]);
+			});
+			System.out.println("[FluidGoreTest] death " + kinds[i] + ": legs gone at " + downAt[i] + ", on its side " + onSide[i] + ", still at " + stillAt[i] + ", stiff " + stiff[i]
+					+ ", kick " + kick[i] + ", gasp " + gasp[i] + ", hind limp " + limp[i] + ", moved " + String.format("%.2f", moved));
+			check(downAt[i] >= 0 && downAt[i] <= 8, kinds[i] + ": the legs did not give way at once: " + downAt[i]);
+			check(onSide[i], kinds[i] + ": not lying on its side within a second and a half");
+			check(stillAt[i] >= 60 && stillAt[i] <= 110, kinds[i] + ": did not die out in three to five and a half seconds: " + stillAt[i]);
+			check(moved >= 0.0 && moved < 0.8, kinds[i] + ": did not lie where it dropped, moved " + moved);
+			check(kick[i] > 0.1F, kinds[i] + ": never paddled: " + kick[i]);
 		}
 
-		// Measured from 25 ticks on, once the knock of the killing blow is spent: the stunned cow lies where it dropped;
-		// the broken-backed one is still up at the 70-tick sample and has dragged itself along. (The samples are later than
-		// their names: every screenshot and teleport between them costs ticks, so "130" is about 210 ticks after death,
-		// past the 169-tick earliest collapse of a broken back at Extreme.)
-		check(seen.get(1)[1].contains("upright=false") && Math.abs(value(seen.get(1)[1], "moved") - value(seen.get(0)[1], "moved")) < 0.3,
-				"the stunned cow did not drop where it stood: " + seen.get(0)[1] + " -> " + seen.get(1)[1]);
-		check(seen.get(1)[4].contains("upright=true"), "the broken-backed cow went over too soon: " + seen.get(1)[4]);
-		check(value(seen.get(2)[4], "moved") - value(seen.get(0)[4], "moved") > 0.4, "the broken-backed cow did not drag itself: " + seen.get(0)[4] + " -> " + seen.get(2)[4]);
-		check(Math.abs(value(seen.get(1)[6], "turned")) > 150.0, "the brain-hurt cow did not walk in circles: " + seen.get(1)[6]);
-		check(Math.abs(value(seen.get(4)[6], "roll")) > 2.5, "the brain-hurt cow did not end on its back: " + seen.get(4)[6]);
-		check(value(seen.get(2)[0], "moved") > 3.0, "the death run went nowhere: " + seen.get(2)[0]);
+		int concussion = dev.fluidgore.suffer.Corpse.Kind.CONCUSSION.ordinal();
+		int trauma = dev.fluidgore.suffer.Corpse.Kind.TRAUMA.ordinal();
+		int decapitation = dev.fluidgore.suffer.Corpse.Kind.DECAPITATION.ordinal();
+		int spinal = dev.fluidgore.suffer.Corpse.Kind.SPINAL.ordinal();
+		check(stiff[concussion] >= 0.8F, "the head blow did not go rigid: " + stiff[concussion]);
+		check(kick[concussion] >= 0.4F, "the head blow did not paddle hard: " + kick[concussion]);
+		check(stiff[trauma] == 0.0F && kick[trauma] < 0.45F, "the blast victim was not limp: stiff " + stiff[trauma] + " kick " + kick[trauma]);
+		check(kick[decapitation] >= 0.5F && gasp[decapitation] == 0.0F, "the beheaded body did not kick hard without a breath: kick "
+				+ kick[decapitation] + " gasp " + gasp[decapitation]);
+		check(limp[spinal] == 1.0F, "the broken back did not leave the hind end limp");
+		for (dev.fluidgore.suffer.Corpse.Kind kind : new dev.fluidgore.suffer.Corpse.Kind[]{dev.fluidgore.suffer.Corpse.Kind.CONCUSSION,
+				dev.fluidgore.suffer.Corpse.Kind.EXSANGUINATION, dev.fluidgore.suffer.Corpse.Kind.SPINAL, dev.fluidgore.suffer.Corpse.Kind.CHEST,
+				dev.fluidgore.suffer.Corpse.Kind.BEATEN}) {
+			check(gasp[kind.ordinal()] > 0.0F, kind + ": never gasped");
+		}
+
 		int blood = context.computeOnClient(mc -> GoreSystems.blood().fluid().size() + GoreSystems.blood().decals().size());
 		System.out.println("[FluidGoreTest] deaths: blood on the ground " + blood);
-		check(blood > 20, "the bleeding deaths left little blood: " + blood);
+		check(blood > 20, "the dying bodies left little blood: " + blood);
 
-		// A blow on the downer makes it heave to get up; on the stunned cow it sets the legs going.
-		context.runOnClient(mc -> {
-			for (int i : new int[]{1, 3}) {
-				var corpse = GoreSystems.suffering().corpse(ids[i]);
-				if (corpse != null) {
-					var eye = mc.player.getEyePosition();
-					var at = dev.fluidgore.suffer.CorpseStrike.centre(corpse);
-					dev.fluidgore.suffer.CorpseStrike.strike(mc.level, GoreSystems.blood(), corpse, eye, at.subtract(eye).normalize(), Weapon.BLUNT, 1.0F);
-				}
-			}
+		// A blow during the rigid phase breaks it: the legs start going at once.
+		int last = ids[kinds.length];
+		context.runOnClient(mc -> GoreSystems.suffering().forceNextDeath(dev.fluidgore.suffer.Corpse.Kind.CONCUSSION, false));
+		server.runCommand("damage @e[tag=death" + kinds.length + ",limit=1] 100 minecraft:generic");
+		context.waitTicks(16);
+		int[] rigid = context.computeOnClient(mc -> {
+			var c = GoreSystems.suffering().corpse(last);
+			return c == null ? null : new int[]{c.groundTicks(), c.tonicEnd};
 		});
-		context.waitTicks(12);
-		context.takeScreenshot("deaths_6_struck");
+		check(rigid != null && rigid[0] < rigid[1], "the head-blow cow was not rigid when struck: " + java.util.Arrays.toString(rigid));
+		context.runOnClient(mc -> {
+			var corpse = GoreSystems.suffering().corpse(last);
+			var eye = mc.player.getEyePosition();
+			var at = dev.fluidgore.suffer.CorpseStrike.centre(corpse);
+			dev.fluidgore.suffer.CorpseStrike.strike(mc.level, GoreSystems.blood(), corpse, eye, at.subtract(eye).normalize(), Weapon.BLUNT, 1.0F);
+		});
+		context.waitTicks(5);
+		float kicked = context.computeOnClient(mc -> GoreSystems.suffering().corpse(last).pose().kick());
+		System.out.println("[FluidGoreTest] rigid cow struck: kick " + kicked + " five ticks later");
+		check(kicked > 0.1F, "a blow during the rigid phase did not set the legs going: " + kicked);
+		context.takeScreenshot("deaths_struck");
 		context.runOnClient(mc -> GoreConfig.get().sufferingLevel = GoreLevel.EXTREME);
-	}
-
-	/** The number after {@code key=} in a state line. */
-	private static double value(String line, String key) {
-		int at = line.indexOf(key + "=");
-		if (at < 0) {
-			return Double.NaN;
-		}
-
-		String rest = line.substring(at + key.length() + 1);
-		int end = rest.indexOf(' ');
-		return Double.parseDouble(end < 0 ? rest : rest.substring(0, end));
 	}
 
 	/**
@@ -1197,7 +1208,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		check(burning > 0.1F, "the burning chicken did not char: " + burning);
 		check(charred > 0.3F, "the chicken burnt to death is not charred: " + charred);
 		check(cellsWhileBurning == 0, "burning made the chicken bleed puddles: " + cellsWhileBurning);
-		check(corpse.startsWith("BRUTAL"), "a chicken burnt alive did not writhe to death: " + corpse);
+		check(corpse.startsWith("BURN"), "a chicken burnt alive did not die of its burns: " + corpse);
 		check(scorch >= 1, "the burnt chicken left no scorch mark");
 		int still = Integer.parseInt(corpse.split(" ")[1]);
 		check(still >= 1000, "on Extreme a burnt body does not lie long enough to be seen: " + still + " ticks");
@@ -1219,7 +1230,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		});
 		context.takeScreenshot("evidence_01_beaten_pig");
 		System.out.println("[FluidGoreTest] beaten pig: body " + pig);
-		check(pig.startsWith("BRUTAL"), "the beaten pig did not die hard: " + pig);
+		check(pig.startsWith("BEATEN"), "the beaten pig did not die beaten: " + pig);
 		String[] p = pig.split(" ");
 		check(Integer.parseInt(p[1]) >= 1000, "on Extreme a beaten body does not lie long enough to be seen: " + p[1] + " ticks");
 		check(Integer.parseInt(p[2]) >= 20 * 60 * 5, "on Extreme blood does not stay five minutes: " + p[2] + " ticks");

@@ -57,18 +57,18 @@ with a patter of wet slaps and the clatter of bone. Medium gore level and up; ne
   and long it screams, how quickly it panics, stoic or frantic. Two cows never scream or die alike.
 - **Screams** are built from each animal's own vanilla sounds, pitch-bent, layered and re-triggered into screams,
   whimpers, gurgles and panicked bellows.
-- **Nine ways to die, the way animals really do**, picked by where and with what the killing blow landed and by the
-  animal itself: stunned (drops like a sack, lies rigid, then the legs paddle on their own), bled out (stands swaying
-  while its blood pumps out into a growing pool, then sinks onto its chest), the death run (bolts blind and crashes
-  nose first), the downer (down on its chest, head against its flank, trying again and again to get up), a broken
-  back (drags itself on its front legs), drowning in blood (coughs it up with every breath), gut-shot (curls over the
-  wound), agonal thrashing after a beating, and brain hurt (walks in circles, ends on its back with its legs in the
-  air). A beheaded body still runs. Each one answers a blow in its own way while it dies. Then laboured breaths, and
-  the last one. One death in twenty ends with the body bursting apart when it finally goes.
+- **Dying the way animals really do.** Every animal drops the moment it is killed: the legs go and it falls onto its
+  side. Then, over three to five seconds, what slaughterhouse and veterinary staff see in a dying animal: a rigid
+  phase (legs locked out, head arched back, not breathing), involuntary paddling in bursts that fades and slows,
+  a few agonal gasps further and further apart, fine flickers of muscle, and stillness. The heart pumps blood out
+  of the worst wound in beats that weaken and slow until it stops, and the pool grows under the body. The cause of
+  death shapes it: a head blow is silent and paddles hard; a cut-open animal lies bleeding and kicks late; a broken
+  back leaves the hind end dead and the forelegs rigid; a beheaded body kicks hardest of all and never breathes;
+  lungs full of blood gurgle and bring it up; a blast leaves it limp; a burnt one draws its limbs in; a beating ends
+  in violent kicking. Every length, kick and gasp is rolled anew, so no two deaths are alike. A blow during the
+  rigid phase sets the legs going. One death in twenty ends with the body bursting apart when it finally goes.
 - **Bodies stay.** The body outlives the server's entity: it falls, is thrown along the killing blow, and can still
   be struck, shoved and cut where it lies.
-
-![A beheaded cow still running](docs/images/headless-run.png)
 
 ### Mothers and their young
 Hurt a calf and it cries for its mother, and she answers: her head comes up and turns to the cries, and she shakes.
@@ -155,7 +155,7 @@ Tested alongside Sodium, Iris (without a shader pack), Lithium, FerriteCore, Ent
 | Body Lingers | 10 s | How long a body stays after its death throes. |
 | Red Death | On | Dying bodies stay red until they are gone, like the vanilla death. |
 | Death Pop | On | Some bodies, when they finally go, pop into their head, limbs and scraps of flesh, which you can kick about. |
-| Death Pop Chance | 5% | How many deaths end in that burst; the rest die one of the nine realistic deaths and are left lying. |
+| Death Pop Chance | 5% | How many deaths end in that burst; the rest die out on the ground and are left lying. |
 
 Only in `config/fluidgore.json`:
 
