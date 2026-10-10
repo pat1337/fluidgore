@@ -2,6 +2,13 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.9.3]
+
+### Fixed
+- Hits by other players landed on a random spot: only your own swings were aimed, so when you hit something on the
+  head, a friend with the mod saw the wound somewhere else. Other players' swings are now traced along where they
+  are looking, so the wound lands on the same spot on everyone's screen. Mobs and arrows still land on a guessed spot.
+
 ## [1.9.2]
 
 ### Fixed

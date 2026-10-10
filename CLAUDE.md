@@ -91,7 +91,8 @@ Mod Menu 21.0.0 (compile-only, soft dependency).
   - `WoundSet` is one body's wounds (flat arrays, cap 32): spot on a cube face, radius, severity 0..1 through four
     layers (bruise, gash 0.25, meat 0.5, bone 0.75). `Wounds` owns them, resolves the player's swing at click time
     (the damage packet arrives later, after knockback has moved the legs), applies the gore-level depth cap and
-    decides targeted cuts. Only aimed blows sever precisely; guessed spots (other attackers) keep random severing.
+    decides targeted cuts. Other players' melee swings are cast along their synced view (`alongView`), so they land
+    on the same spot on every screen. Only aimed blows sever precisely; guessed spots (mobs, projectiles) keep random severing.
   - `WoundRenderer` draws from `ModelFeatureRendererMixin` right after `renderToBuffer`, in the same part
     transforms (`entityCutoutZOffset`, `wounds.png`). `Weapon` (blunt/flint/blade/chop/pick/pierce/bite/blast), `Flesh` (meat/bone/dried).
 - `render/GoreRenderer`: draws decals, puddles, droplets, parts and removed corpses via
@@ -165,3 +166,5 @@ severable parts; severed heads can't blink.
   at 2) to stop the stuttering click on animal hits and kills.
 - **1.9.2**: `Suffering.slam` plays the hard fall crunch 1 in 4 (else a dull mud/wool thud); `Deaths` back-down and
   `Giblets.thud` sounds are gated to 1 in 4.
+- **1.9.3**: other players' swings land where they looked (`Wounds.alongView`, synced view ray with small nudges)
+  instead of a random guessed spot, so a head hit shows on the head for everyone with the mod.

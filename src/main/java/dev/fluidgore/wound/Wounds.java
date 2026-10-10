@@ -36,6 +36,8 @@ public final class Wounds {
 	private static final int AIM_TICKS = 10;
 	private static final double REACH = 8.0;
 	private static final RandomSource RANDOM = RandomSource.create();
+	/** Pitch and yaw offsets, in degrees, tried in order when another player's view ray misses the body. */
+	private static final float[][] VIEW_NUDGES = {{0, 0}, {2, 0}, {-2, 0}, {0, 2}, {0, -2}, {4, 0}, {-4, 0}, {0, 4}, {0, -4}};
 
 	/** Where a swing of the local player landed on the model, resolved against the pose the player saw. */
 	private record Aim(Model<?> model, ModelHit.Result hit, float bodyYaw, int tick) {
@@ -86,10 +88,10 @@ public final class Wounds {
 	}
 
 	/**
-	 * A blow reported by the server. Uses the player's own aim if they swung at this entity, otherwise a ray from the
-	 * attacker to the middle of the victim.
+	 * A blow reported by the server. Uses the player's own aim if they swung at this entity, then another player's
+	 * swing along where the server says they are looking, otherwise a ray from the attacker to the middle of the victim.
 	 */
-	public @Nullable Strike onDamage(LivingEntity victim, @Nullable Entity attacker, Weapon weapon, float damage) {
+	public @Nullable Strike onDamage(LivingEntity victim, @Nullable Entity attacker, boolean melee, Weapon weapon, float damage) {
 		if (attacker == null || !applies(victim)) {
 			return null;
 		}
@@ -102,7 +104,16 @@ public final class Wounds {
 			}
 		}
 
-		// Another player, a mob or a projectile: the server never says where it landed, so a spot is guessed.
+		if (melee && attacker instanceof Player player) {
+			// Another player's swing: the server sends everyone where each player looks, so it is cast along their
+			// view the way the local player's own swing is, and lands on the same spot on every screen.
+			Strike seen = alongView(victim, player, weapon, damage);
+			if (seen != null) {
+				return seen;
+			}
+		}
+
+		// A mob, a projectile, or a swing whose view ray missed: the server never says where it landed, so a spot is guessed.
 		Vec3 eye = attacker.getEyePosition();
 		Vec3 target = victim.position().add(
 				(RANDOM.nextDouble() - 0.5) * victim.getBbWidth() * 0.6,
@@ -112,6 +123,24 @@ public final class Wounds {
 		double length = dir.length();
 		Strike guessed = length < 1.0E-4 ? null : strike(victim, eye, dir.scale(1.0 / length), length + 2.0, weapon, damage);
 		return guessed == null ? null : new Strike(guessed.hit(), guessed.severity(), guessed.cut(), false);
+	}
+
+	/**
+	 * Casts {@code player}'s swing along their synced view. Their rotation arrives rounded to 1.4 degrees and a tick or
+	 * two late, so if the exact ray misses, nearby rays within a few degrees are tried before giving up.
+	 */
+	private @Nullable Strike alongView(LivingEntity victim, Player player, Weapon weapon, float damage) {
+		Vec3 eye = player.getEyePosition();
+		float xRot = player.getViewXRot(1.0F);
+		float yRot = player.getViewYRot(1.0F);
+		for (float[] nudge : VIEW_NUDGES) {
+			Strike strike = strike(victim, eye, Entity.calculateViewVector(xRot + nudge[0], yRot + nudge[1]), REACH, weapon, damage);
+			if (strike != null) {
+				return strike;
+			}
+		}
+
+		return null;
 	}
 
 	/**

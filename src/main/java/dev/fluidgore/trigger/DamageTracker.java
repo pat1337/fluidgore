@@ -203,7 +203,7 @@ public final class DamageTracker {
 
 			Wounds.Strike wound = weapon == null ? null : blastAt != null
 					? dismemberment.wounds().onBlast(victim, blastAt, damage)
-					: dismemberment.wounds().onDamage(victim, attacker, weapon, damage);
+					: dismemberment.wounds().onDamage(victim, attacker, meleeAttacker != null, weapon, damage);
 			if (wound != null) {
 				BodyPart part = wound.hit().bodyPart();
 				zone = part == null ? Deaths.Zone.BODY : part == BodyPart.HEAD ? Deaths.Zone.HEAD : Deaths.Zone.LEG;
