@@ -56,7 +56,8 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 				scaledSlider("fluidgore.option.max_decals", 1, 100, 50, c.maxBloodDecals, null, v -> c.maxBloodDecals = v),
 				OptionInstance.createBoolean("fluidgore.option.wall_splatter", c.wallSplatter, v -> c.wallSplatter = v),
 				OptionInstance.createBoolean("fluidgore.option.footprints", c.footprints, v -> c.footprints = v),
-				OptionInstance.createBoolean("fluidgore.option.rain_washes", c.rainWashesBlood, v -> c.rainWashesBlood = v)
+				OptionInstance.createBoolean("fluidgore.option.rain_washes", c.rainWashesBlood, v -> c.rainWashesBlood = v),
+				OptionInstance.createBoolean("fluidgore.option.cleaning", c.cleaning, v -> c.cleaning = v)
 		);
 
 		this.list.addHeader(Component.translatable("fluidgore.header.performance"));
@@ -77,7 +78,11 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 		this.list.addSmall(
 				scaledSlider("fluidgore.option.scream_volume", 0, 40, 5, c.screamVolume, "fluidgore.unit.percent", v -> c.screamVolume = v),
 				scaledSlider("fluidgore.option.max_screams", 1, 32, 1, c.maxScreams, null, v -> c.maxScreams = v),
-				OptionInstance.createBoolean("fluidgore.option.herd_panic", c.herdPanic, v -> c.herdPanic = v)
+				OptionInstance.createBoolean("fluidgore.option.herd_panic", c.herdPanic, v -> c.herdPanic = v),
+				OptionInstance.createBoolean("fluidgore.option.personality", c.personality, v -> c.personality = v),
+				OptionInstance.createBoolean("fluidgore.option.ecology", c.ecology, v -> c.ecology = v),
+				scaledSlider("fluidgore.option.death_launch", 0, 30, 10, c.deathLaunchPercent, "fluidgore.unit.percent", v -> c.deathLaunchPercent = v),
+				scaledSlider("fluidgore.option.corpse_linger", 1, 120, 5, c.corpseLingerSeconds, "fluidgore.unit.seconds", v -> c.corpseLingerSeconds = v)
 		);
 	}
 

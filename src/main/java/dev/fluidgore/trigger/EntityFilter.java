@@ -1,5 +1,6 @@
 package dev.fluidgore.trigger;
 
+import dev.fluidgore.blood.BoneEmitter;
 import dev.fluidgore.config.BloodColor;
 import dev.fluidgore.config.GoreConfig;
 import java.util.ArrayList;
@@ -23,6 +24,8 @@ public final class EntityFilter {
 	private static final List<TagKey<Item>> bladeTags = new ArrayList<>();
 	private static List<String> cachedBloodlessSource;
 	private static final Set<Identifier> bloodless = new HashSet<>();
+	private static List<String> cachedBoneSource;
+	private static final Set<Identifier> bone = new HashSet<>();
 
 	private EntityFilter() {
 	}
@@ -45,8 +48,26 @@ public final class EntityFilter {
 		return config.affectAnimals;
 	}
 
+	/** Blood colour, or {@link BoneEmitter#BONE} for bony bodies, which break instead of bleeding. */
 	public static int bloodColor(LivingEntity entity) {
-		return bloodType(entity).rgb;
+		return isBone(entity) ? BoneEmitter.BONE : bloodType(entity).rgb;
+	}
+
+	/** True for skeletons and other bony bodies: they chip, crack and shatter, and never bleed. */
+	public static boolean isBone(LivingEntity entity) {
+		List<String> source = GoreConfig.get().boneEntities;
+		if (source != cachedBoneSource) {
+			cachedBoneSource = source;
+			bone.clear();
+			for (String entry : source) {
+				Identifier id = Identifier.tryParse(entry.trim());
+				if (id != null) {
+					bone.add(id);
+				}
+			}
+		}
+
+		return bone.contains(BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()));
 	}
 
 	public static BloodColor bloodType(LivingEntity entity) {
@@ -55,6 +76,11 @@ public final class EntityFilter {
 	}
 
 	public static boolean isBloodless(LivingEntity entity) {
+		if (isBone(entity)) {
+			// Old configs list skeletons as bloodless; bone takes priority so they still break.
+			return false;
+		}
+
 		List<String> source = GoreConfig.get().bloodlessEntities;
 		if (source != cachedBloodlessSource) {
 			cachedBloodlessSource = source;

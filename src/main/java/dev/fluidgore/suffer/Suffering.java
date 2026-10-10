@@ -8,6 +8,7 @@ import dev.fluidgore.dismember.GorePart;
 import dev.fluidgore.trigger.EntityFilter;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.objects.Object2FloatOpenHashMap;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -17,6 +18,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
@@ -43,6 +45,13 @@ public final class Suffering {
 	private static final int TERROR_MEMORY = 600;
 	private static final double TERROR_RADIUS_SQ = 14.0 * 14.0;
 	private static final int MAX_CORPSES = 12;
+	/** Survivors notice a body, and a mother her young, from this far. */
+	private static final double MOURN_RADIUS = 9.0;
+	/** Predators smell a kill from this far. */
+	private static final double SCENT_RADIUS = 18.0;
+	/** Per tick, how fast an animal species forgets what it has seen; remembered dread falls to nothing in minutes. */
+	private static final float DREAD_FADE = 0.00002F;
+	private static final DustParticleOptions FLY = new DustParticleOptions(0x16130F, 0.3F);
 
 	/** Per-animal memory: how it has been treated and how scared it is. */
 	private static final class State {
@@ -55,6 +64,9 @@ public final class Suffering {
 		int thrashTicks;
 		int nextWhimper;
 		int nextBellow;
+		int nextCall;
+		/** One more hit would finish it: the last health is draining and it is already on its way down. */
+		boolean dying;
 	}
 
 	/** Something terrible happened here: makes nearby animals of the same kind panic for a while. */
@@ -66,6 +78,8 @@ public final class Suffering {
 	private final Int2ObjectOpenHashMap<Corpse> corpses = new Int2ObjectOpenHashMap<>();
 	private final Int2ObjectOpenHashMap<SufferPose> poses = new Int2ObjectOpenHashMap<>();
 	private final List<Terror> terror = new ArrayList<>();
+	/** What each species has seen in this world: raised by every killing, fading slowly. */
+	private final Object2FloatOpenHashMap<EntityType<?>> dread = new Object2FloatOpenHashMap<>();
 	private final RandomSource random = RandomSource.create();
 	private List<String> cachedAnimalSource;
 	private final Set<Identifier> animals = new HashSet<>();
@@ -136,8 +150,9 @@ public final class Suffering {
 	 * Called for every hit on a suffering animal.
 	 *
 	 * @param bareHanded the attacker hit with an empty hand (beating an animal to death makes for the worst death)
+	 * @param strike unit vector from the attacker towards the victim, or null if unknown; the body is thrown along it
 	 */
-	public void onHurt(ClientLevel level, LivingEntity entity, float damage, boolean lethal, boolean bareHanded) {
+	public void onHurt(ClientLevel level, LivingEntity entity, float damage, boolean lethal, boolean bareHanded, @Nullable Vec3 strike) {
 		State state = state(entity);
 		state.hits++;
 		if (bareHanded) {
@@ -150,9 +165,12 @@ public final class Suffering {
 
 		state.thrashTicks = 14;
 		terror.add(new Terror(entity.position(), entity.getType(), lethal ? 3.0F : 1.0F, tick));
+		dread.put(entity.getType(), Math.min(1.0F, dread.getFloat(entity.getType()) + (lethal ? 0.1F : 0.01F)));
 
 		boolean headless = (GoreSystems.dismemberment().missingMask(entity.getId()) & BodyPart.HEAD.bit()) != 0;
 		if (!lethal) {
+			// The second-to-last blow: from here on it staggers and bleeds its way down.
+			state.dying = entity.getHealth() <= Math.max(damage, entity.getMaxHealth() * 0.25F);
 			if (!headless) {
 				screams.pain(follow(entity), state.voice, intensity(), state.fear);
 			}
@@ -160,15 +178,17 @@ public final class Suffering {
 			return;
 		}
 
-		startDeath(entity, state, damage, headless);
+		startDeath(entity, state, damage, headless, strike);
 	}
 
-	private void startDeath(LivingEntity entity, State state, float lastBlow, boolean headless) {
+	private void startDeath(LivingEntity entity, State state, float lastBlow, boolean headless, @Nullable Vec3 strike) {
 		if (corpses.containsKey(entity.getId())) {
 			return;
 		}
 
 		float intensity = intensity();
+		Personality self = state.voice.self();
+		boolean personal = GoreConfig.get().personality;
 		int ordeal = tick - state.firstHitTick;
 		float blowShare = lastBlow / Math.max(1.0F, entity.getMaxHealth());
 		Corpse.Kind kind;
@@ -178,8 +198,19 @@ public final class Suffering {
 			kind = Corpse.Kind.BRUTAL;
 		} else if (state.hits <= 1 && blowShare >= 0.6F) {
 			kind = Corpse.Kind.QUICK;
+		} else if (personal && self.frantic() > 0.68F) {
+			kind = Corpse.Kind.BOLT;
+		} else if (personal && self.frantic() < 0.32F) {
+			kind = Corpse.Kind.COLLAPSE;
+		} else if (personal && state.hits >= 3) {
+			kind = Corpse.Kind.CURL;
 		} else {
 			kind = Corpse.Kind.NORMAL;
+		}
+
+		if (state.dying && (kind == Corpse.Kind.QUICK || kind == Corpse.Kind.NORMAL)) {
+			// It was already on its way down: the legs give out instead of an instant fall.
+			kind = Corpse.Kind.COLLAPSE;
 		}
 
 		int run = 0;
@@ -188,22 +219,45 @@ public final class Suffering {
 			case QUICK -> throes = 30 + random.nextInt(20);
 			case NORMAL -> throes = 80 + random.nextInt(40);
 			case BRUTAL -> throes = Math.min(360, 140 + 25 * state.hits + 40 * state.beatenHits + ordeal / 4);
+			case BOLT -> {
+				run = Math.max(8, Math.round((16 + random.nextInt(20) + 14 * self.frantic()) * intensity));
+				throes = 70 + random.nextInt(40);
+			}
+			case COLLAPSE -> {
+				run = Math.max(10, Math.round((36 + random.nextInt(30)) * intensity));
+				throes = 70 + random.nextInt(30);
+			}
+			case CURL -> {
+				run = Math.max(10, Math.round((40 + random.nextInt(20)) * intensity));
+				throes = 90 + random.nextInt(40);
+			}
 			default -> {
 				run = Math.min(140, Math.round((40 + random.nextInt(50)) * intensity));
 				throes = 40;
 			}
 		}
 
-		throes = Math.max(20, Math.round(throes * intensity));
-		Corpse corpse = new Corpse(entity, kind, state.voice, run, throes, 60, random.nextFloat() * 100.0F);
+		throes = Math.max(20, Math.round(throes * intensity * self.endurance()));
+		int linger = GoreConfig.get().corpseLingerSeconds * 20;
+		Corpse corpse = new Corpse(entity, kind, state.voice, run, throes, linger, random.nextFloat() * 100.0F);
 		corpses.put(entity.getId(), corpse);
 		evictOldCorpses();
+
+		// The killing blow throws the body the way it was struck, harder the bigger the share of its health.
+		int launch = GoreConfig.get().deathLaunchPercent;
+		if (launch > 0 && strike != null) {
+			float share = Math.min(1.0F, lastBlow / Math.max(1.0F, entity.getMaxHealth()));
+			corpse.body.launch(strike, (0.1 + 0.3 * share) * launch / 100.0);
+		}
 
 		float length = switch (kind) {
 			case QUICK -> 0.0F;
 			case NORMAL -> 0.4F;
 			case BRUTAL -> 1.0F;
 			case HEADLESS_RUN -> -1.0F;
+			case BOLT -> 0.7F;
+			case COLLAPSE -> 0.1F;
+			case CURL -> 0.2F;
 		};
 		if (length >= 0.0F) {
 			screams.death(follow(entity), state.voice, intensity, length);
@@ -229,6 +283,7 @@ public final class Suffering {
 		tick++;
 		screams.tick();
 		terror.removeIf(t -> tick - t.tick() > TERROR_MEMORY);
+		dread.replaceAll((type, value) -> Math.max(0.0F, value - DREAD_FADE));
 		poses.clear();
 
 		Entity camera = Minecraft.getInstance().getCameraEntity();
@@ -261,23 +316,39 @@ public final class Suffering {
 		int mask = GoreSystems.dismemberment().missingMask(entity.getId());
 		boolean headless = (mask & BodyPart.HEAD.bit()) != 0;
 		boolean wounded = entity.getHealth() < entity.getMaxHealth() * 0.3F;
+		boolean ecology = config.ecology;
 		float panic = config.herdPanic ? terrorAround(entity) : 0.0F;
+		float memory = ecology ? dread.getFloat(entity.getType()) : 0.0F;
+		Corpse near = ecology && !corpses.isEmpty() ? nearestCorpse(entity) : null;
 
 		State state = states.get(entity.getId());
-		if (state == null && !wounded && mask == 0 && panic < 0.01F) {
+		if (state == null && !wounded && mask == 0 && panic < 0.01F && memory < 0.12F && near == null) {
 			return;
 		}
 
 		state = state(entity);
-		float target = Math.max(panic, wounded ? 0.7F : 0.0F);
-		state.fear += (target - state.fear) * 0.05F;
+		Personality self = state.voice.self();
+		boolean predator = ecology && self.role() == Personality.Role.PREDATOR;
+		boolean kin = near != null && near.entity.getType() == entity.getType() && near.entity.isBaby() != entity.isBaby();
+
+		// Predators are drawn to a kill, not frightened by it; a mother whose young lies dead is beside herself.
+		float target = predator ? 0.0F : Math.max(panic, memory * 0.55F);
+		if (kin && !entity.isBaby()) {
+			target = Math.max(target, 0.8F);
+		}
+
+		if (wounded) {
+			target = Math.max(target, 0.7F);
+		}
+
+		state.fear += (target - state.fear) * Math.min(0.5F, 0.05F * self.panic() * (1.0F + memory));
 		if (state.thrashTicks > 0) {
 			state.thrashTicks--;
 		}
 
 		// Pose: shaking from fear and pain, head thrown around after a hit, legs kicking.
 		float thrash = state.thrashTicks / 14.0F + state.fear * 0.25F + (headless ? 0.5F : 0.0F);
-		float tremble = Math.min(1.0F, state.fear * 0.6F + (wounded ? 0.5F : 0.0F) + (headless ? 1.0F : 0.0F)) * Math.min(1.5F, intensity);
+		float tremble = Math.min(1.0F, (state.fear * 0.6F + (wounded ? 0.5F : 0.0F) + (headless ? 1.0F : 0.0F)) * self.shake()) * Math.min(1.5F, intensity);
 		float kick = Math.min(1.0F, state.thrashTicks / 14.0F * 0.7F + (headless ? 0.5F : 0.0F));
 
 		// Missing legs: the body sags and tips towards the missing side and staggers as it moves.
@@ -291,7 +362,46 @@ public final class Suffering {
 		float drop = Math.min(0.3F, legsMissing * 0.1F);
 		float stagger = legsMissing > 0 ? 6.0F : (wounded ? 2.0F : 0.0F);
 
-		SufferPose pose = new SufferPose(tremble, Math.min(1.0F, thrash), kick, 0.9F, tiltX, tiltZ, drop, stagger);
+		// Dying: the nearer to death, the more it sags, staggers and shakes, and the more it bleeds as it goes.
+		float dyingness = wounded ? Mth.clamp(1.0F - entity.getHealth() / (entity.getMaxHealth() * 0.3F), 0.0F, 1.0F) : 0.0F;
+		if (state.dying) {
+			dyingness = Math.max(dyingness, 0.7F);
+		}
+
+		if (dyingness > 0.0F) {
+			drop += 0.14F * dyingness;
+			tiltX += 8.0F * dyingness;
+			stagger = Math.max(stagger, 2.0F + 6.0F * dyingness);
+			tremble = Math.min(1.0F, tremble + 0.4F * dyingness);
+			if (dyingness > 0.4F && tick % 6 == 0 && config.goreLevel.enabled() && !headless) {
+				BloodEmitter.drip(GoreSystems.blood(), new Vec3(entity.getX(), entity.getY() + 0.3, entity.getZ()), EntityFilter.bloodColor(entity), 0.02F);
+			}
+		}
+
+		// Where it looks: survivors cower with their heads down and stand over the body; a predator lifts its head
+		// and turns towards the blood.
+		float headDip = 0.0F;
+		float lookYaw = 0.0F;
+		if (predator) {
+			Vec3 smell = near == null ? nearestTerror(entity) : null;
+			if (near != null || smell != null) {
+				lookYaw = near != null ? lookToward(entity, near.body.x, near.body.z) : lookToward(entity, smell.x, smell.z);
+				headDip = -0.3F;
+				tiltX += 4.0F;
+				drop += 0.04F;
+			}
+		} else if (ecology) {
+			headDip = 0.5F * state.fear;
+			tiltX -= 4.0F * state.fear;
+			if (near != null && near.groundTicks() > 20) {
+				double dist = Math.sqrt(entity.distanceToSqr(near.body.x, near.body.y, near.body.z));
+				lookYaw = lookToward(entity, near.body.x, near.body.z);
+				headDip = Math.max(headDip, 0.6F * (float) (1.0 - dist / MOURN_RADIUS));
+				tremble = Math.max(tremble, 0.15F * self.shake());
+			}
+		}
+
+		SufferPose pose = new SufferPose(tremble, Math.min(1.0F, thrash), kick, 0.9F, tiltX, tiltZ, drop, stagger, headDip, lookYaw);
 		if (!pose.isIdle()) {
 			poses.put(entity.getId(), pose);
 		}
@@ -305,15 +415,57 @@ public final class Suffering {
 			return;
 		}
 
-		if (wounded && tick >= state.nextWhimper) {
+		if ((wounded || state.dying) && tick >= state.nextWhimper) {
 			screams.whimper(follow(entity), state.voice);
 			state.nextWhimper = tick + Math.round((40 + random.nextInt(60)) / intensity);
 		}
 
-		if (state.fear > 0.25F && config.herdPanic && tick >= state.nextBellow) {
-			screams.bellow(follow(entity), state.voice, state.fear);
-			state.nextBellow = tick + Math.round((60 + random.nextInt(120)) / (state.fear * intensity));
+		if (kin && near.groundTicks() > 20 && tick >= state.nextCall) {
+			screams.call(follow(entity), state.voice, entity.isBaby(), state.fear);
+			state.nextCall = tick + 50 + random.nextInt(50);
 		}
+
+		if (state.fear > 0.25F && config.herdPanic && !predator && tick >= state.nextBellow) {
+			screams.bellow(follow(entity), state.voice, state.fear);
+			float herd = self.role() == Personality.Role.HERD ? 0.7F : 1.0F;
+			state.nextBellow = tick + Math.round(herd * (60 + random.nextInt(120)) / (state.fear * intensity));
+		}
+	}
+
+	/** The nearest body of a dead animal that has finished falling, within {@link #MOURN_RADIUS}, or null. */
+	private @Nullable Corpse nearestCorpse(LivingEntity entity) {
+		Corpse best = null;
+		double bestDist = MOURN_RADIUS * MOURN_RADIUS;
+		for (Corpse corpse : corpses.values()) {
+			double dist = entity.distanceToSqr(corpse.body.x, corpse.body.y, corpse.body.z);
+			if (corpse.entity != entity && corpse.groundTicks() >= 0 && dist < bestDist) {
+				bestDist = dist;
+				best = corpse;
+			}
+		}
+
+		return best;
+	}
+
+	/** Where the nearest recent slaughter happened, or null if none is close. */
+	private @Nullable Vec3 nearestTerror(LivingEntity entity) {
+		Vec3 best = null;
+		double bestDist = SCENT_RADIUS * SCENT_RADIUS;
+		for (Terror t : terror) {
+			double dist = t.pos().distanceToSqr(entity.position());
+			if (dist < bestDist) {
+				bestDist = dist;
+				best = t.pos();
+			}
+		}
+
+		return best;
+	}
+
+	/** Head yaw offset in radians that turns an animal's head from its body heading to a point, within what a neck allows. */
+	private static float lookToward(LivingEntity entity, double x, double z) {
+		float wanted = (float) (Mth.atan2(entity.getX() - x, z - entity.getZ()) * Mth.RAD_TO_DEG);
+		return Mth.clamp(Mth.wrapDegrees(wanted - entity.yBodyRot) * Mth.DEG_TO_RAD, -1.1F, 1.1F);
 	}
 
 	/** Fear from recent slaughter nearby: same species counts fully, other animals half. */
@@ -340,6 +492,7 @@ public final class Suffering {
 		GoreConfig config = GoreConfig.get();
 		boolean gore = config.goreLevel.enabled();
 		int color = EntityFilter.bloodColor(entity);
+		Personality self = c.self();
 
 		// The collision box follows the body, not the entity: until the server removes it, the entity still sits
 		// wherever the server last put it.
@@ -347,7 +500,7 @@ public final class Suffering {
 		boolean running = c.running();
 		body.move(level, box, running ? steer(level, c, box) : 0.0);
 
-		if (!running && !c.toppled) {
+		if (c.age >= c.collapseAt && !c.toppled) {
 			c.toppled = true;
 			topple(c);
 		}
@@ -367,34 +520,89 @@ public final class Suffering {
 		c.walkPos += c.walkSpeed;
 
 		float tremble = 0.0F;
+		float thrash = 0.0F;
+		float kick = 0.0F;
+		boolean curl = c.kind == Corpse.Kind.CURL;
+		// How far the legs have given out. The posture is kept through the first moments of the fall and fades as
+		// the body rolls onto its side, so there is no pop when the buckling ends.
+		float buckle = 0.0F;
+		if (c.kind == Corpse.Kind.COLLAPSE || curl) {
+			buckle = c.buckling() ? c.prefall() : Math.max(0.0F, Mth.cos(body.roll));
+		}
+
 		int ground = c.groundTicks();
 		if (running) {
 			float pressure = 1.0F - c.age / (float) Math.max(1, c.runTicks);
-			if (gore && c.age % 4 == 0) {
-				BloodEmitter.burst(GoreSystems.blood(), level, neck(c), color, 0.05F * pressure + 0.01F, 4);
+			if (c.kind == Corpse.Kind.HEADLESS_RUN) {
+				if (gore && c.age % 4 == 0) {
+					BloodEmitter.burst(GoreSystems.blood(), level, neck(c), color, 0.05F * pressure + 0.01F, 4);
+				}
+			} else {
+				// A bolting animal screams as it goes and leaves a trail.
+				if (gore && c.age % 5 == 0) {
+					BloodEmitter.drip(GoreSystems.blood(), centre(c), color, 0.02F);
+				}
+
+				if (c.age % 9 == 3) {
+					screams.pain(follow(entity), c.voice, 0.0F, 1.0F);
+				}
+
+				thrash = 0.5F;
 			}
 
 			tremble = 0.4F;
+		} else if (c.buckling()) {
+			// Legs going out from under it. A collapsing animal breathes hard; a curled one whimpers over the wound.
+			tremble = (curl ? 0.6F + 0.3F * buckle : 0.5F);
+			kick = 0.3F * buckle;
+			if (curl && c.age % 18 == 4) {
+				screams.whimper(follow(entity), c.voice);
+			} else if (!curl && c.age % 14 == 5) {
+				screams.breath(follow(entity), c.voice, buckle);
+			}
+
+			if (gore && c.age % (curl ? 6 : 8) == 0) {
+				BloodEmitter.drip(GoreSystems.blood(), centre(c), color, 0.02F);
+			}
 		} else if (ground >= 0) {
 			// Agonal throes: sudden convulsions that get rarer as life runs out, flinging the joints and body.
 			float life = 1.0F - Math.min(1.0F, ground / (float) c.throeTicks);
 			float envelope = (float) Math.exp(-ground / Math.max(1.0, c.throeTicks / 3.0));
-			if (life > 0.0F && random.nextFloat() < 0.07F * life) {
+			float spasmRate = 0.07F * (0.4F + 1.2F * self.frantic()) * (c.kind == Corpse.Kind.COLLAPSE ? 0.5F : 1.0F);
+			if (life > 0.0F && random.nextFloat() < spasmRate * life) {
 				body.spasm(random, 0.5F + random.nextFloat() * 0.5F);
 			}
 
-			tremble = life <= 0.0F ? 0.0F : envelope * 0.8F;
-			if (life > 0.0F && c.kind != Corpse.Kind.HEADLESS_RUN && c.kind != Corpse.Kind.QUICK && random.nextFloat() < 0.045F * envelope + 0.01F * life) {
+			tremble = life <= 0.0F ? 0.0F : Math.min(1.0F, envelope * 0.8F * self.shake());
+			boolean voiced = c.kind != Corpse.Kind.HEADLESS_RUN && c.kind != Corpse.Kind.QUICK;
+			boolean breathes = voiced && (c.kind != Corpse.Kind.BRUTAL || ground > c.throeTicks / 2);
+			if (life > 0.0F && voiced && c.kind != Corpse.Kind.COLLAPSE && random.nextFloat() < 0.045F * envelope + 0.01F * life) {
 				screams.gurgle(follow(entity), c.voice, envelope);
+			}
+
+			// Breaths get further apart, then there is one last long one.
+			if (breathes && ground >= c.nextBreath && ground < c.throeTicks + c.stillTicks / 2) {
+				screams.breath(follow(entity), c.voice, envelope);
+				c.nextBreath = ground + Math.round(16.0F + 8.0F * self.endurance() + ground * 0.08F);
+			}
+
+			if (voiced && !c.lastBreathTaken && ground >= c.throeTicks) {
+				c.lastBreathTaken = true;
+				screams.lastBreath(follow(entity), c.voice);
 			}
 
 			if (gore && c.kind == Corpse.Kind.HEADLESS_RUN && life > 0.0F && c.age % 7 == 0) {
 				BloodEmitter.drip(GoreSystems.blood(), neck(c), color, 0.01F);
 			}
+
+			if (config.ecology && ground > c.throeTicks) {
+				attractFlies(level, c, ground - c.throeTicks);
+			}
 		}
 
 		body.stepJoints();
-		c.pose = new SufferPose(tremble, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F);
+		c.pose = new SufferPose(tremble, thrash, kick, 0.6F, (curl ? 26.0F : 6.0F) * buckle, 0.0F,
+				entity.getBbHeight() * (curl ? 0.12F : 0.25F) * buckle * (curl ? 1.0F : buckle), curl ? 0.0F : 3.0F * buckle, 0.0F, 0.0F);
 		if (c.unloaded) {
 			// Keep the entity (culling, shadow, bounding box) with the body; no offset is then needed to draw it.
 			entity.xo = body.px;
@@ -403,6 +611,39 @@ public final class Suffering {
 			entity.setPos(body.x, body.y, body.z);
 			entity.setOnGround(body.onGround);
 		}
+	}
+
+	/**
+	 * Flies gather over a body that has finished dying and keep coming the longer it lies there, and the more bodies
+	 * lie near it. The drone is the scavengers' cue.
+	 */
+	private void attractFlies(ClientLevel level, Corpse c, int restTicks) {
+		int neighbours = 0;
+		for (Corpse other : corpses.values()) {
+			if (other != c && other.groundTicks() >= 0 && other.body.distanceToSqr(c.body) < 36.0) {
+				neighbours++;
+			}
+		}
+
+		float density = Mth.clamp(0.1F + restTicks / 20.0F * 0.02F + neighbours * 0.1F, 0.0F, 1.0F);
+		Vec3 middle = centre(c);
+		if (random.nextFloat() < density * 0.5F) {
+			double angle = random.nextDouble() * Mth.TWO_PI;
+			double radius = 0.3 + random.nextDouble() * 0.5;
+			level.addParticle(FLY, middle.x + Math.cos(angle) * radius, middle.y + random.nextDouble() * 0.5, middle.z + Math.sin(angle) * radius,
+					-Math.sin(angle) * 0.15, 0.0, Math.cos(angle) * 0.15);
+		}
+
+		if (c.age >= c.nextFly) {
+			screams.flies(() -> middle, density);
+			c.nextFly = c.age + 50 + random.nextInt(30);
+		}
+	}
+
+	/** The middle of a ragdolled body: at half height when upright, near the ground once it lies on its side. */
+	private static Vec3 centre(Corpse c) {
+		Ragdoll b = c.body;
+		return new Vec3(b.x, b.y + c.entity.getBbHeight() * (0.15 + 0.4 * Mth.cos(b.roll)), b.z);
 	}
 
 	/** Starts the fall: the push comes from the body's own momentum, so a hit knocks it over away from the blow. */
@@ -445,7 +686,7 @@ public final class Suffering {
 
 		body.yawV += (wanted - body.yawV) * 0.2F;
 		body.yaw += body.yawV;
-		return (0.15 + 0.03 * Math.sin(c.age * 0.4)) * Math.min(1.0, c.age / 6.0);
+		return ((c.kind == Corpse.Kind.BOLT ? 0.22 : 0.15) + 0.03 * Math.sin(c.age * 0.4)) * Math.min(1.0, c.age / 6.0);
 	}
 
 	/** Severed heads twitch (rendered by GoreRenderer) and let out a few weak moans. */
@@ -529,5 +770,6 @@ public final class Suffering {
 		states.clear();
 		poses.clear();
 		terror.clear();
+		dread.clear();
 	}
 }

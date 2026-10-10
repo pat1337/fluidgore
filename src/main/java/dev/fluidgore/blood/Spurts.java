@@ -63,8 +63,66 @@ public final class Spurts {
 		spurts.add(new Spurt(wound, dir, rgb, life, strength, 6 + random.nextInt(5)));
 	}
 
+	/** Blood running off a body: slow drops that form on the wound and below it, then fall with gravity. */
+	private static final class Ooze {
+		final Supplier<Vec3> top;
+		final Supplier<Vec3> bottom;
+		final double width;
+		final int rgb;
+		final int life;
+		final float strength;
+		int age;
+
+		Ooze(Supplier<Vec3> top, Supplier<Vec3> bottom, double width, int rgb, int life, float strength) {
+			this.top = top;
+			this.bottom = bottom;
+			this.width = width;
+			this.rgb = rgb;
+			this.life = life;
+			this.strength = strength;
+		}
+	}
+
+	private static final int MAX_OOZE = 24;
+	private final List<Ooze> oozes = new ArrayList<>();
+
+	/**
+	 * Starts blood running down a body, from the wound at {@code top} to the feet at {@code bottom}. Drops
+	 * form anywhere along that line and fall off the limbs, so a wounded animal leaves a trail.
+	 */
+	public void ooze(Supplier<Vec3> top, Supplier<Vec3> bottom, double width, int rgb, int life, float strength) {
+		if (oozes.size() >= MAX_OOZE) {
+			oozes.removeFirst();
+		}
+
+		oozes.add(new Ooze(top, bottom, width, rgb, life, strength));
+	}
+
 	void tick() {
 		spurts.removeIf(this::step);
+		oozes.removeIf(this::stepOoze);
+	}
+
+	private boolean stepOoze(Ooze o) {
+		if (++o.age > o.life) {
+			return true;
+		}
+
+		float fade = 1.0F - o.age / (float) o.life;
+		if (random.nextFloat() < 0.55F * o.strength * fade && world.droplets().hasRoom()) {
+			Vec3 top = o.top.get();
+			Vec3 bottom = o.bottom.get();
+			double t = random.nextDouble();
+			float size = 0.02F + random.nextFloat() * 0.025F;
+			world.droplets().spawn(
+					top.x + (bottom.x - top.x) * t + random.nextGaussian() * o.width,
+					top.y + (bottom.y - top.y) * t,
+					top.z + (bottom.z - top.z) * t + random.nextGaussian() * o.width,
+					random.nextGaussian() * 0.006, -0.01, random.nextGaussian() * 0.006,
+					0.004F + size * 0.2F, world.vary(o.rgb, 0.15F), size);
+		}
+
+		return false;
 	}
 
 	/** Returns true when the spurt is finished. */
@@ -102,5 +160,6 @@ public final class Spurts {
 
 	void clear() {
 		spurts.clear();
+		oozes.clear();
 	}
 }

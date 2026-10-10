@@ -70,6 +70,9 @@ public abstract class LivingEntityRendererMixin {
 	private void fluidgore$suffer(LivingEntityRenderState state, PoseStack poseStack, float bodyRot, float entityScale, CallbackInfo ci) {
 		BodyPose body = state.getData(BodyPose.KEY);
 		if (body != null) {
+			// The lean pivots on the feet, so a body lying on its side would sink half its width into the floor.
+			// Lift it by the half-width it swings below the pivot (pose scale is already applied here).
+			poseStack.translate(0.0F, state.boundingBoxWidth * 0.5F / entityScale * Mth.abs(Mth.sin(body.roll())), 0.0F);
 			poseStack.rotateDegrees(Axis.ZP, body.roll() * Mth.RAD_TO_DEG);
 		}
 

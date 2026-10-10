@@ -14,12 +14,16 @@ import net.fabricmc.fabric.api.client.rendering.v1.RenderStateDataKey;
  * @param tiltZ   sideways body tilt in degrees
  * @param drop    how far the body sags towards the ground, in blocks
  * @param stagger amplitude of a drunken side-to-side wobble in degrees
+ * @param headDip head pitch offset in radians: positive lowers the head (cowering, mourning), negative lifts it (alert)
+ * @param lookYaw head turn offset in radians, to face a body or a smell of blood
  */
-public record SufferPose(float tremble, float thrash, float kick, float kickRate, float tiltX, float tiltZ, float drop, float stagger) {
+public record SufferPose(float tremble, float thrash, float kick, float kickRate, float tiltX, float tiltZ, float drop, float stagger,
+		float headDip, float lookYaw) {
 	public static final RenderStateDataKey<SufferPose> KEY = RenderStateDataKey.create(() -> "fluidgore:suffer_pose");
 
 	public boolean isIdle() {
-		return tremble < 0.01F && thrash < 0.01F && kick < 0.01F && tiltX == 0.0F && tiltZ == 0.0F && drop == 0.0F && stagger == 0.0F;
+		return tremble < 0.01F && thrash < 0.01F && kick < 0.01F && tiltX == 0.0F && tiltZ == 0.0F && drop == 0.0F && stagger == 0.0F
+				&& headDip == 0.0F && lookYaw == 0.0F;
 	}
 
 	/** Smooth pseudo-random signal in about [-1, 1]; a sum of incommensurate sines. */

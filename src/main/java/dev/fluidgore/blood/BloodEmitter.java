@@ -51,6 +51,11 @@ public final class BloodEmitter {
 			return;
 		}
 
+		if (EntityFilter.isBone(entity)) {
+			BoneEmitter.hit(level, entity, damage, lethal, away);
+			return;
+		}
+
 		damage = Mth.clamp(damage, 0.5F, 40.0F);
 		BloodColor type = EntityFilter.bloodType(entity);
 		int rgb = type.rgb;
@@ -67,7 +72,14 @@ public final class BloodEmitter {
 		Vec3 origin = new Vec3(entity.getX() + ox, entity.getY() + oy, entity.getZ() + oz);
 
 		spray(world, origin, away, count, volume * 0.7F, rgb, entity.getBbWidth() * 0.4, 0.12, 0.32 + 0.1 * (severity - 1.0));
-		redstoneDust(world, level, origin, rgb, Math.min(80, Math.round(count * 1.5F)), entity.getBbWidth() * 0.5);
+		// Only a light mist at the wound; the blood itself is the falling droplets and the trickle below.
+		redstoneDust(world, level, origin, rgb, Math.min(12, Math.round(count * 0.25F)), entity.getBbWidth() * 0.3);
+
+		int trickle = Math.round((50 + RANDOM.nextInt(60)) * preset.duration * Math.min(2.0F, severity));
+		double width = entity.getBbWidth() * 0.25;
+		world.spurts().ooze(() -> new Vec3(entity.getX() + ox, entity.getY() + oy, entity.getZ() + oz),
+				() -> new Vec3(entity.getX() + ox, entity.getY() + 0.1, entity.getZ() + oz), width, rgb, trickle,
+				Mth.clamp(0.5F + damage * 0.1F, 0.5F, 1.5F));
 
 		if (lethal) {
 			double surface = SurfaceProbe.surfaceBelow(level, entity.getX(), entity.getY() + 0.3, entity.getY() - 1.5, entity.getZ());
@@ -103,8 +115,13 @@ public final class BloodEmitter {
 		GoreConfig config = GoreConfig.get();
 		GoreLevel preset = config.goreLevel;
 		Vec3 at = part.get();
+		if (rgb == BoneEmitter.BONE) {
+			BoneEmitter.sever(level, at);
+			return;
+		}
+
 		spray(world, at, null, Math.round(18 * preset.particles), 0.25F * preset.puddles, rgb, 0.1, 0.08, 0.35);
-		redstoneDust(world, level, at, rgb, Math.round(30 * preset.particles), 0.15);
+		redstoneDust(world, level, at, rgb, Math.round(6 * preset.particles), 0.1);
 		if (config.goreChunks) {
 			chunks(level, at, EntityFilter.bloodType(entity), meatOf(entity), Math.round(12 * preset.particles));
 		}
@@ -124,12 +141,28 @@ public final class BloodEmitter {
 	public static void burst(BloodWorld world, ClientLevel level, Vec3 origin, int rgb, float volume, int count) {
 		GoreLevel preset = GoreConfig.get().goreLevel;
 		int scaled = Math.round(count * preset.particles);
+		if (rgb == BoneEmitter.BONE) {
+			BoneEmitter.burst(level, origin, null, scaled, scaled * 2, 0.15);
+			return;
+		}
+
 		spray(world, origin, null, scaled, volume * preset.puddles, rgb, 0.1, 0.08, 0.3);
-		redstoneDust(world, level, origin, rgb, Math.min(40, scaled), 0.15);
+		redstoneDust(world, level, origin, rgb, Math.min(6, scaled / 3), 0.1);
+	}
+
+	/** A weapon biting into a body that is already down: a wet crunch. */
+	public static void slash(ClientLevel level, Vec3 at, float volume) {
+		if (GoreConfig.get().goreSounds) {
+			crunch(level, at, volume);
+		}
 	}
 
 	/** A slow trickle, used for stumps and moving severed parts. */
 	public static void drip(BloodWorld world, Vec3 origin, int rgb, float volume) {
+		if (rgb == BoneEmitter.BONE) {
+			return;
+		}
+
 		world.droplets().spawn(origin.x + (RANDOM.nextDouble() - 0.5) * 0.1, origin.y, origin.z + (RANDOM.nextDouble() - 0.5) * 0.1,
 				(RANDOM.nextDouble() - 0.5) * 0.04, -0.02, (RANDOM.nextDouble() - 0.5) * 0.04, volume, world.vary(rgb, 0.12F), 0.03F);
 	}

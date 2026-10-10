@@ -70,8 +70,23 @@ public final class GoreConfig {
 	public int maxScreams = 8;
 	/** Nearby animals of the same kind panic when one is hurt or killed. */
 	public boolean herdPanic = true;
-	/** Severed parts can be punched, kicked, picked up, thrown and stomped. */
+/** Every animal has its own voice, nerve and way of dying, derived from its species and UUID. */
+public boolean personality = true;
+/**
+ * Animals remember killing for the session and react by role: prey cower, herds call, mothers search, predators
+ * take interest, and bodies draw flies. Pose, sound and particles only.
+ */
+public boolean ecology = true;
+/** How long a body stays on the ground after its death throes, in seconds. */
+public int corpseLingerSeconds = 45;
+/** Severed parts can be punched, kicked, picked up, thrown and stomped. */
 	public boolean playWithParts = true;
+	/** How hard the killing blow throws a body in the direction it was struck, in percent. 0 turns it off. */
+	public int deathLaunchPercent = 100;
+	/** Hold a cleaning item and use it on a surface to scrub blood off. */
+	public boolean cleaning = true;
+	/** Item ids that scrub blood away when used (sneak to use them normally). */
+	public List<String> cleaningItems = new ArrayList<>(List.of("minecraft:sponge", "minecraft:wet_sponge", "minecraft:brush"));
 	/** Entity ids that scream, panic and get death throes. */
 	public List<String> sufferingAnimals = new ArrayList<>(List.of(
 			"minecraft:cow",
@@ -86,16 +101,23 @@ public final class GoreConfig {
 			"minecraft:llama",
 			"minecraft:trader_llama",
 			"minecraft:camel",
-			"minecraft:rabbit"
+			"minecraft:rabbit",
+			"minecraft:wolf",
+			"minecraft:fox",
+			"minecraft:cat"
 	));
-	/** Entities that never bleed or lose parts (constructs, skeletons, decorations). */
-	public List<String> bloodlessEntities = new ArrayList<>(List.of(
-			"minecraft:armor_stand",
+	/** Entities made of bone: no blood; hits chip and crack them and severed bones shatter. Wins over bloodlessEntities. */
+	public List<String> boneEntities = new ArrayList<>(List.of(
 			"minecraft:skeleton",
 			"minecraft:stray",
 			"minecraft:wither_skeleton",
 			"minecraft:bogged",
-			"minecraft:skeleton_horse",
+			"minecraft:parched",
+			"minecraft:skeleton_horse"
+	));
+	/** Entities that never bleed or lose parts (constructs, decorations). */
+	public List<String> bloodlessEntities = new ArrayList<>(List.of(
+			"minecraft:armor_stand",
 			"minecraft:iron_golem",
 			"minecraft:snow_golem",
 			"minecraft:copper_golem",
@@ -157,8 +179,12 @@ public final class GoreConfig {
 		if (sufferingLevel == null) sufferingLevel = GoreLevel.MEDIUM;
 		screamVolume = clamp(screamVolume, 0, 200);
 		maxScreams = clamp(maxScreams, 1, 32);
+		corpseLingerSeconds = clamp(corpseLingerSeconds, 3, 600);
 		if (sufferingAnimals == null) sufferingAnimals = new ArrayList<>();
 		if (bladedItems == null) bladedItems = new ArrayList<>();
+		deathLaunchPercent = clamp(deathLaunchPercent, 0, 300);
+		if (cleaningItems == null) cleaningItems = new ArrayList<>();
+		if (boneEntities == null) boneEntities = new ArrayList<>();
 		if (bloodlessEntities == null) bloodlessEntities = new ArrayList<>();
 	}
 

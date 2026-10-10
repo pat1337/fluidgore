@@ -1,0 +1,126 @@
+package dev.fluidgore.suffer;
+
+import dev.fluidgore.GoreSystems;
+import dev.fluidgore.blood.BloodEmitter;
+import dev.fluidgore.blood.BloodWorld;
+import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.trigger.EntityFilter;
+import java.util.Collection;
+import java.util.Optional;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.Mth;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.item.component.SwingAnimation;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
+
+/**
+ * Hitting a body that is already down or still going through its death throes. The server no longer knows about
+ * these bodies, so nothing can hit them in the normal way; the attack click is caught here, aimed against the
+ * body's own box, and answered with blood, a shove into the ragdoll and, with a blade, a chance to cut a part off.
+ */
+public final class CorpseStrike {
+	private static final double REACH = 4.5;
+	private static final int COOLDOWN = 6;
+	private static final RandomSource RANDOM = RandomSource.create();
+
+	private static int lastStrike = -100;
+
+	private CorpseStrike() {
+	}
+
+	/** Attack key pressed. Returns true if it landed on a body (the vanilla attack is then skipped). */
+	public static boolean onAttack(Minecraft mc, LocalPlayer player, ClientLevel level, BloodWorld blood) {
+		GoreConfig config = GoreConfig.get();
+		Collection<Corpse> corpses = GoreSystems.suffering().corpses();
+		if (!config.goreLevel.enabled() || corpses.isEmpty()) {
+			return false;
+		}
+
+		Vec3 eye = player.getEyePosition();
+		Vec3 end = eye.add(player.getViewVector(1.0F).scale(REACH));
+		// Blocks in the way hide a body. The dying entity itself may still be what the crosshair is on; that is fine.
+		double limit = REACH * REACH;
+		HitResult hit = mc.hitResult;
+		if (hit != null && hit.getType() == HitResult.Type.BLOCK) {
+			limit = Math.min(limit, hit.getLocation().distanceToSqr(eye));
+		}
+
+		Corpse best = null;
+		Vec3 point = null;
+		for (Corpse corpse : corpses) {
+			Optional<Vec3> clip = box(corpse).clip(eye, end);
+			if (clip.isPresent() && clip.get().distanceToSqr(eye) < limit) {
+				limit = clip.get().distanceToSqr(eye);
+				best = corpse;
+				point = clip.get();
+			}
+		}
+
+		if (best == null) {
+			return false;
+		}
+
+		player.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
+		if (level.getGameTime() - lastStrike >= COOLDOWN) {
+			lastStrike = (int) level.getGameTime();
+			strike(level, blood, best, point, player.getViewVector(1.0F), EntityFilter.isBladed(player.getMainHandItem()));
+		}
+
+		return true;
+	}
+
+	/**
+	 * One blow on a body at {@code point} travelling along {@code look}: blood and a sound, a shove and a jolt through
+	 * the ragdoll, and with a blade a chance to take a part off.
+	 */
+	public static void strike(ClientLevel level, BloodWorld blood, Corpse corpse, Vec3 point, Vec3 look, boolean blade) {
+		LivingEntity entity = corpse.entity;
+		Ragdoll body = corpse.body;
+		int rgb = EntityFilter.bloodColor(entity);
+		BloodEmitter.burst(blood, level, point, rgb, blade ? 0.07F : 0.025F, blade ? 14 : 5);
+		BloodEmitter.slash(level, point, blade ? 0.9F : 0.5F);
+		level.playLocalSound(point.x, point.y, point.z, blade ? SoundEvents.PLAYER_ATTACK_SWEEP : SoundEvents.PLAYER_ATTACK_WEAK,
+				SoundSource.PLAYERS, 0.8F, 0.8F, false);
+
+		// The body takes the blow where it was struck: shoved along the swing, and rolled if hit off-centre.
+		double push = blade ? 0.1 : 0.14;
+		body.vx += look.x * push;
+		body.vz += look.z * push;
+		body.vy += 0.05;
+		float yawRad = body.yaw * Mth.DEG_TO_RAD;
+		double lateral = look.x * Mth.cos(yawRad) + look.z * Mth.sin(yawRad);
+		body.rollV += (float) Math.max(-0.1, Math.min(0.1, lateral * 0.08));
+		body.spasm(RANDOM, blade ? 0.7F : 0.5F);
+
+		if (blade && RANDOM.nextFloat() < 0.4F * GoreConfig.get().goreLevel.partChance + 0.15F) {
+			Vec3 away = new Vec3(look.x, 0.0, look.z);
+			GoreSystems.dismemberment().severOnBody(blood, level, entity, () -> new Vec3(body.x, body.y, body.z), body.yaw, body.roll,
+					away.lengthSqr() > 1.0E-6 ? away.normalize() : null);
+		}
+	}
+
+	/** The body's box: the entity's own while it is upright, lying flat once it has tipped over. */
+	private static AABB box(Corpse corpse) {
+		Ragdoll body = corpse.body;
+		LivingEntity entity = corpse.entity;
+		float lying = Math.abs(Mth.sin(body.roll));
+		double width = entity.getBbWidth();
+		double height = entity.getBbHeight();
+		double half = Mth.lerp(lying, width, Math.max(width, height)) * 0.5;
+		double top = Mth.lerp(lying, height, width);
+		return new AABB(body.x - half, body.y, body.z - half, body.x + half, body.y + top, body.z + half).inflate(0.1);
+	}
+
+	/** For tests: the point at the middle of a body. */
+	public static Vec3 centre(Corpse corpse) {
+		return box(corpse).getCenter();
+	}
+}

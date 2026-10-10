@@ -89,11 +89,11 @@ public abstract class ModelFeatureRendererMixin {
 	@Unique
 	private void fluidgore$animate(ModelPart[] parts, SufferPose pose, float t) {
 		ModelPart head = parts[BodyPart.HEAD.ordinal()];
-		if (head != null && (pose.thrash() > 0.01F || pose.tremble() > 0.01F)) {
+		if (head != null && (pose.thrash() > 0.01F || pose.tremble() > 0.01F || pose.headDip() != 0.0F || pose.lookYaw() != 0.0F)) {
 			fluidgore$save(head);
 			float shiver = pose.tremble() * 0.06F;
-			head.xRot += Mth.sin(t * 0.83F) * pose.thrash() * 0.6F + SufferPose.noise(t * 5.0F, 1.0F) * shiver;
-			head.yRot += Mth.sin(t * 1.37F + 1.0F) * pose.thrash() * 0.7F + SufferPose.noise(t * 5.5F, 2.0F) * shiver;
+			head.xRot += Mth.sin(t * 0.83F) * pose.thrash() * 0.6F + SufferPose.noise(t * 5.0F, 1.0F) * shiver + pose.headDip();
+			head.yRot += Mth.sin(t * 1.37F + 1.0F) * pose.thrash() * 0.7F + SufferPose.noise(t * 5.5F, 2.0F) * shiver + pose.lookYaw();
 			head.zRot += Mth.sin(t * 2.1F) * pose.thrash() * 0.3F;
 		}
 

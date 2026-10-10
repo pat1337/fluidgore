@@ -46,6 +46,10 @@ public final class GorePart {
 	public float squash = 1.0F;
 	/** Being carried by the player (see {@link PartInteraction}). */
 	public boolean held;
+	/** Blows taken by a bone part; it breaks apart on the second. */
+	public int hits;
+	/** Broke apart this tick; removed by the manager. */
+	public boolean shattered;
 	/** Ticks since the part last splatted on impact, to avoid a splat every tick while sliding. */
 	public int lastSplat = -100;
 
@@ -57,6 +61,11 @@ public final class GorePart {
 		this.scale = scale;
 		this.bloodRgb = bloodRgb;
 		this.lifetime = lifetime;
+	}
+
+	/** Made of bone: breaks instead of splattering. */
+	public boolean bone() {
+		return bloodRgb == dev.fluidgore.blood.BoneEmitter.BONE;
 	}
 
 	public float alpha() {

@@ -112,6 +112,38 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		context.waitTicks(60);
 		context.takeScreenshot(tag + "_04_after_pig");
 		System.out.println("[FluidGoreTest] " + tag + " after pig: " + stats(context));
+
+		// Bony bodies break instead of bleeding.
+		server.runCommand("summon minecraft:skeleton 0.5 -60 8.5 {NoAI:1b,Rotation:[180f,0f]}");
+		server.runCommand("summon minecraft:parched 2.5 -60 8.5 {NoAI:1b,Rotation:[180f,0f]}");
+		context.waitTicks(10);
+		boolean[] bone = context.computeOnClient(mc -> {
+			boolean bloodless = false;
+			boolean allBone = true;
+			int found = 0;
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e instanceof net.minecraft.world.entity.LivingEntity living && living.isAlive() && (net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).getPath().matches("skeleton|parched"))) {
+					found++;
+					bloodless |= dev.fluidgore.trigger.EntityFilter.isBloodless(living);
+					allBone &= dev.fluidgore.trigger.EntityFilter.bloodColor(living) == dev.fluidgore.blood.BoneEmitter.BONE;
+				}
+			}
+
+			return new boolean[]{found == 2, !bloodless, allBone};
+		});
+		check(bone[0] && bone[1] && bone[2], tag + ": skeleton and parched must count as bone (found/not bloodless/bone) " + java.util.Arrays.toString(bone));
+		int partsBefore = stats(context).parts;
+		for (int i = 0; i < 2; i++) {
+			server.runCommand("execute as @p run damage @e[type=minecraft:skeleton,limit=1,sort=nearest] 100 minecraft:player_attack by @s");
+			server.runCommand("execute as @p run damage @e[type=minecraft:parched,limit=1,sort=nearest] 100 minecraft:player_attack by @s");
+			context.waitTicks(3);
+		}
+
+		context.waitTicks(6);
+		context.takeScreenshot(tag + "_05_bones");
+		int boneParts = context.computeOnClient(mc -> (int) GoreSystems.dismemberment().parts().parts().stream().filter(dev.fluidgore.dismember.GorePart::bone).count());
+		System.out.println("[FluidGoreTest] " + tag + " bone parts: " + boneParts + " (parts before " + partsBefore + ")");
+		check(boneParts > 0, tag + ": killing skeletons produced no bone parts");
 	}
 
 	private static void fluid(ClientGameTestContext context, TestServerContext server) {
@@ -204,6 +236,21 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		check(herdFear > 0.2F, "herd did not panic");
 		check(screamsAfter - screamsBefore > 10, "too few scream sounds played");
 		context.takeScreenshot("cow_03_body_after_removal_and_panic");
+		server.runCommand("tp @a 0.5 -60 3.2 0 40");
+		context.waitTicks(5);
+		context.takeScreenshot("cow_03b_closeup");
+		boolean cleaned = context.computeOnClient(mc -> {
+			net.minecraft.world.phys.Vec3 spot = new net.minecraft.world.phys.Vec3(0.5, -60.0, 5.5);
+			for (int i = 0; i < 3; i++) {
+				GoreSystems.blood().clean(spot, net.minecraft.core.Direction.UP, 4.0F);
+			}
+
+			return !GoreSystems.blood().hasBloodNear(spot, 3.0F);
+		});
+		check(cleaned, "scrubbing did not remove the blood around the cows");
+		context.waitTicks(10);
+		context.takeScreenshot("cow_03c_cleaned");
+		server.runCommand("tp @a 0.5 -60 0.5 0 20");
 
 		// Sword kills until one is beheaded.
 		server.runCommand("item replace entity @a weapon.mainhand with minecraft:diamond_sword");
@@ -265,6 +312,105 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		check(thrown, "could not throw the held part");
 		context.waitTicks(30);
 		System.out.println("[FluidGoreTest] part play: punched=" + punched + " grabbed=" + grabbed + " thrown=" + thrown);
+
+		// The killing blow throws the body the way it was struck, and the body can then be slashed.
+		server.runCommand("tp @a 8.5 -60 0.5 0 0");
+		server.runCommand("summon minecraft:cow 8.5 -60 4.5 {NoAI:1b,Rotation:[0f,0f]}");
+		context.waitTicks(10);
+		int cowId = context.computeOnClient(mc -> {
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e instanceof net.minecraft.world.entity.animal.cow.Cow && Math.abs(e.getX() - 8.5) < 0.2 && Math.abs(e.getZ() - 4.5) < 0.2) {
+					return e.getId();
+				}
+			}
+
+			return -1;
+		});
+		check(cowId >= 0, "launch test cow not found");
+		server.runCommand("execute as @p run damage @e[type=minecraft:cow,x=8.5,y=-60,z=4.5,distance=..1,limit=1] 100 minecraft:player_attack by @s");
+		context.waitTicks(25);
+		double travelled = context.computeOnClient(mc -> {
+			var corpse = GoreSystems.suffering().corpse(cowId);
+			return corpse == null ? -99.0 : corpse.body.z(1.0F) - 4.5;
+		});
+		System.out.println("[FluidGoreTest] cow thrown along the blow: " + travelled + " blocks");
+		check(travelled > 0.6 && travelled < 7.0, "killing blow did not throw the body away from the attacker, moved " + travelled);
+		context.takeScreenshot("cow_07_launched");
+
+		boolean cut = context.computeOnClient(mc -> {
+			var corpse = GoreSystems.suffering().corpse(cowId);
+			if (corpse == null) {
+				return false;
+			}
+
+			for (int i = 0; i < 40 && GoreSystems.dismemberment().missingMask(cowId) == 0; i++) {
+				dev.fluidgore.suffer.CorpseStrike.strike(mc.level, GoreSystems.blood(), corpse, dev.fluidgore.suffer.CorpseStrike.centre(corpse), new net.minecraft.world.phys.Vec3(0.0, 0.0, 1.0), true);
+			}
+
+			return GoreSystems.dismemberment().missingMask(cowId) != 0;
+		});
+		context.waitTicks(10);
+		context.takeScreenshot("cow_08_slashed_body");
+		check(cut, "slashing a body with a blade never cut a part off");
+		context.runOnClient(mc -> GoreConfig.get().sufferingLevel = GoreLevel.MEDIUM);
+		individuality(context, server);
+	}
+
+	/**
+	 * Twelve animals (cows and pigs) are wounded three times and then killed the same way. They must have distinct
+	 * voices, must not all die the same way, and a living animal next to a fresh body must lower its head and face it.
+	 */
+	private static void individuality(ClientGameTestContext context, TestServerContext server) {
+		context.runOnClient(mc -> GoreConfig.get().sufferingLevel = GoreLevel.EXTREME);
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:stick");
+		server.runCommand("tp @a 0.5 -60 -1.5 180 12");
+		for (int i = 0; i < 12; i++) {
+			String type = i % 2 == 0 ? "cow" : "pig";
+			server.runCommand("summon minecraft:" + type + " " + (-5.5 + i) + " -60 -6.5 {NoAI:1b,Tags:[\"indiv\"],UUID:[I;7," + i + "," + (i * 31 + 5) + ",1013],Rotation:[0f,0f]}");
+		}
+
+		context.waitTicks(20);
+		int voices = context.computeOnClient(mc -> {
+			java.util.Set<Float> pitches = new java.util.HashSet<>();
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e instanceof net.minecraft.world.entity.LivingEntity living && (e.getUUID().getMostSignificantBits() >>> 32) == 7L) {
+					pitches.add(dev.fluidgore.suffer.Personality.of(living).pitch());
+				}
+			}
+
+			return pitches.size();
+		});
+		System.out.println("[FluidGoreTest] distinct voices among 12 animals: " + voices);
+		check(voices >= 10, "animals do not have individual voices");
+
+		java.util.Set<String> kinds = new java.util.TreeSet<>();
+		for (int i = 0; i < 12; i++) {
+			for (int hit = 0; hit < 3; hit++) {
+				server.runCommand("execute as @p run damage @e[tag=indiv,limit=1,sort=nearest] 2 minecraft:player_attack by @s");
+				context.waitTicks(12);
+			}
+
+			server.runCommand("execute as @p run damage @e[tag=indiv,limit=1,sort=nearest] 100 minecraft:player_attack by @s");
+			context.waitTicks(i < 6 ? 28 : 4);
+			if (i < 6) {
+				context.takeScreenshot("indiv_" + (i + 1));
+			}
+
+			kinds.addAll(context.computeOnClient(mc -> {
+				java.util.Set<String> now = new java.util.TreeSet<>();
+				for (var corpse : GoreSystems.suffering().corpses()) {
+					now.add(corpse.kind.name());
+				}
+
+				return now;
+			}));
+		}
+
+		System.out.println("[FluidGoreTest] death styles seen among 12 animals: " + kinds);
+		check(kinds.size() >= 2, "every animal died the same way: " + kinds);
+		check(kinds.stream().anyMatch(k -> k.equals("BOLT") || k.equals("COLLAPSE") || k.equals("CURL")), "no personality death style occurred: " + kinds);
+		context.waitTicks(120);
+		context.takeScreenshot("indiv_7_aftermath");
 		context.runOnClient(mc -> GoreConfig.get().sufferingLevel = GoreLevel.MEDIUM);
 	}
 

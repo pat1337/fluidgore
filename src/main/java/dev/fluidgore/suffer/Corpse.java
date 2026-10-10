@@ -14,11 +14,18 @@ import net.minecraft.world.entity.LivingEntity;
  *     into gurgles, and agonal kicking with sudden spasms that can go on for many seconds.</li>
  * <li>{@link Kind#HEADLESS_RUN}: beheaded. Spinal reflexes keep the body running blindly while the neck pumps
  *     blood, then it collapses and twitches. Silent: there is no head left to scream with.</li>
+ * <li>{@link Kind#BOLT}: a frantic animal that bolts, screaming and bleeding, until its legs give out.</li>
+ * <li>{@link Kind#COLLAPSE}: a stoic animal that does not run. Its legs buckle slowly, it goes down on its knees
+ *     and then onto its side, and breathes laboured breaths until the last one.</li>
+ * <li>{@link Kind#CURL}: gut-shot. It hunches over the wound, whimpering and shaking, and folds before it falls.</li>
  * </ul>
+ *
+ * <p>Which one an animal gets depends on how it was hit and on its {@link Personality}, so the same cow killed
+ * the same way twice still dies differently from the next cow.
  */
 public final class Corpse {
 	public enum Kind {
-		QUICK, NORMAL, BRUTAL, HEADLESS_RUN
+		QUICK, NORMAL, BRUTAL, HEADLESS_RUN, BOLT, COLLAPSE, CURL
 	}
 
 	/** Length of the vanilla tip-over animation in ticks. */
@@ -27,6 +34,7 @@ public final class Corpse {
 	public final LivingEntity entity;
 	public final Kind kind;
 	public final Voice voice;
+	/** Ticks before the body goes down: a headless run or a bolt, or the buckling of a collapse or a curl. */
 	public final int runTicks;
 	public final int throeTicks;
 	public final int stillTicks;
@@ -42,10 +50,14 @@ public final class Corpse {
 	/** Tick at which the body starts falling over (after the headless run, otherwise immediately). */
 	int collapseAt;
 	boolean toppled;
+	/** Next tick (on the ground) a laboured breath is due, and whether the last breath has been taken. */
+	int nextBreath;
+	boolean lastBreathTaken;
+	int nextFly;
 	/** Remaining ticks of a deliberate turn away from a wall, and its direction. */
 	int turnTicks;
 	float turnDir;
-	SufferPose pose = new SufferPose(0, 0, 0, 0, 0, 0, 0, 0);
+	SufferPose pose = new SufferPose(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
 	Corpse(LivingEntity entity, Kind kind, Voice voice, int runTicks, int throeTicks, int stillTicks, float seed) {
 		this.entity = entity;
@@ -56,11 +68,25 @@ public final class Corpse {
 		this.stillTicks = stillTicks;
 		this.seed = seed;
 		this.body = new Ragdoll(entity);
-		this.collapseAt = kind == Kind.HEADLESS_RUN ? runTicks : 0;
+		this.collapseAt = runTicks;
 	}
 
 	public boolean running() {
-		return kind == Kind.HEADLESS_RUN && age < runTicks;
+		return (kind == Kind.HEADLESS_RUN || kind == Kind.BOLT) && age < runTicks;
+	}
+
+	/** The legs are giving out but the body is still on its feet. */
+	public boolean buckling() {
+		return (kind == Kind.COLLAPSE || kind == Kind.CURL) && age < runTicks;
+	}
+
+	/** How far into the run or the buckling the body is, 0..1 (1 once it has gone down). */
+	public float prefall() {
+		return runTicks <= 0 ? 1.0F : Math.min(1.0F, age / (float) runTicks);
+	}
+
+	public Personality self() {
+		return voice.self();
 	}
 
 	/** Ticks spent on the ground so far (negative while still running). */

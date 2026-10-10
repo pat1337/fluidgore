@@ -67,6 +67,13 @@ public final class Ragdoll {
 		this.onGround = entity.onGround();
 	}
 
+	double distanceToSqr(Ragdoll other) {
+		double dx = x - other.x;
+		double dy = y - other.y;
+		double dz = z - other.z;
+		return dx * dx + dy * dy + dz * dz;
+	}
+
 	void beginTick() {
 		px = x;
 		py = y;
@@ -125,6 +132,14 @@ public final class Ragdoll {
 		double friction = onGround ? GROUND_FRICTION : AIR_FRICTION;
 		vx *= friction;
 		vz *= friction;
+	}
+
+	/** Throws the body along a direction (unit vector) at the given horizontal speed, with a hop so it leaves the ground. */
+	void launch(Vec3 direction, double speed) {
+		vx += direction.x * speed;
+		vz += direction.z * speed;
+		vy += 0.1 + speed * 0.25 + Math.max(0.0, direction.y) * speed;
+		onGround = false;
 	}
 
 	/** Gives the body a push towards a side; {@code side} is +1 or -1 (the lean direction), so it will topple. */

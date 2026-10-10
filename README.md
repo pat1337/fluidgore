@@ -32,6 +32,9 @@ saved to `.minecraft\config\fluidgore.json` when the screen closes.
 | Wall Splatter | On | Blood sticks to walls and runs down ledges as streaks. |
 | Bloody Footprints | On | Anything walking through a puddle leaves a few footprints. |
 | Rain Washes Blood | On | Blood in the rain fades much faster. Blood in water always disperses. |
+| Scrub Blood | On | Hold a sponge, wet sponge or brush (`cleaningItems` in the config) and hold the use key on blood to wipe it away. Sneak to use the item normally. |
+| Death Launch | 100% | Percent. The killing blow throws a body along the direction it was struck. 0 turns it off. A dead or dying animal can also be hit again: swing at the body to spray blood, shove it, and with a blade cut parts off. |
+| Bone bodies | skeleton, stray, wither skeleton, bogged, parched, skeleton horse | `boneEntities` in the config. These never bleed: hits chip them into bone shards and dust with hard cracking sounds, any melee weapon can snap a bone off, and loose bones shatter when thrown, dropped hard, stomped or punched twice. |
 | Fluid Cells/Tick | 64 | Fluid simulation budget per tick. Lower if you have a weak CPU. |
 | Max Droplets | 600 | Cap on flying droplets. |
 | Part Lifetime | 60 s | How long severed parts stay at Medium (scaled by gore level). |

@@ -1,8 +1,10 @@
 package dev.fluidgore.blood;
 
 import dev.fluidgore.config.GoreConfig;
+import net.minecraft.core.Direction;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Client-side container for all blood in the current level: decals, fluid cells, flying droplets and footprint
@@ -105,6 +107,82 @@ public final class BloodWorld {
 		} else {
 			footprints.clear();
 		}
+	}
+
+	/**
+	 * Wipes blood within {@code radius} of {@code at} on the surface that was hit: decals fade out at once and
+	 * puddle cells lose most of their volume. Returns how many decals and cells were touched.
+	 */
+	public int clean(Vec3 at, Direction face, float radius) {
+		int touched = 0;
+		for (Decal d : decals.decals()) {
+			if (d.face == face && d.age < d.lifetime - 4 && decalDistanceSqr(d, at) <= sq(radius + d.half * 0.5F)) {
+				// Jump to the end of its life: the normal fade-out does the wiping.
+				d.age = d.lifetime - 4;
+				touched++;
+			}
+		}
+
+		if (face == Direction.UP) {
+			for (BloodCell cell : fluid.cells()) {
+				double dx = cell.bx + 0.5 - at.x;
+				double dz = cell.bz + 0.5 - at.z;
+				if (Math.abs(cell.surfaceY - at.y) < 0.6 && dx * dx + dz * dz <= sq(radius + 0.5F)) {
+					fluid.drain(cell, cell.volume * 0.75F + 0.05F);
+					touched++;
+				}
+			}
+		}
+
+		return touched;
+	}
+
+	/** True if any decal or puddle lies within {@code radius} of {@code at}. */
+	public boolean hasBloodNear(Vec3 at, float radius) {
+		for (Decal d : decals.decals()) {
+			if (d.age < d.lifetime - 4 && decalDistanceSqr(d, at) <= sq(radius)) {
+				return true;
+			}
+		}
+
+		for (BloodCell cell : fluid.cells()) {
+			double dx = cell.bx + 0.5 - at.x;
+			double dz = cell.bz + 0.5 - at.z;
+			if (cell.volume > 0.01F && Math.abs(cell.surfaceY - at.y) < 1.0 && dx * dx + dz * dz <= sq(radius)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private static double decalDistanceSqr(Decal d, Vec3 at) {
+		double x;
+		double y;
+		double z;
+		switch (d.face.getAxis()) {
+			case Y -> {
+				x = d.centerA;
+				y = d.plane;
+				z = d.centerB;
+			}
+			case X -> {
+				x = d.plane;
+				y = d.centerB;
+				z = d.centerA;
+			}
+			default -> {
+				x = d.centerA;
+				y = d.centerB;
+				z = d.plane;
+			}
+		}
+
+		return at.distanceToSqr(x, y, z);
+	}
+
+	private static double sq(float v) {
+		return v * v;
 	}
 
 	/** Keeps decals + puddle cells under {@link GoreConfig#maxBloodDecals}, removing the oldest first. */

@@ -2,7 +2,9 @@ package dev.fluidgore.dismember;
 
 import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.blood.BloodWorld;
+import dev.fluidgore.blood.BoneEmitter;
 import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.suffer.CorpseStrike;
 import java.util.List;
 import java.util.Optional;
 import net.minecraft.client.Minecraft;
@@ -64,10 +66,19 @@ public final class PartInteraction {
 
 		GorePart target = pick(mc, player);
 		if (target == null) {
-			return false;
+			// Not a loose part: maybe a body that is down or still dying.
+			return CorpseStrike.onAttack(mc, player, level, blood);
 		}
 
 		Vec3 look = player.getViewVector(1.0F);
+		if (target.bone() && ++target.hits >= 2) {
+			// Second blow: the bone breaks apart.
+			BoneEmitter.shatter(level, new Vec3(target.x, target.y, target.z), 1.0F);
+			target.shattered = true;
+			player.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
+			return true;
+		}
+
 		wake(target);
 		target.vx += look.x * 0.55 + (random.nextDouble() - 0.5) * 0.1;
 		target.vy += 0.22 + Math.max(0.0, look.y) * 0.3;
@@ -76,7 +87,7 @@ public final class PartInteraction {
 		player.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
 		BloodEmitter.burst(blood, level, new Vec3(target.x, target.y, target.z), target.bloodRgb, 0.04F, 6);
 		level.playLocalSound(target.x, target.y, target.z, SoundEvents.PLAYER_ATTACK_WEAK, SoundSource.PLAYERS, 0.8F, 0.9F, false);
-		level.playLocalSound(target.x, target.y, target.z, SoundEvents.SLIME_SQUISH_SMALL, SoundSource.NEUTRAL, 0.8F, 0.7F, false);
+		level.playLocalSound(target.x, target.y, target.z, target.bone() ? SoundEvents.BONE_BLOCK_HIT : SoundEvents.SLIME_SQUISH_SMALL, SoundSource.NEUTRAL, 0.8F, 0.7F, false);
 		return true;
 	}
 
@@ -149,6 +160,12 @@ public final class PartInteraction {
 
 			if (motion.y < -0.3 && player.getY() > part.y && part.squash > 0.5F) {
 				// Landed on it.
+				if (part.bone()) {
+					BoneEmitter.shatter(level, new Vec3(part.x, part.y, part.z), 1.2F);
+					part.shattered = true;
+					continue;
+				}
+
 				part.squash = 0.35F;
 				part.bleedLeft += 0.05F;
 				blood.landOnFloor(level, part.x, part.y - r, part.z, 0.12F, part.bloodRgb, blood.decalLifetime());

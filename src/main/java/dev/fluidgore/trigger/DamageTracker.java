@@ -101,16 +101,25 @@ public final class DamageTracker {
 		Entity attacker = hit != null && hit.attackerId() >= 0 ? level.getEntity(hit.attackerId()) : null;
 		LivingEntity meleeAttacker = attacker instanceof LivingEntity living && hit.melee() ? living : null;
 		Vec3 away = null;
+		Vec3 strike = null;
 		if (attacker != null) {
 			Vec3 delta = new Vec3(victim.getX() - attacker.getX(), 0.0, victim.getZ() - attacker.getZ());
 			if (delta.lengthSqr() > 1.0E-6) {
 				away = delta.normalize();
 			}
+
+			// Where the blow was going: from the attacker's eyes to the middle of the victim.
+			Vec3 aim = victim.position().add(0.0, victim.getBbHeight() * 0.5, 0.0).subtract(attacker.getEyePosition());
+			if (aim.lengthSqr() > 1.0E-6) {
+				strike = aim.normalize();
+			}
 		}
 
 		if (gore) {
 			BloodEmitter.bleed(blood, level, victim, damage, lethal, away);
-			if (meleeAttacker != null && EntityFilter.isBladed(meleeAttacker.getMainHandItem())) {
+			// Bone does not need a blade: any hard blow can snap a bone off.
+			boolean breaks = EntityFilter.isBone(victim) && (meleeAttacker != null || lethal);
+			if (breaks || meleeAttacker != null && EntityFilter.isBladed(meleeAttacker.getMainHandItem())) {
 				// Players only lose parts on death; mobs can also lose one to a heavy hit and keep walking.
 				boolean heavy = damage >= GoreConfig.get().heavyHitDamage && !(victim instanceof Player);
 				if (lethal || heavy) {
@@ -122,7 +131,7 @@ public final class DamageTracker {
 		// After dismemberment, so a beheading on this very hit is known to the death throes.
 		if (suffers) {
 			boolean bareHanded = meleeAttacker != null && meleeAttacker.getMainHandItem().isEmpty();
-			suffering.onHurt(level, victim, damage, lethal, bareHanded);
+			suffering.onHurt(level, victim, damage, lethal, bareHanded, strike);
 		}
 	}
 

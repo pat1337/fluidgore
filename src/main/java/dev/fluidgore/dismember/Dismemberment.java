@@ -10,6 +10,7 @@ import it.unimi.dsi.fastutil.ints.Int2IntMap;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 import net.fabricmc.fabric.api.client.rendering.v1.RenderStateDataKey;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.EntityModel;
@@ -76,12 +77,26 @@ public final class Dismemberment {
 					? BodyPart.HEAD
 					: candidates.get(RANDOM.nextInt(candidates.size()));
 			candidates.remove(chosen);
-			sever(blood, level, entity, chosen, away);
+			sever(blood, level, entity, chosen, away, entity::position, Float.NaN, 0.0F);
+		}
+	}
+
+	/**
+	 * Cuts a random remaining part off a body the physics has moved: it may have walked, been thrown and tipped over
+	 * since the server last placed the entity, so the caller says where the body is now.
+	 */
+	public void severOnBody(BloodWorld blood, ClientLevel level, LivingEntity entity, Supplier<Vec3> origin, float yaw, float roll, @Nullable Vec3 away) {
+		List<BodyPart> candidates = new ArrayList<>(List.of(BodyPart.values()));
+		int already = missing.get(entity.getId());
+		candidates.removeIf(p -> (already & p.bit()) != 0);
+		if (!candidates.isEmpty()) {
+			sever(blood, level, entity, candidates.get(RANDOM.nextInt(candidates.size())), away, origin, yaw, roll);
 		}
 	}
 
 	@SuppressWarnings({"unchecked", "rawtypes"})
-	private void sever(BloodWorld blood, ClientLevel level, LivingEntity entity, BodyPart bodyPart, @Nullable Vec3 away) {
+	private void sever(BloodWorld blood, ClientLevel level, LivingEntity entity, BodyPart bodyPart, @Nullable Vec3 away,
+			Supplier<Vec3> origin, float yawOverride, float roll) {
 		Minecraft mc = Minecraft.getInstance();
 		EntityRenderer renderer = mc.getEntityRenderDispatcher().getRenderer(entity);
 		if (!(renderer instanceof LivingEntityRenderer livingRenderer)) {
@@ -114,8 +129,15 @@ public final class Dismemberment {
 
 		// Model space -> world, mirroring LivingEntityRenderer: rotate by body yaw, scale, flip X/Y, shift down.
 		float scale = state.scale * state.ageScale;
-		Quaternionf bodyRotation = new Quaternionf().rotationY((float) Math.toRadians(180.0F - state.bodyRot));
+		float yaw = Float.isNaN(yawOverride) ? state.bodyRot : yawOverride;
+		Quaternionf bodyRotation = new Quaternionf().rotationY((float) Math.toRadians(180.0F - yaw));
 		Vector3f offset = new Vector3f(-modelCenter.x, MODEL_Y_OFFSET - modelCenter.y, modelCenter.z).mul(scale);
+		if (roll != 0.0F) {
+			// A tipped-over body: lean about its feet like the renderer does, then lift it so it rests on the floor.
+			offset.rotateZ(roll);
+			offset.y += entity.getBbWidth() * 0.5F * Math.abs((float) Math.sin(roll));
+		}
+
 		bodyRotation.transform(offset);
 
 		Vector3f half = new Vector3f((b[3] - b[0]) * 0.5F, (b[4] - b[1]) * 0.5F, (b[5] - b[2]) * 0.5F).mul(scale);
@@ -124,11 +146,13 @@ public final class Dismemberment {
 		int lifetime = Math.max(100, Math.round(GoreConfig.get().partLifetimeSeconds * 20 * preset.duration));
 
 		GorePart part = new GorePart(ModelParts.copy(source), texture, localCenter, half, scale, rgb, lifetime);
-		part.x = part.prevX = entity.getX() + offset.x;
-		part.y = part.prevY = entity.getY() + offset.y;
-		part.z = part.prevZ = entity.getZ() + offset.z;
-		part.rotation.set(bodyRotation);
-		part.prevRotation.set(bodyRotation);
+		Vec3 base = origin.get();
+		part.x = part.prevX = base.x + offset.x;
+		part.y = part.prevY = base.y + offset.y;
+		part.z = part.prevZ = base.z + offset.z;
+		Quaternionf partRotation = new Quaternionf(bodyRotation).rotateZ(roll);
+		part.rotation.set(partRotation);
+		part.prevRotation.set(partRotation);
 
 		double ax = away != null ? away.x : RANDOM.nextDouble() - 0.5;
 		double az = away != null ? away.z : RANDOM.nextDouble() - 0.5;
@@ -141,7 +165,7 @@ public final class Dismemberment {
 		}
 
 		part.spinSpeed = 0.2F + RANDOM.nextFloat() * 0.35F;
-		part.bleedLeft = 0.12F * preset.puddles;
+		part.bleedLeft = part.bone() ? 0.0F : 0.12F * preset.puddles;
 		part.light = net.minecraft.util.LightCoordsUtil.getLightCoords(level, entity.blockPosition());
 		if (bodyPart == BodyPart.HEAD && GoreConfig.get().sufferingLevel.enabled()) {
 			// The head keeps twitching and moaning for a few seconds (see Suffering#tickSeveredHeads).
@@ -153,7 +177,7 @@ public final class Dismemberment {
 		missing.put(entity.getId(), missing.get(entity.getId()) | bodyPart.bit());
 		// The stump stays attached to the body (which may keep moving); the part flies off on its own.
 		Vec3 stumpOffset = new Vec3(offset.x, offset.y, offset.z);
-		BloodEmitter.sever(blood, level, entity, () -> entity.position().add(stumpOffset), () -> new Vec3(part.x, part.y, part.z), rgb);
+		BloodEmitter.sever(blood, level, entity, () -> origin.get().add(stumpOffset), () -> new Vec3(part.x, part.y, part.z), rgb);
 	}
 
 	/** Physics for severed parts and bleeding stumps on entities that are still walking around. */

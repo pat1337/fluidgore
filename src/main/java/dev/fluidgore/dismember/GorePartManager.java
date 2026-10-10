@@ -2,6 +2,7 @@ package dev.fluidgore.dismember;
 
 import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.blood.BloodWorld;
+import dev.fluidgore.blood.BoneEmitter;
 import dev.fluidgore.blood.SurfaceProbe;
 import dev.fluidgore.config.GoreConfig;
 import java.util.ArrayList;
@@ -33,6 +34,8 @@ public final class GorePartManager {
 	private static final RandomSource RANDOM = RandomSource.create();
 	/** Speed (blocks/tick) above which hitting a surface splats blood and squelches. */
 	private static final double IMPACT_SPEED = 0.3;
+	/** A loose bone hitting anything faster than this breaks apart. */
+	private static final double BONE_BREAK_SPEED = 0.45;
 
 	private final List<GorePart> parts = new ArrayList<>();
 	private final RandomSource random = RandomSource.create();
@@ -65,7 +68,7 @@ public final class GorePartManager {
 		p.prevY = p.y;
 		p.prevZ = p.z;
 		p.prevRotation.set(p.rotation);
-		if (++p.age >= p.lifetime || !level.isLoaded(BlockPos.containing(p.x, p.y, p.z))) {
+		if (p.shattered || ++p.age >= p.lifetime || !level.isLoaded(BlockPos.containing(p.x, p.y, p.z))) {
 			return false;
 		}
 
@@ -96,6 +99,11 @@ public final class GorePartManager {
 		p.y += moved.y;
 		p.z += moved.z;
 
+		if (p.bone() && !p.held && (moved.x != wanted.x ? Math.abs(wanted.x) : moved.z != wanted.z ? Math.abs(wanted.z) : moved.y != wanted.y && wanted.y < 0.0 ? -wanted.y : 0.0) > BONE_BREAK_SPEED) {
+			shatter((ClientLevel) level, p);
+			return false;
+		}
+
 		if (moved.x != wanted.x) {
 			splatWall(level, blood, p, r, wanted.x > 0 ? Direction.WEST : Direction.EAST, Math.abs(wanted.x));
 			p.vx = -p.vx * BOUNCE;
@@ -114,15 +122,24 @@ public final class GorePartManager {
 				onGround = true;
 				if (!p.landed) {
 					p.landed = true;
+					if (p.bone()) {
+						BoneEmitter.burst((ClientLevel) level, new Vec3(p.x, p.y - r, p.z), null, 4, 6, 0.1);
+						level.playLocalSound(p.x, p.y, p.z, SoundEvents.BONE_BLOCK_FALL, SoundSource.NEUTRAL, 0.9F, 0.8F + random.nextFloat() * 0.4F, false);
+					} else {
 					float splash = 0.12F * GoreConfig.get().goreLevel.puddles;
 					blood.landOnFloor(level, p.x, p.y - r, p.z, splash, p.bloodRgb, blood.decalLifetime());
+					}
 				} else if (-wanted.y > IMPACT_SPEED && p.age - p.lastSplat > 5) {
 					// Thrown or kicked part slamming into the ground.
 					p.lastSplat = p.age;
 					float speed = (float) -wanted.y;
+					if (p.bone()) {
+						level.playLocalSound(p.x, p.y, p.z, SoundEvents.BONE_BLOCK_HIT, SoundSource.NEUTRAL, Math.min(1.0F, speed * 2.0F), 0.8F, false);
+					} else {
 					blood.landOnFloor(level, p.x, p.y - r, p.z, 0.04F * speed, p.bloodRgb, blood.decalLifetime());
 					BloodEmitter.burst(blood, (ClientLevel) level, new Vec3(p.x, p.y - r, p.z), p.bloodRgb, 0.03F, 5);
 					level.playLocalSound(p.x, p.y, p.z, SoundEvents.SLIME_SQUISH, SoundSource.NEUTRAL, Math.min(1.0F, speed), 0.8F, false);
+					}
 				}
 			}
 
@@ -189,6 +206,10 @@ public final class GorePartManager {
 			blood.landOnFloor(level, p.x, p.y - r, p.z, 0.02F, p.bloodRgb, blood.decalLifetime());
 			p.bleedLeft -= 0.02F;
 		}
+	}
+
+	private static void shatter(ClientLevel level, GorePart p) {
+		BoneEmitter.shatter(level, new Vec3(p.x, p.y, p.z), Math.min(1.5F, 0.6F + radius(p) * 3.0F));
 	}
 
 	/** A part hitting a wall hard leaves a splat on it and squelches. {@code face} is the face that was hit. */
