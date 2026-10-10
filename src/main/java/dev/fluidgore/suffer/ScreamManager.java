@@ -46,14 +46,14 @@ public final class ScreamManager {
 
 	/** A sharp cry when hit. Higher {@code fear} pushes it higher and longer. */
 	public void pain(Supplier<Vec3> at, Voice voice, float intensity, float fear) {
-		float top = 1.7F + 0.25F * Math.min(1.0F, fear + intensity * 0.2F);
+		float top = 1.05F + 0.2F * Math.min(1.0F, fear + intensity * 0.2F);
 		clip(voice.self(), 0, HIGH, voice.hurt(), at, top, top + 0.15F, 0.06F, 1.3F, 1.0F, 0.3F, 12);
-		clip(voice.self(), 1, HIGH, voice.hurt(), at, top * 0.62F, top * 0.6F, 0.04F, 1.1F, 0.75F, 0.4F, 12);
+		clip(voice.self(), 1, HIGH, voice.hurt(), at, top * 0.75F, top * 0.72F, 0.04F, 1.1F, 0.5F, 0.4F, 14);
 		clip(voice.self(), 2, LOW, voice.ambient(), at, 0.62F, 0.55F, 0.05F, 0.9F, 0.5F, 0.6F, 16);
-		int repeats = Math.round(intensity * (0.5F + voice.self().frantic()));
+		int repeats = Math.min(2, Math.round(intensity * (0.5F + voice.self().frantic())));
 		for (int i = 0; i < repeats; i++) {
-			int delay = 6 + i * 7 + random.nextInt(3);
-			clip(voice.self(), delay, HIGH, voice.hurt(), at, top + 0.05F, top - 0.35F, 0.1F, 1.6F, 0.85F - i * 0.15F, 0.5F, 14);
+			int delay = 14 + i * 12 + random.nextInt(4);
+			clip(voice.self(), delay, HIGH, voice.hurt(), at, top, top - 0.25F, 0.06F, 1.6F, 0.7F - i * 0.15F, 0.5F, 18);
 		}
 	}
 
@@ -62,15 +62,17 @@ public final class ScreamManager {
 	 * wail of repeated cries that sag in pitch and strength as the animal gives out.
 	 */
 	public void death(Supplier<Vec3> at, Voice voice, float intensity, float length) {
-		int cries = 1 + Math.round(length * 6.0F * Math.min(1.5F, intensity) * voice.self().endurance());
+		int cries = 1 + Math.min(2, Math.round(length * 3.0F * Math.min(1.5F, intensity) * voice.self().endurance()));
 		int delay = 0;
 		for (int i = 0; i < cries; i++) {
 			float progress = cries == 1 ? 0.0F : i / (float) (cries - 1);
-			float pitch = 1.95F - progress * 0.95F;
-			float volume = 1.25F - progress * 0.65F;
-			clip(voice.self(), delay, HIGH, voice.hurt(), at, pitch, pitch - 0.25F, 0.08F + progress * 0.08F, 1.4F, volume, 0.5F, 16);
-			clip(voice.self(), delay + 1, HIGH, voice.hurt(), at, pitch * 0.55F, pitch * 0.5F, 0.05F, 1.0F, volume * 0.7F, 0.5F, 16);
-			delay += 5 + random.nextInt(4) + Math.round(progress * 5.0F);
+			float pitch = 1.3F - progress * 0.45F;
+			float volume = 1.0F - progress * 0.45F;
+			clip(voice.self(), delay, HIGH, voice.hurt(), at, pitch, pitch - 0.25F, 0.06F + progress * 0.05F, 1.4F, volume, 0.5F, 22);
+			if (i == 0) {
+				clip(voice.self(), delay + 1, HIGH, voice.hurt(), at, pitch * 0.7F, pitch * 0.65F, 0.05F, 1.0F, volume * 0.5F, 0.5F, 20);
+			}
+			delay += 14 + random.nextInt(5) + Math.round(progress * 6.0F);
 		}
 
 		clip(voice.self(), delay, HIGH, voice.death(), at, 0.75F, 0.6F, 0.04F, 0.7F, 0.9F, 0.7F, 30);

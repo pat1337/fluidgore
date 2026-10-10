@@ -2,6 +2,14 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.9.1]
+
+### Fixed
+- The clicking when an animal is hit or killed: its cries were the animal's own hurt sound at nearly double pitch,
+  chopped short, layered in pairs and restarted every 5 to 9 ticks, which stuttered like a machine gun. Cries are
+  now near natural pitch, a death is at most three of them spaced further apart, only the first has a second
+  layer, and repeats after a hit are capped at two.
+
 ## [1.9.0]
 
 ### Added
