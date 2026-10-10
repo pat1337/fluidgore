@@ -99,6 +99,11 @@ Droplets fly with gravity and splat on floors and walls. Puddles flow to lower g
 and drip off ledges. Arterial spurts pump in pulses. Blood dries and darkens, rain washes it away, footprints track
 through it, and a sponge or brush scrubs it off.
 
+### Inventory sorting
+A small extra, the way 1.7.10 did it: a tiny sort button in the top right of every chest, barrel, ender chest and
+shulker box and one next to your inventory, or middle-click over either part. Stacks are merged and ordered by item
+id, blocks first. The hotbar is left alone. It uses ordinary inventory clicks, so it works on any server.
+
 ## Demos
 Every feature has a short scene you can play in game, set up right in front of you: type `/gore demo` for the
 list (click one to play it), or `/gore demo <name>`. `pit` digs a 5x5 pit of pigs and lights a TNT in it;
@@ -149,6 +154,7 @@ Tested alongside Sodium, Iris (without a shader pack), Lithium, FerriteCore, Ent
 | Blast Gore | On | Explosions shred, tear open and throw bodies by how close they were (see Explosions). |
 | Wounds | On | The hit-zone and wound system described above. |
 | Wounds on Monsters | On | Wounds on hostile mobs too. |
+| Inventory Sorting | On | Sort buttons on chests and your inventory, and middle-click to sort. |
 | Rotten Undead | On | Zombies and their kin are rotting meat, with rotten wounds and dark, thick rotten blood. |
 | Wounds on Players | On | Wounds on other players. Everyone with the mod sees the same ones. |
 | Suffering | Medium | Screams, trembling, death throes and herd panic, separate from Gore Level. Off disables it. |

@@ -120,6 +120,8 @@ public final class GoreConfig {
 	 * instead of the monster blood colour.
 	 */
 	public boolean rottenUndead = true;
+	/** Sort buttons on chests and the inventory, and middle-click to sort (plain inventory clicks, works on any server). */
+	public boolean inventorySorting = true;
 	/** Wounds on other players. Everyone with the mod sees the same wounds (see trigger/Fate). */
 	public boolean woundPlayers = true;
 	/** Severed parts can be punched, kicked, picked up, thrown and stomped. */

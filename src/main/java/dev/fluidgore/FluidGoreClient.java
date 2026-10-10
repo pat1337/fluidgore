@@ -5,6 +5,7 @@ import dev.fluidgore.demo.DemoPlayer;
 import dev.fluidgore.render.GoreRenderer;
 import dev.fluidgore.ui.GoreCommand;
 import dev.fluidgore.ui.OptionsScreenButton;
+import dev.fluidgore.ui.SortButtons;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents;
@@ -32,6 +33,7 @@ public class FluidGoreClient implements ClientModInitializer {
 
 		GoreRenderer.register();
 		OptionsScreenButton.register();
+		SortButtons.register();
 		LOGGER.info("Fluid Gore loaded (gore level {})", GoreConfig.get().goreLevel);
 	}
 }

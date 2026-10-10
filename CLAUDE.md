@@ -10,7 +10,9 @@ Easy follow-up work is listed in **TASKS.md**. Do those one at a time.
 ## Hard rules
 1. **Client-side only.** No registries (blocks, items, entities, particle types, sounds), no packets, no
    server-side code. It must keep working on a vanilla server. Use vanilla sound events and particle types only.
-2. **Cosmetic only.** Never change health, damage, drops, loot, AI or game rules.
+2. **Cosmetic only.** Never change health, damage, drops, loot, AI or game rules. The one exception, asked for by the
+   user in 2.3: the inventory sorter (`ui/InventorySorter`, `ui/SortButtons`), which moves items with ordinary vanilla
+   inventory clicks (`handleContainerInput` PICKUP), exactly what a player could do by hand. No custom packets.
 3. **26.3 is not 1.21.** Names are Mojang's unobfuscated names and many APIs changed (render states,
    `SubmitNodeCollector`, `LevelRenderEvents`, `GuiGraphicsExtractor`, `Identifier` instead of `ResourceLocation`,
    `client.gui.setScreen`). Check the real source before guessing. See "Looking up APIs".
@@ -54,7 +56,9 @@ Mod Menu 21.0.0 (compile-only, soft dependency).
   multipliers), `BloodColor` (rgb + chunk block), `BloodStyle` (Redstone/Realistic/Mixed).
 - `ui/`: `GoreSettingsScreen` (vanilla `OptionsSubScreen` + `OptionInstance`), `ModMenuIntegration`,
   `OptionsScreenButton` (the "Fluid Gore..." button on the Options screen), `GoreCommand` (`/gore demo`, a Fabric
-  client command).
+  client command). `SortButtons` + `InventorySorter` (2.3): 1.7.10-style sort buttons on chest/barrel/ender chest/shulker
+  screens and the player inventory, middle-click (pick-block key) to sort the hovered part; merge then order by item id,
+  hotbar untouched, done with vanilla clicks. `mixin/AbstractContainerScreenAccessor` gives the screen position.
 - `demo/`: `Demos` (the list), `Demo`, `Script` (steps: vanilla commands sent as the player, client actions,
   narration, pauses), `Stage`, `DemoPlayer` (runs from the client tick, fakes the held item for the gore via
   `DemoPlayer.held`, hides command replies from chat). Needs cheats/op; nothing server-side.
@@ -190,3 +194,5 @@ severable parts; severed heads can't blink.
 - **2.2.0**: anatomical slashes (incised/chop wounds along the swing, five tissue layers) and Rotten Undead (rotten
   flesh tints, pus/maggot layers, falling maggots, `BloodColor.ROTTEN`, slow ooze, no spurts, rotten giblets).
   `woundHostiles` on by default (`configVersion` 4). Game test: `rot`. Demo: `rot`.
+- **2.3.0**: 1.7.10-style inventory and chest sorter (`inventorySorting`, see `ui/`). Game test: `sorting` (checks the
+  server's copy of the chest). No demo: it is not gore and needs no scene.

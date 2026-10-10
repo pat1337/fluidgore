@@ -3,6 +3,7 @@
 	"package": "dev.fluidgore.mixin",
 	"compatibilityLevel": "JAVA_25",
 	"client": [
+		"AbstractContainerScreenAccessor",
 		"ClientLevelMixin",
 		"ClientPacketListenerMixin",
 		"LivingEntityMixin",

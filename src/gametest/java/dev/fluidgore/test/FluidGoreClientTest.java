@@ -64,6 +64,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 
 		try (TestSingleplayerContext singleplayer = context.worldBuilder().adjustSettings(s -> s.setAllowCommands(true)).create()) {
 			singleplayer.getConnection().waitForChunksRender();
+			sorting(context, singleplayer.getServer());
 			demos(context, singleplayer.getServer());
 		}
 
@@ -676,6 +677,90 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			return "none";
 		});
 		check("MEAT".equals(cow), "a cow is not ordinary meat: " + cow);
+	}
+
+	/**
+	 * The 1.7.10 sorter on a real chest, opened the way a player opens it: scrambled partial stacks go in, the sort is
+	 * done with ordinary clicks, and the server's own copy of the chest must come out merged and in item-id order with
+	 * nothing lost. The player's main inventory is sorted the same way, and the hotbar left alone.
+	 */
+	private static void sorting(ClientGameTestContext context, TestServerContext server) {
+		net.minecraft.core.BlockPos pos = new net.minecraft.core.BlockPos(100, -60, 102);
+		server.runCommand("tp @a 100.5 -60 100.5 0 30");
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");
+		server.runCommand("setblock 100 -60 102 minecraft:chest");
+		String[] chest = {"0 minecraft:diamond 3", "4 minecraft:dirt 10", "7 minecraft:stone 5", "12 minecraft:dirt 30", "15 minecraft:iron_sword 1",
+				"20 minecraft:cobblestone 64", "23 minecraft:stone 9", "26 minecraft:dirt 40", "9 minecraft:oak_log 7"};
+		for (String entry : chest) {
+			String[] e = entry.split(" ");
+			server.runCommand("item replace block 100 -60 102 container." + e[0] + " with " + e[1] + " " + e[2]);
+		}
+
+		// inventory.N is the main inventory (slots 9-35); hotbar.0 must stay where it is.
+		server.runCommand("item replace entity @p inventory.20 with minecraft:dirt 5");
+		server.runCommand("item replace entity @p inventory.3 with minecraft:stone 7");
+		server.runCommand("item replace entity @p inventory.11 with minecraft:dirt 6");
+		server.runCommand("item replace entity @p hotbar.1 with minecraft:torch 12");
+		context.waitTicks(5);
+		context.runOnClient(mc -> mc.gameMode.useItemOn(mc.player, net.minecraft.world.InteractionHand.MAIN_HAND,
+				new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(pos), net.minecraft.core.Direction.NORTH, pos, false)));
+		context.waitTicks(10);
+		boolean open = context.computeOnClient(mc -> mc.gui.screen() instanceof net.minecraft.client.gui.screens.inventory.ContainerScreen);
+		check(open, "the chest did not open");
+		context.takeScreenshot("sort_01_before");
+		boolean sorted = context.computeOnClient(mc -> {
+			var menu = ((net.minecraft.client.gui.screens.inventory.ContainerScreen) mc.gui.screen()).getMenu();
+			return dev.fluidgore.ui.InventorySorter.sort(mc, menu, dev.fluidgore.ui.InventorySorter.Region.CONTAINER)
+					&& dev.fluidgore.ui.InventorySorter.sort(mc, menu, dev.fluidgore.ui.InventorySorter.Region.PLAYER);
+		});
+		check(sorted, "the sorter refused to sort");
+		context.waitTicks(10);
+		context.takeScreenshot("sort_02_after");
+		context.runOnClient(mc -> mc.player.closeContainer());
+		context.waitTicks(5);
+
+		String chestAfter = server.computeOnServer(s -> {
+			var container = (net.minecraft.world.Container) s.overworld().getBlockEntity(pos);
+			return describe(java.util.stream.IntStream.range(0, container.getContainerSize()).mapToObj(container::getItem).toList());
+		});
+		String mainAfter = server.computeOnServer(s -> {
+			var inventory = s.getPlayerList().getPlayers().getFirst().getInventory();
+			return describe(java.util.stream.IntStream.range(9, 36).mapToObj(inventory::getItem).toList());
+		});
+		String torch = server.computeOnServer(s -> {
+			var stack = s.getPlayerList().getPlayers().getFirst().getInventory().getItem(1);
+			return stack.getItem() + " " + stack.getCount();
+		});
+		System.out.println("[FluidGoreTest] sorted chest: " + chestAfter);
+		System.out.println("[FluidGoreTest] sorted inventory: " + mainAfter + ", hotbar slot 1: " + torch);
+		check(chestAfter.equals("stone 14, dirt 64, dirt 16, cobblestone 64, oak_log 7, diamond 3, iron_sword 1"),
+				"the chest did not come out merged and in id order: " + chestAfter);
+		check(mainAfter.equals("stone 7, dirt 11"), "the inventory did not come out merged and in id order: " + mainAfter);
+		check(torch.equals("minecraft:torch 12"), "the hotbar was touched: " + torch);
+	}
+
+	/** The stacks in order, empty slots allowed only at the end ("item count, ..."), or a note of a gap. */
+	private static String describe(java.util.List<net.minecraft.world.item.ItemStack> stacks) {
+		StringBuilder out = new StringBuilder();
+		boolean gap = false;
+		for (var stack : stacks) {
+			if (stack.isEmpty()) {
+				gap = true;
+				continue;
+			}
+
+			if (gap) {
+				return "gap before " + stack;
+			}
+
+			if (!out.isEmpty()) {
+				out.append(", ");
+			}
+
+			out.append(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).getPath()).append(' ').append(stack.getCount());
+		}
+
+		return out.toString();
 	}
 
 	/** The head, or for babies without one (a chick is a single block) the first part the model has. */

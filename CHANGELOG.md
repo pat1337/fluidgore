@@ -2,6 +2,15 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.0]
+
+### Added
+- Inventory Sorting, the simple 1.7.10 way: a tiny sort button in the top right of chests, barrels, ender chests and
+  shulker boxes, one next to your inventory, and middle-click over either part to sort it. Partial stacks are merged
+  and everything is ordered by item id (blocks first, then items, like the old numeric ids), then damage and name.
+  The hotbar is left alone. It moves items with ordinary inventory clicks, so it works on any server. Turn it off in
+  the settings.
+
 ## [2.2.0]
 
 Rotting zombies and slashes that look like real cuts.
