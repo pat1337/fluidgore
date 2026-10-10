@@ -832,8 +832,19 @@ public final class Suffering {
 	private void slam(ClientLevel level, Corpse c, float speed, int color, boolean gore) {
 		Vec3 middle = centre(c);
 		float heavy = 1.0F / c.body.heft;
-		level.playLocalSound(middle.x, middle.y, middle.z, SoundEvents.GENERIC_BIG_FALL, SoundSource.NEUTRAL,
-				Math.min(1.0F, 0.4F + speed * 4.0F), 0.75F + 0.25F / heavy + random.nextFloat() * 0.1F, false);
+		float volume = Math.min(1.0F, 0.4F + speed * 4.0F);
+		if (random.nextInt(4) == 0) {
+			// The hard crunch of a fall, now only one fall in four.
+			level.playLocalSound(middle.x, middle.y, middle.z, SoundEvents.GENERIC_BIG_FALL, SoundSource.NEUTRAL, volume * 0.8F,
+					0.75F + 0.25F / heavy + random.nextFloat() * 0.1F, false);
+		} else {
+			// Otherwise a dull, heavy thud: meat and bone going down on the ground.
+			level.playLocalSound(middle.x, middle.y, middle.z, SoundEvents.MUD_BREAK, SoundSource.NEUTRAL, volume * 0.7F,
+					0.45F + 0.2F / heavy + random.nextFloat() * 0.1F, false);
+			level.playLocalSound(middle.x, middle.y, middle.z, SoundEvents.WOOL_FALL, SoundSource.NEUTRAL, volume * 0.6F,
+					0.6F + random.nextFloat() * 0.1F, false);
+		}
+
 		if (gore && !EntityFilter.isBloodless(c.entity)) {
 			BloodEmitter.burst(GoreSystems.blood(), level, middle, color, 0.02F + speed * 0.2F, 4 + Math.round(speed * 40.0F));
 			BloodEmitter.drip(GoreSystems.blood(), neck(c), color, 0.02F);

@@ -429,7 +429,7 @@ private boolean hitWall(ClientLevel level, BloodWorld world, int i, Direction.Ax
 
 /** A piece of meat or bone slapping down, while this tick's budget of landing sounds lasts. */
 private void thud(ClientLevel level, int i, Tissue t, double impact) {
-	if (sounds <= 0 || !GoreConfig.get().goreSounds) {
+	if (sounds <= 0 || !GoreConfig.get().goreSounds || RANDOM.nextInt(4) != 0) {
 		return;
 	}
 

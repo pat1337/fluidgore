@@ -2,6 +2,13 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.9.2]
+
+### Fixed
+- The click when a carcass falls over: the body hitting the ground used Minecraft's hard fall-damage crunch every
+  time. That crunch now plays one fall in four; the other falls are a dull, heavy thud. The sound of a body
+  heaving and dropping back, and of flesh pieces landing, is also a quarter as frequent.
+
 ## [1.9.1]
 
 ### Fixed

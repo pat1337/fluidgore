@@ -163,3 +163,5 @@ severable parts; severed heads can't blink.
   flames and burn with flame particles in `Burns`.
 - **1.9.1**: `ScreamManager.pain/death` retuned (natural pitch, at most 3 death cries 14+ ticks apart, repeats capped
   at 2) to stop the stuttering click on animal hits and kills.
+- **1.9.2**: `Suffering.slam` plays the hard fall crunch 1 in 4 (else a dull mud/wool thud); `Deaths` back-down and
+  `Giblets.thud` sounds are gated to 1 in 4.

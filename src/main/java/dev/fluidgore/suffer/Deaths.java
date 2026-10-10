@@ -424,7 +424,9 @@ public final class Deaths {
 				// Back down, hard.
 				c.body.spasm(random, 0.3F);
 				Vec3 at = c.position();
-				c.entity.level().playLocalSound(at.x, at.y, at.z, SoundEvents.GENERIC_SMALL_FALL, SoundSource.NEUTRAL, 0.6F, 0.7F, false);
+				if (random.nextInt(4) == 0) {
+					c.entity.level().playLocalSound(at.x, at.y, at.z, SoundEvents.GENERIC_SMALL_FALL, SoundSource.NEUTRAL, 0.6F, 0.7F, false);
+				}
 			}
 		}
 
