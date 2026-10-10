@@ -4,7 +4,7 @@ Read CLAUDE.md first. Do **one task at a time**: implement it, run `./gradlew bu
 `./gradlew runClientGameTest`, then commit. Each task lists which files to touch. If a task turns out to need a
 new mixin or rendering changes, stop and leave it for a bigger session.
 
-## 1. CHANGELOG.md
+## 1. CHANGELOG.md (done in 1.4.0; keep it updated with every release)
 Create `CHANGELOG.md` from the "Version history" section of CLAUDE.md (1.0.0, 1.1.0, 1.2.0), newest first,
 using Keep a Changelog style headings (Added/Changed).
 Files: new `CHANGELOG.md`.

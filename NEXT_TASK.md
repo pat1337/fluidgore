@@ -102,6 +102,8 @@ applies joint offsets and hides severed parts; `dismember/` has `GorePart` sever
   per gore level in `GoreLevel.woundDepth`. Game test: `hackModel`. Left over from stage 1: per-zone, per-weapon
   sounds (only a bone crack on bodies so far) and blood sprayed along the blade. Wounds do not travel with a severed
   `GorePart` yet; they are dropped from the body. Next: stage 2 (segment severing, chunk physics).
+- **1.4.0**: per-weapon/flesh sounds and blood along the blow (`HitFeedback`), wounds travel with severed pieces
+  plus a cut face, ragdoll `heft` by body size, baby/variant model fix. Stage 1 is complete.
 
 ## Process
 Do it in stages, committing each: (1) zone raycast + wound decals on a living and dead animal, (2) segment severing and

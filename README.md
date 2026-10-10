@@ -1,122 +1,158 @@
 # Fluid Gore
 
-Client-side cosmetic gore for Minecraft Java **26.3** (Fabric). Blood sprays and sticks to the ground and walls, pools and
-flows like a cheap fluid, and bladed kills can cut off heads and limbs that tumble away as physical objects.
+**Silver-age Minecraft as a butcher's yard.** A client-side Fabric mod for Minecraft Java **26.3** that gives every
+blow weight and every animal a death of its own: wounds that open where you strike and deepen with each blow, limbs
+and heads hacked off, blood that sprays, pools and runs downhill, and animals that scream, panic and remember.
 
-Everything is visual and local to your game. The mod adds no blocks, items, entities, packets or registry entries, so it
-works on **vanilla servers** and other players don't need it. It never changes health, loot, drops or game rules.
+> **Content note:** this mod shows graphic, realistic violence against animals. That is its point: at Extreme it
+> shows plainly what a kill costs the animal. The Gore Level and Suffering sliders scale it down to something mild,
+> or switch it off.
+
+![A cow's leg hacked open to the bone](docs/images/wounded-leg.png)
+
+Everything is visual and local to your game. The mod adds no blocks, items, entities, packets or registry entries, so
+it works on **vanilla servers** and nobody else needs it installed. It never changes health, damage, drops, AI or game
+rules.
+
+## Features
+
+### Strike any part of the body
+Blows are tested against the animal's real model, not its hitbox, and land exactly where you aimed: a leg, the neck,
+the head, the flank. Each blow on the same spot deepens the wound through four layers: **bruise, gash, open meat,
+bone**. Wounds are drawn on the model itself, so they move with every step, on living animals mid-fight and on bodies
+after death. Open wounds drip, so a wounded animal leaves a trail.
+
+![Wound layers on a leg: bruise, open meat, bone](docs/images/wound-layers.png)
+
+- **Weapons cut differently.** Fists bruise and split skin, swords cut, axes chop deep and wide, arrows punch small,
+  deep holes. Each has its own sound: a dull wet thud, a slice, a heavy chop, a crack once the blade reaches bone.
+- **Hack it off.** A blade through a wound that cannot get any deeper takes that limb or the head off. The body keeps
+  a raw stump; the piece keeps its gashes and shows meat around bone where it was cut.
+- **Flesh by species.** Ordinary animals bleed red. Husks are dried leather that splits to a sickly, poison-coloured
+  ooze. Skeletons never bleed: they scuff, crack, chip into shards and shatter.
+
+![Severed pieces with raw cut ends](docs/images/severed.png)
+
+### Every animal is an individual
+- **Its own voice and nerve.** Each animal's personality is fixed by its species and identity: voice pitch, how loud
+  and long it screams, how quickly it panics, stoic or frantic. Two cows never scream or die alike.
+- **Screams** are built from each animal's own vanilla sounds, pitch-bent, layered and re-triggered into screams,
+  whimpers, gurgles and panicked bellows.
+- **Death throes depend on how it died**: a quick cut-off cry after one clean blow, kicking that dies away, a long,
+  brutal wail with spasms after a beating, or a headless run with blood pumping from the neck. Some bolt, some
+  collapse slowly, some fold over the wound. Then laboured breaths, and the last one.
+- **Bodies stay.** The body outlives the server's entity: it falls, is thrown along the killing blow, and can still
+  be struck, shoved and cut where it lies.
+
+![A beheaded cow still running](docs/images/headless-run.png)
+
+### The herd responds
+No messages and no lectures; the world responds. Animals near a slaughter tremble, look around wildly and bellow, and
+it gets worse with every kill. They remember for the session: survivors cower, keep their distance and stand over
+bodies; mothers and young call for each other; wolves and foxes take interest in fresh blood; bodies draw flies.
+All of it is pose, sound and particles; real animal behaviour is untouched.
+
+![The aftermath](docs/images/aftermath.png)
+
+### Blood that behaves like a fluid
+Droplets fly with gravity and splat on floors and walls. Puddles flow to lower ground, pool in dips, run down stairs
+and drip off ledges. Arterial spurts pump in pulses. Blood dries and darkens, rain washes it away, footprints track
+through it, and a sponge or brush scrubs it off.
 
 ## Install
 
-1. Install Fabric Loader **0.19.5+** for Minecraft 26.3 and **Fabric API** (0.162.0+26.3 tested).
-2. Copy `fluidgore-1.0.0.jar` into `%APPDATA%\.minecraft\mods`.
-3. Optional: **Mod Menu** (21.0.0) for a config button in the mod list.
+1. Install [Fabric Loader](https://fabricmc.net/use/) **0.19.5+** for Minecraft **26.3** and
+   [Fabric API](https://modrinth.com/mod/fabric-api) (0.162.0+26.3 tested).
+2. Put `fluidgore-<version>.jar` in your `mods` folder (`%APPDATA%\.minecraft\mods` on Windows).
+3. Optional: [Mod Menu](https://modrinth.com/mod/modmenu) for a config button in the mod list.
 
-Open the settings from **Options → Fluid Gore...** (top-left button) or from Mod Menu. Changes apply immediately and are
-saved to `.minecraft\config\fluidgore.json` when the screen closes.
+Open the settings from **Options → Fluid Gore...** (top-left button) or from Mod Menu. Changes apply immediately and
+are saved to `config/fluidgore.json`.
+
+Tested alongside Sodium, Iris (without a shader pack), Lithium, FerriteCore, Entity Culling and ImmediatelyFast.
+
+![Settings](docs/images/settings.png)
 
 ## Settings
 
 | Setting | Default | What it does |
 |---|---|---|
-| Gore Level | Medium | Off / Low / Medium / High / Extreme. Scales droplet count, puddle size, chance and number of severed parts, and how long effects last. **Off** disables everything and removes existing blood and parts. |
-| Affect Players / Mobs / Animals | On | Who bleeds. Mobs = hostile (`Enemy`); Animals = everything else that isn't a player (animals, villagers, ...). |
-| Blood Color | Red | Players and passive creatures. Red, Dark Red, Green, Yellow, Blue, Purple, Black. |
-| Mob Blood | Red | Hostile mobs, e.g. set Green for alien-looking mob blood. |
-| Persistence | 180 s | How long blood stays at Medium before it fades (Low ×0.5, High ×1.5, Extreme ×2). |
-| Style | Redstone | **Redstone**: blocky pixel-art splats and chunky drops like redstone dust. **Realistic**: smooth round splats. **Mixed**: random mix. |
-| Gore Chunks | On | Heavy hits and kills throw redstone-block crumbs (or a block matching the blood colour) and bits of the body's meat. |
-| Arterial Spurts | On | Bad wounds and severed limbs pump blood out in pulsing jets that paint streaks. |
-| Gore Sounds | On | Wet crunching on heavy hits, kills and dismemberment. |
-| Max Blood Decals | 1500 | Cap on splats + puddle cells. The oldest go first. |
-| Wall Splatter | On | Blood sticks to walls and runs down ledges as streaks. |
-| Bloody Footprints | On | Anything walking through a puddle leaves a few footprints. |
-| Rain Washes Blood | On | Blood in the rain fades much faster. Blood in water always disperses. |
-| Scrub Blood | On | Hold a sponge, wet sponge or brush (`cleaningItems` in the config) and hold the use key on blood to wipe it away. Sneak to use the item normally. |
-| Death Launch | 100% | Percent. The killing blow throws a body along the direction it was struck. 0 turns it off. A dead or dying animal can also be hit again: swing at the body to spray blood, shove it, and with a blade cut parts off. |
-| Wounds | On | The hack model. Every blow lands on the exact spot of the model you aimed at (leg, head, flank, neck) and leaves a wound there that gets worse with each blow to the same spot: bruise, gash, open meat, then bone. Open wounds drip, so a hurt animal leaves a trail. A blade through a wound that cannot get any deeper takes that limb or the head off and leaves a raw stump. Works on living animals mid-fight and on bodies after death. The Gore Level sets how far it goes: Low stops at gashes, Medium at open meat, High and Extreme reach the bone. Fists only bruise and split skin, swords cut, axes chop deep, arrows punch small deep holes. |
-| Wounds on Monsters | Off | Wounds on hostile mobs too. Husks are dried leather that splits to a sickly ooze, skeletons scuff and crack. |
-| Wounds on Players | Off | Wounds on other players, on your screen only. |
-| Bone bodies | skeleton, stray, wither skeleton, bogged, parched, skeleton horse | `boneEntities` in the config. These never bleed: hits chip them into bone shards and dust with hard cracking sounds, any melee weapon can snap a bone off, and loose bones shatter when thrown, dropped hard, stomped or punched twice. |
-| Fluid Cells/Tick | 64 | Fluid simulation budget per tick. Lower if you have a weak CPU. |
+| Gore Level | Medium | Off / Low / Medium / High / Extreme. Scales blood, puddles, how often parts come off, how long it all stays, and how deep wounds go: Low stops at gashes, Medium at open meat, High and Extreme reach the bone. **Off** disables everything and clears existing blood and parts. |
+| Affect Players / Mobs / Animals | On | Who bleeds. Mobs are hostile mobs; Animals is everything else that isn't a player. |
+| Blood Color / Mob Blood | Red | Blood of players and passive creatures / of hostile mobs. Red, Dark Red, Green, Yellow, Blue, Purple, Black. |
+| Style | Redstone | **Redstone**: blocky pixel-art splats like redstone dust. **Realistic**: smooth round splats. **Mixed**. |
+| Gore Chunks | On | Heavy hits and kills throw crumbs and bits of meat. |
+| Arterial Spurts | On | Bad wounds and stumps pump blood in pulsing jets. |
+| Gore Sounds | On | Wet crunches and the weapon-specific impact sounds. |
+| Persistence | 180 s | How long blood stays at Medium before fading (scaled by Gore Level). |
+| Max Blood Decals | 1500 | Cap on splats and puddle cells; the oldest go first. |
+| Wall Splatter | On | Blood sticks to walls and runs down ledges. |
+| Bloody Footprints | On | Anything walking through a puddle leaves footprints. |
+| Rain Washes Blood | On | Rain fades blood much faster. Blood in water always disperses. |
+| Scrub Blood | On | Hold a sponge, wet sponge or brush and hold use on blood to wipe it away. Sneak to use the item normally. |
+| Fluid Cells/Tick | 64 | Fluid simulation budget per tick. Lower it on a weak CPU. |
 | Max Droplets | 600 | Cap on flying droplets. |
-| Part Lifetime | 60 s | How long severed parts stay at Medium (scaled by gore level). |
-| Max Severed Parts | 32 | Cap on parts lying around; oldest removed first. |
+| Part Lifetime | 60 s | How long severed parts stay at Medium (scaled by Gore Level). |
+| Max Severed Parts | 32 | Cap on loose parts; the oldest go first. |
+| Play With Parts | On | Punch severed parts, pick them up and throw them, kick them by walking into them, stomp them flat. |
+| Wounds | On | The hit-zone and wound system described above. |
+| Wounds on Monsters | Off | Wounds on hostile mobs too. |
+| Wounds on Players | Off | Wounds on other players, on your screen only. |
+| Suffering | Medium | Screams, trembling, death throes and herd panic, separate from Gore Level. Off disables it. |
+| Scream Volume | 100% | Also follows the Friendly Creatures volume. |
+| Max Screams | 8 | Sounds playing at once; background whimpers and bellows are dropped first. |
+| Herd Panic | On | Animals near a slaughter tremble and bellow. |
+| Personalities | On | Every animal has its own voice, nerve and way of dying. |
+| Ecology | On | Animals remember killing and react by role: prey, herds, mothers, predators, flies. |
+| Death Launch | 100% | How hard the killing blow throws a body. 0 turns it off. |
+| Body Lingers | 45 s | How long a body stays after its death throes. |
 
-| Play With Parts | On | Punch severed parts (attack), pick up / throw them (use), kick them by walking into them, stomp them flat by landing on them. |
-| Suffering | Medium | Animal Suffering intensity, independent of Gore Level. Off disables it. |
-| Scream Volume | 100% | Screams, whimpers and bellows. Also follows the Friendly Creatures volume. |
-| Max Screams | 8 | Sounds playing at once; background whimpers/bellows are dropped first. |
-| Herd Panic | On | Animals near a slaughter tremble and bellow; more killing nearby = worse panic. |
+Only in `config/fluidgore.json`:
 
-### Animal Suffering (1.1)
-
-This applies to farm animals: cows, mooshrooms, pigs, sheep, chickens, goats, horses, donkeys, mules, llamas, camels
-and rabbits. The list is `sufferingAnimals` in the config.
-
-- **Screams.** Built from each animal's own vanilla sounds, which are pitch-bent, layered and re-triggered into
-  screams, whimpers, gurgles and panicked bellows. No new audio files.
-- **Every hit.** A scream, plus a flinch with the head thrown around and legs kicking.
-- **Badly wounded (under 30% health).** Constant trembling and whimpering.
-- **Missing a part.**
-  - Legless animals sag, tilt towards the missing leg and stagger.
-  - Headless animals shake silently while the neck spurts blood with each heartbeat.
-- **Death throes depend on how it died.**
-  - **Quick:** one clean heavy blow gives a short spasm and a cut-off cry.
-  - **Normal:** a scream, then kicking that dies away.
-  - **Brutal:** beaten with bare hands, hit five or more times, or a long fight. A long wail that sags into
-    gurgles, and kicking broken by sudden spasms for up to about 20 seconds at Extreme.
-  - **Beheaded:** the body keeps running blindly for a few seconds while blood pumps from the neck, then collapses
-    and twitches.
-- **The body stays after death.** The body stays visible after the server removes the entity until its throes
-  are over, then vanishes in the usual puff.
-- **Herd panic.** Animals near a slaughter tremble, look around wildly and bellow. Fear builds with every kill nearby.
-- **Severed heads.** They twitch and let out a few weak moans.
-
-Everything is client-side: animals still move exactly as the server says. Vanilla animals already run when hit.
-Only how they look and sound changes, except for the body after death, which belongs to your client.
-
-You can only change these in `fluidgore.json`:
-
+- `sufferingAnimals`: which animals scream and get death throes (farm animals, horses, llamas, camels, rabbits,
+  wolves, foxes, cats). Deleting the entry restores the defaults.
+- `boneEntities`: bony mobs that crack instead of bleeding (skeletons, strays, wither skeletons, bogged, parched,
+  skeleton horses).
+- `bloodlessEntities`: entities that never bleed (golems, armor stands, blazes, ...).
+- `bladedItems`: what counts as a blade, as item ids (`minecraft:iron_sword`) or tags (`#minecraft:swords`). Default:
+  all swords and axes.
+- `cleaningItems`: what scrubs blood.
 - `heavyHitDamage` (6.0): a non-lethal hit this strong can cut a part off a mob, which keeps walking without it.
-  Players only lose parts when they die.
-- `bladedItems`: what counts as a blade. Item ids (`minecraft:iron_sword`) or tags (`#minecraft:swords`). Default: all swords and axes.
-- `bloodlessEntities`: entity ids that never bleed (skeletons, golems, armor stands, blazes, ...).
 
 ## How it works
 
-- **Damage detection.** Vanilla servers already send a damage event (attacker and source) and the synced health of
-  every living entity. The mod pairs the two: the health drop gives the amount and the damage event gives the attacker.
-- **Blood.** Droplets fly with gravity and ray-cast against block collision shapes. A droplet that hits a floor leaves
-  a splat and adds volume to a puddle. One that hits a wall leaves a splat and sometimes a run.
-- **Fluid.** Each puddle is a per-block cell with a volume. Volume flows to lower neighbours by "head" (surface height
-  plus depth), so blood runs down steps, spreads and thins on flat ground, and pools in dips. At a ledge it drips off as
-  droplets. Only cells that changed are simulated, within a fixed per-tick budget. Puddles darken, shrink and fade as
-  they dry.
-- **Decals** follow stairs and slabs: they are cut into half-block pieces, each placed on the real surface height. Each
-  sits a tiny, unique distance above the surface, which prevents z-fighting.
-- **Dismemberment.** On a qualifying sword or axe hit, the part is copied from the entity's own model and drawn with
-  the entity's own texture (players use their skin). The copy is simulated as a tumbling rigid body that bounces and
-  settles flat. The entity's model hides that part from then on, including during the death animation.
-- **Cleanup.** Effects are removed on chunk unload, dimension change or disconnect, when the entity unloads, and when
-  you set Off.
+- **No server needed.** Vanilla servers already send a damage event (who hit whom) and every entity's health. The
+  mod pairs the two to see each hit. When you swing, it records where your aim met the model at that moment (the
+  damage packet arrives a tick later, after knockback has moved the legs).
+- **Hit zones.** The ray is tested against the cubes of the entity's own model, posed exactly as it is drawn this
+  frame, so it works for any mob built from model parts, modded ones included.
+- **Wounds** are stored in each model part's own space and drawn right after the model, inside the same part
+  transforms, so they follow the animation without any extra work.
+- **Fluid.** Each puddle is a per-block cell with a volume that flows to lower neighbours, within a fixed per-tick
+  budget. Decals are cut into pieces that sit on the real surface heights of stairs and slabs.
+- **Bodies** are small physics systems (gravity, block collision, toppling, springy joints, weight from body size)
+  that keep going after the server has removed the entity.
 
 ## Building from source
 
-Needs a **JDK 25**.
+Needs **JDK 25**.
 
 ```
-gradlew build              # jar in build/libs/fluidgore-1.0.0.jar
-gradlew runClient          # dev client
-gradlew runClientGameTest  # automated in-game test (singleplayer + dedicated server), screenshots in build/run/clientGameTest/screenshots
+./gradlew build              # jar in build/libs/
+./gradlew runClient          # development client
+./gradlew runClientGameTest  # automated in-game test, singleplayer and dedicated server
 ```
 
-`tools/GenerateTextures.java` regenerates the procedural textures:
+The game test plays through the mod (kills, wounds, severing, babies, fluid flow, settings screens) and saves
+screenshots to `build/run/clientGameTest/screenshots`. Textures are generated, not drawn:
 `java tools/GenerateTextures.java src/main/resources/assets/fluidgore`.
 
 ## Known limitations
 
-- An item held in a severed hand still renders where the hand was, because held items aren't part of the arm model.
-- Mobs with unusual models (slimes, fish, ghasts...) have no matching head, arm or leg parts. They bleed but don't
-  lose parts.
-- Decals are axis-aligned squares with 8 orientations, not freely rotated, so they never sample outside their texture.
+- An item held in a severed hand still renders where the hand was.
+- Mobs with unusual models (slimes, fish, ghasts) bleed but have no parts to lose.
+- Not yet verified with an Iris shader pack enabled.
+
+## License
+
+[MIT](LICENSE)

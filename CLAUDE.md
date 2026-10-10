@@ -121,3 +121,7 @@ severable parts; severed heads can't blink.
 - **1.3.0**: bone bodies (skeletons chip and shatter), hitting bodies after death, death launch, per-animal
   personalities, scrubbing blood, and the hack model (Slaughterhouse stage 1): blows land on the exact spot of the
   model and open wounds that deepen through bruise, gash, meat and bone; targeted severing, stumps, dripping wounds.
+- **1.4.0**: weapon/flesh hit sounds and directional blood (`wound/HitFeedback`), wounds and cut faces on severed
+  pieces, ragdoll `heft` from body size, and the baby/variant fix: `ModelParts.pose` uses the model each entity was
+  really drawn with (recorded in `LivingEntityRendererMixin` at `submit` HEAD), never `renderer.getModel()` alone.
+  Public docs: README, CHANGELOG, `docs/images`, CI in `.github/workflows/build.yml`.
