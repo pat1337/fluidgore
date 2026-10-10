@@ -84,6 +84,7 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 				OptionInstance.createBoolean("fluidgore.option.herd_panic", c.herdPanic, v -> c.herdPanic = v),
 				OptionInstance.createBoolean("fluidgore.option.personality", c.personality, v -> c.personality = v),
 				OptionInstance.createBoolean("fluidgore.option.ecology", c.ecology, v -> c.ecology = v),
+				scaledSlider("fluidgore.option.grief", 0, 60, 30, c.griefSeconds, "fluidgore.unit.seconds", v -> c.griefSeconds = v),
 				scaledSlider("fluidgore.option.death_launch", 0, 30, 10, c.deathLaunchPercent, "fluidgore.unit.percent", v -> c.deathLaunchPercent = v),
 				scaledSlider("fluidgore.option.corpse_linger", 1, 120, 5, c.corpseLingerSeconds, "fluidgore.unit.seconds", v -> c.corpseLingerSeconds = v)
 		);

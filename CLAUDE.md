@@ -125,3 +125,6 @@ severable parts; severed heads can't blink.
   pieces, ragdoll `heft` from body size, and the baby/variant fix: `ModelParts.pose` uses the model each entity was
   really drawn with (recorded in `LivingEntityRendererMixin` at `submit` HEAD), never `renderer.getModel()` alone.
   Public docs: README, CHANGELOG, `docs/images`, CI in `.github/workflows/build.yml`.
+- **1.5.0**: `suffer/Bereavement`: mother and young (nearest grown/young animal of the same kind within 24 blocks).
+  Calf cries and the mother answers (`ScreamManager.call` with delay), dying calves `weakCall`, survivors `grieve`
+  for `griefSeconds`, pose turned to where it happened. Game test: `grief`.

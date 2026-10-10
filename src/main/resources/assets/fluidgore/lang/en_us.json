@@ -71,6 +71,8 @@
 	"fluidgore.option.personality": "Personalities",
 	"fluidgore.option.personality.tooltip": "Every animal has its own voice, nerve and way of dying, fixed by its species and identity. Two cows never scream or die alike: some bolt, some go down slowly, some fold over the wound.",
 	"fluidgore.option.ecology": "Ecology",
+	"fluidgore.option.grief": "Grief",
+	"fluidgore.option.grief.tooltip": "A calf cries for its mother when it is hurt, and she answers. Kill a young animal and its mother grieves: head hung, turned to where it happened, calling for it again and again long after the body is gone, less often as time passes. Kill a mother and her young calls for her. This sets how long it lasts at Medium suffering. 0 turns it off. Needs Ecology.",
 	"fluidgore.option.ecology.tooltip": "Animals remember killing during the session. Survivors cower and stand over bodies, mothers and young call for each other, predators take interest in fresh blood, and bodies draw flies. Pose, sound and particles only.",
 	"fluidgore.option.death_launch": "Death Launch",
 	"fluidgore.option.death_launch.tooltip": "How hard the killing blow throws a body in the direction it was struck. 0% turns it off.",

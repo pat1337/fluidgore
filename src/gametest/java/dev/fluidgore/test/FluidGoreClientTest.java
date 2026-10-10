@@ -50,6 +50,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			suffering(context, singleplayer.getServer());
 			hackModel(context, singleplayer.getServer());
 			babies(context, singleplayer.getServer());
+			grief(context, singleplayer.getServer());
 		}
 
 		screens(context);
@@ -636,6 +637,62 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		context.waitTicks(5);
 		context.takeScreenshot("baby_02_beheaded");
 		server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");
+	}
+
+	/**
+	 * Mother and young: a hurt calf must make its mother answer and turn to it; a killed calf must leave her grieving,
+	 * head hung towards where it died; and a killed mother must leave her calf grieving too.
+	 */
+	private static void grief(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("tp @a 40.5 -60 0.5 0 15");
+		// Let the bodies from before finish, so none of them bonds with the new cows.
+		context.waitTicks(20);
+		context.runOnClient(mc -> GoreSystems.suffering().clear());
+		server.runCommand("summon minecraft:cow 43.5 -60 8.5 {NoAI:1b,Rotation:[0f,0f],Tags:[\"mother\"]}");
+		server.runCommand("summon minecraft:cow 40.5 -60 4.5 {NoAI:1b,Age:-24000,Rotation:[180f,0f],Tags:[\"calf\"]}");
+		server.runCommand("summon minecraft:cow 30.5 -60 12.5 {NoAI:1b,Rotation:[0f,0f],Tags:[\"other_mother\"]}");
+		server.runCommand("summon minecraft:cow 30.5 -60 15.5 {NoAI:1b,Age:-24000,Rotation:[0f,0f],Tags:[\"orphan\"]}");
+		context.waitTicks(20);
+		int[] ids = context.computeOnClient(mc -> {
+			int[] found = {-1, -1, -1, -1};
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e instanceof net.minecraft.world.entity.animal.cow.Cow cow) {
+					int slot = (cow.getX() > 35 ? 0 : 2) + (cow.isBaby() ? 1 : 0);
+					found[slot] = e.getId();
+				}
+			}
+
+			return found;
+		});
+		int mother = ids[0];
+		int calf = ids[1];
+		int otherMother = ids[2];
+		int otherCalf = ids[3];
+		check(mother >= 0 && calf >= 0 && otherMother >= 0 && otherCalf >= 0, "grief test cows not found: " + java.util.Arrays.toString(ids));
+
+		int before = context.computeOnClient(mc -> GoreSystems.suffering().screams().totalPlayed());
+		server.runCommand("execute as @p run damage @e[tag=calf,limit=1] 2 minecraft:player_attack by @s");
+		context.waitTicks(25);
+		float alarm = context.computeOnClient(mc -> GoreSystems.suffering().fear(mother));
+		int calls = context.computeOnClient(mc -> GoreSystems.suffering().screams().totalPlayed()) - before;
+		System.out.println("[FluidGoreTest] calf hurt: mother fear " + alarm + ", sounds " + calls);
+		check(alarm > 0.5F, "the mother did not react to her calf being hurt: fear " + alarm);
+		context.takeScreenshot("grief_01_mother_turns");
+
+		server.runCommand("execute as @p run damage @e[tag=calf,limit=1] 100 minecraft:player_attack by @s");
+		server.runCommand("execute as @p run damage @e[tag=other_mother,limit=1] 100 minecraft:player_attack by @s");
+		context.waitTicks(400);
+		String grief = context.computeOnClient(mc -> {
+			var pose = GoreSystems.suffering().pose(mother);
+			return GoreSystems.suffering().grieving(mother) + " " + GoreSystems.suffering().grieving(otherCalf) + " " + (pose == null ? 0.0F : pose.headDip());
+		});
+		System.out.println("[FluidGoreTest] after the killings: mother grieving, orphan grieving, mother head dip: " + grief);
+		String[] g = grief.split(" ");
+		check(g[0].equals("true"), "the mother does not grieve for her killed calf");
+		check(g[1].equals("true"), "the calf does not grieve for its killed mother");
+		check(Float.parseFloat(g[2]) > 0.3F, "the grieving mother does not hang her head: " + g[2]);
+		context.takeScreenshot("grief_02_mother_grieving");
 	}
 
 	private static void aimAt(net.minecraft.client.Minecraft mc, double x, double y, double z) {

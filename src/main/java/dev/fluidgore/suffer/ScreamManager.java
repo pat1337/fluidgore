@@ -114,10 +114,40 @@ public final class ScreamManager {
 
 	/** A mother calling for her young, or a young animal calling for its mother. */
 	public void call(Supplier<Vec3> at, Voice voice, boolean young, float urgency) {
+		call(at, voice, young, urgency, 0);
+	}
+
+	/** {@link #call} starting {@code delay} ticks from now: an answer, a moment after the cry it answers. */
+	public void call(Supplier<Vec3> at, Voice voice, boolean young, float urgency, int delay) {
 		float pitch = (young ? 1.75F : 0.95F) + random.nextFloat() * 0.1F;
 		float volume = 0.6F + 0.4F * urgency;
-		clip(voice.self(), 0, LOW, voice.ambient(), at, pitch, pitch + 0.15F, 0.08F, 1.0F, volume, 0.3F, 20);
-		clip(voice.self(), 9 + random.nextInt(4), LOW, voice.ambient(), at, pitch + 0.1F, pitch - 0.2F, 0.1F, 1.3F, volume * 0.85F, 0.5F, 22);
+		int priority = urgency >= 0.9F ? HIGH : LOW;
+		clip(voice.self(), delay, priority, voice.ambient(), at, pitch, pitch + 0.15F, 0.08F, 1.0F, volume, 0.3F, 20);
+		clip(voice.self(), delay + 9 + random.nextInt(4), priority, voice.ambient(), at, pitch + 0.1F, pitch - 0.2F, 0.1F, 1.3F, volume * 0.85F, 0.5F, 22);
+	}
+
+	/**
+	 * A dying young animal still calling for its mother: thin, shaking and quieter each time, the pitch sinking as it
+	 * runs out of breath. {@code strength} 1 = first calls, 0 = the last.
+	 */
+	public void weakCall(Supplier<Vec3> at, Voice voice, float strength) {
+		float pitch = 1.45F + 0.3F * strength + random.nextFloat() * 0.05F;
+		float volume = 0.2F + 0.45F * strength;
+		clip(voice.self(), 0, HIGH, voice.ambient(), at, pitch, pitch - 0.35F, 0.12F + 0.1F * (1.0F - strength), 1.8F, volume, 0.6F, 24);
+	}
+
+	/**
+	 * A mother whose young was killed (or a young animal whose mother was): a long low call that breaks in the middle
+	 * and trails off. {@code strength} fades over the grief, so the calls get quieter as well as rarer.
+	 */
+	public void grieve(Supplier<Vec3> at, Voice voice, float strength, boolean young) {
+		float base = young ? 1.6F : 0.8F;
+		float volume = 0.45F + 0.6F * strength;
+		int priority = strength > 0.6F ? HIGH : LOW;
+		clip(voice.self(), 0, priority, voice.ambient(), at, base, base - 0.08F, 0.05F, 0.7F, volume, 0.4F, 32);
+		// The crack: a higher, broken note, then sinking.
+		clip(voice.self(), 14 + random.nextInt(4), priority, voice.ambient(), at, base * 1.3F, base * 0.85F, 0.16F, 2.2F, volume * 0.8F, 0.6F, 28);
+		clip(voice.self(), 34 + random.nextInt(6), priority, voice.ambient(), at, base * 0.9F, base * 0.72F, 0.06F, 0.6F, volume * 0.55F, 0.8F, 34);
 	}
 
 	/** The drone of flies over a body that has been lying a while. */

@@ -77,6 +77,11 @@ public final class GoreConfig {
 	 * take interest, and bodies draw flies. Pose, sound and particles only.
 	 */
 	public boolean ecology = true;
+	/**
+	 * How long a mother grieves for her killed young (or a young animal for its killed mother), in seconds at Medium
+	 * suffering. It calls to the place it happened, less and less often. 0 turns grief off. Needs {@link #ecology}.
+	 */
+	public int griefSeconds = 600;
 	/** How long a body stays on the ground after its death throes, in seconds. */
 	public int corpseLingerSeconds = 45;
 	/**
@@ -189,6 +194,7 @@ public final class GoreConfig {
 		screamVolume = clamp(screamVolume, 0, 200);
 		maxScreams = clamp(maxScreams, 1, 32);
 		corpseLingerSeconds = clamp(corpseLingerSeconds, 3, 600);
+		griefSeconds = clamp(griefSeconds, 0, 3600);
 		if (sufferingAnimals == null) sufferingAnimals = new ArrayList<>();
 		if (bladedItems == null) bladedItems = new ArrayList<>();
 		deathLaunchPercent = clamp(deathLaunchPercent, 0, 300);

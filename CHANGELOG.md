@@ -2,6 +2,17 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.5.0]
+
+### Added
+- Mothers and their young. A hurt calf cries for its mother and she answers, turning to it, shaking. A dying calf
+  keeps calling for her, weaker each time. Afterwards she grieves for minutes: head hung, turned to where it
+  happened, calling in a long, breaking call that goes on after the body is gone and fades slowly. A calf whose
+  mother is killed calls for her the same way. Works for every animal in `sufferingAnimals`.
+- Killing the young leaves the herd's fear raised far longer than killing a grown animal, and a small body lies
+  where it fell longer.
+- Setting: Grief (seconds, 0 turns it off).
+
 ## [1.4.0]
 
 ### Added

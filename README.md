@@ -46,6 +46,16 @@ after death. Open wounds drip, so a wounded animal leaves a trail.
 
 ![A beheaded cow still running](docs/images/headless-run.png)
 
+### Mothers and their young
+Hurt a calf and it cries for its mother, and she answers: her head comes up and turns to the cries, and she shakes.
+A dying calf keeps calling for her, thinner and weaker each time, until its last breath. Then there is a moment of
+silence, and she starts to call.
+
+She grieves for minutes, not seconds: head hung, turned to where it happened, calling to it again and again in a long
+low call that breaks in the middle. She goes on long after the body is gone, less often and more quietly as time
+passes. Kill a mother and her calf is left calling for her. Killing the young weighs on the whole herd far longer
+than killing a grown animal.
+
 ### The herd responds
 No messages and no lectures; the world responds. Animals near a slaughter tremble, look around wildly and bellow, and
 it gets worse with every kill. They remember for the session: survivors cower, keep their distance and stand over
@@ -104,6 +114,7 @@ Tested alongside Sodium, Iris (without a shader pack), Lithium, FerriteCore, Ent
 | Herd Panic | On | Animals near a slaughter tremble and bellow. |
 | Personalities | On | Every animal has its own voice, nerve and way of dying. |
 | Ecology | On | Animals remember killing and react by role: prey, herds, mothers, predators, flies. |
+| Grief | 600 s | How long a mother grieves for her killed young (and a young animal for its mother), at Medium suffering. 0 turns it off. |
 | Death Launch | 100% | How hard the killing blow throws a body. 0 turns it off. |
 | Body Lingers | 45 s | How long a body stays after its death throes. |
 
@@ -143,7 +154,7 @@ Needs **JDK 25**.
 ./gradlew runClientGameTest  # automated in-game test, singleplayer and dedicated server
 ```
 
-The game test plays through the mod (kills, wounds, severing, babies, fluid flow, settings screens) and saves
+The game test plays through the mod (kills, wounds, severing, babies, grief, fluid flow, settings screens) and saves
 screenshots to `build/run/clientGameTest/screenshots`. Textures are generated, not drawn:
 `java tools/GenerateTextures.java src/main/resources/assets/fluidgore`.
 

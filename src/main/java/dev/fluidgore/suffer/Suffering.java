@@ -67,6 +67,11 @@ public final class Suffering {
 		int nextCall;
 		/** One more hit would finish it: the last health is draining and it is already on its way down. */
 		boolean dying;
+		/** Next grieving call, for an animal whose young or mother was killed. */
+		int nextGrief;
+		/** Its young is being hurt: where, and until when it stays alarmed. */
+		@Nullable Vec3 alarmAt;
+		int alarmUntil;
 	}
 
 	/** Something terrible happened here: makes nearby animals of the same kind panic for a while. */
@@ -80,6 +85,7 @@ public final class Suffering {
 	private final List<Terror> terror = new ArrayList<>();
 	/** What each species has seen in this world: raised by every killing, fading slowly. */
 	private final Object2FloatOpenHashMap<EntityType<?>> dread = new Object2FloatOpenHashMap<>();
+	private final Bereavement bereavement = new Bereavement();
 	private final RandomSource random = RandomSource.create();
 	private List<String> cachedAnimalSource;
 	private final Set<Identifier> animals = new HashSet<>();
@@ -95,6 +101,11 @@ public final class Suffering {
 
 	public @Nullable Corpse corpse(int entityId) {
 		return corpses.get(entityId);
+	}
+
+	/** True while this animal grieves for its killed young (or its killed mother). */
+	public boolean grieving(int entityId) {
+		return bereavement.of(entityId) != null;
 	}
 
 	public float fear(int entityId) {
@@ -164,10 +175,16 @@ public final class Suffering {
 		}
 
 		state.thrashTicks = 14;
-		terror.add(new Terror(entity.position(), entity.getType(), lethal ? 3.0F : 1.0F, tick));
-		dread.put(entity.getType(), Math.min(1.0F, dread.getFloat(entity.getType()) + (lethal ? 0.1F : 0.01F)));
+		// Killing the young weighs on the herd far longer than killing a grown animal.
+		boolean young = entity.isBaby();
+		terror.add(new Terror(entity.position(), entity.getType(), lethal ? (young ? 5.0F : 3.0F) : 1.0F, tick));
+		dread.put(entity.getType(), Math.min(1.0F, dread.getFloat(entity.getType()) + (lethal ? (young ? 0.25F : 0.1F) : 0.01F)));
 
 		boolean headless = (GoreSystems.dismemberment().missingMask(entity.getId()) & BodyPart.HEAD.bit()) != 0;
+		if (young && !headless && GoreConfig.get().ecology) {
+			cryForMother(level, entity, state);
+		}
+
 		if (!lethal) {
 			// The second-to-last blow: from here on it staggers and bleeds its way down.
 			state.dying = entity.getHealth() <= Math.max(damage, entity.getMaxHealth() * 0.25F);
@@ -178,10 +195,23 @@ public final class Suffering {
 			return;
 		}
 
-		startDeath(entity, state, damage, headless, strike);
+		startDeath(level, entity, state, damage, headless, strike);
 	}
 
-	private void startDeath(LivingEntity entity, State state, float lastBlow, boolean headless, @Nullable Vec3 strike) {
+	/** A young animal is hurt: it cries for its mother, and she answers, turns to it and is beside herself. */
+	private void cryForMother(ClientLevel level, LivingEntity young, State state) {
+		screams.call(follow(young), state.voice, true, 1.0F);
+		LivingEntity mother = Bereavement.kinOf(level, young);
+		if (mother != null) {
+			State hers = state(mother);
+			hers.fear = Math.max(hers.fear, 0.8F);
+			hers.alarmAt = young.position();
+			hers.alarmUntil = tick + 120;
+			screams.call(follow(mother), hers.voice, false, 1.0F, 10 + random.nextInt(6));
+		}
+	}
+
+	private void startDeath(ClientLevel level, LivingEntity entity, State state, float lastBlow, boolean headless, @Nullable Vec3 strike) {
 		if (corpses.containsKey(entity.getId())) {
 			return;
 		}
@@ -238,7 +268,8 @@ public final class Suffering {
 		}
 
 		throes = Math.max(20, Math.round(throes * intensity * self.endurance()));
-		int linger = GoreConfig.get().corpseLingerSeconds * 20;
+		// A small body is left lying longer.
+		int linger = GoreConfig.get().corpseLingerSeconds * 20 * (entity.isBaby() ? 3 : 2) / 2;
 		Corpse corpse = new Corpse(entity, kind, state.voice, run, throes, linger, random.nextFloat() * 100.0F);
 		corpses.put(entity.getId(), corpse);
 		evictOldCorpses();
@@ -262,6 +293,16 @@ public final class Suffering {
 		if (length >= 0.0F) {
 			screams.death(follow(entity), state.voice, intensity, length);
 		}
+
+		GoreConfig config = GoreConfig.get();
+		if (config.ecology) {
+			int grief = Math.round(config.griefSeconds * 20 * config.sufferingLevel.duration);
+			LivingEntity kin = bereavement.onDeath(level, entity, tick, grief);
+			if (kin != null) {
+				// A moment of silence, then the first call.
+				state(kin).nextGrief = tick + 30 + random.nextInt(20);
+			}
+		}
 	}
 
 	private void evictOldCorpses() {
@@ -282,6 +323,7 @@ public final class Suffering {
 	public void tick(ClientLevel level) {
 		tick++;
 		screams.tick();
+		bereavement.tick(tick);
 		terror.removeIf(t -> tick - t.tick() > TERROR_MEMORY);
 		dread.replaceAll((type, value) -> Math.max(0.0F, value - DREAD_FADE));
 		poses.clear();
@@ -322,7 +364,8 @@ public final class Suffering {
 		Corpse near = ecology && !corpses.isEmpty() ? nearestCorpse(entity) : null;
 
 		State state = states.get(entity.getId());
-		if (state == null && !wounded && mask == 0 && panic < 0.01F && memory < 0.12F && near == null) {
+		Bereavement.Grief grief = ecology ? bereavement.of(entity.getId()) : null;
+		if (state == null && !wounded && mask == 0 && panic < 0.01F && memory < 0.12F && near == null && grief == null) {
 			return;
 		}
 
@@ -333,6 +376,16 @@ public final class Suffering {
 
 		// Predators are drawn to a kill, not frightened by it; a mother whose young lies dead is beside herself.
 		float target = predator ? 0.0F : Math.max(panic, memory * 0.55F);
+		float sorrow = grief != null ? grief.strength(tick) : 0.0F;
+		boolean alarmed = state.alarmAt != null && tick < state.alarmUntil;
+		if (grief != null) {
+			target = Math.max(target, 0.35F + 0.5F * sorrow);
+		}
+
+		if (alarmed) {
+			target = Math.max(target, 0.8F);
+		}
+
 		if (kin && !entity.isBaby()) {
 			target = Math.max(target, 0.8F);
 		}
@@ -401,6 +454,14 @@ public final class Suffering {
 			}
 		}
 
+		// Its young being hurt: head up, turned to the cries. Grieving: head hung, turned to where it happened.
+		Vec3 toward = alarmed ? state.alarmAt : grief != null ? grief.where() : null;
+		if (toward != null && !predator && entity.distanceToSqr(toward) < 40.0 * 40.0 && near == null) {
+			lookYaw = lookToward(entity, toward.x, toward.z);
+			headDip = alarmed ? -0.25F : Math.max(headDip, 0.6F * sorrow);
+			tremble = Math.max(tremble, (alarmed ? 0.5F : 0.3F * sorrow) * self.shake());
+		}
+
 		SufferPose pose = new SufferPose(tremble, Math.min(1.0F, thrash), kick, 0.9F, tiltX, tiltZ, drop, stagger, headDip, lookYaw);
 		if (!pose.isIdle()) {
 			poses.put(entity.getId(), pose);
@@ -420,7 +481,11 @@ public final class Suffering {
 			state.nextWhimper = tick + Math.round((40 + random.nextInt(60)) / intensity);
 		}
 
-		if (kin && near.groundTicks() > 20 && tick >= state.nextCall) {
+		if (grief != null && tick >= state.nextGrief && state.nextGrief > 0) {
+			// Calls to the place it happened, again and again, further apart and quieter as the grief wears on.
+			screams.grieve(follow(entity), state.voice, sorrow, grief.orphan());
+			state.nextGrief = tick + Math.round((70 + random.nextInt(90)) / Math.max(0.12F, sorrow));
+		} else if (grief == null && kin && near.groundTicks() > 20 && tick >= state.nextCall) {
 			screams.call(follow(entity), state.voice, entity.isBaby(), state.fear);
 			state.nextCall = tick + 50 + random.nextInt(50);
 		}
@@ -577,7 +642,14 @@ public final class Suffering {
 			boolean voiced = c.kind != Corpse.Kind.HEADLESS_RUN && c.kind != Corpse.Kind.QUICK;
 			boolean breathes = voiced && (c.kind != Corpse.Kind.BRUTAL || ground > c.throeTicks / 2);
 			if (life > 0.0F && voiced && c.kind != Corpse.Kind.COLLAPSE && random.nextFloat() < 0.045F * envelope + 0.01F * life) {
-				screams.gurgle(follow(entity), c.voice, envelope);
+				if (entity.isBaby() && config.ecology) {
+					// A dying young animal still calls for its mother, weaker each time.
+					if (random.nextBoolean()) {
+						screams.weakCall(follow(entity), c.voice, envelope);
+					}
+				} else {
+					screams.gurgle(follow(entity), c.voice, envelope);
+				}
 			}
 
 			// Breaths get further apart, then there is one last long one.
@@ -771,5 +843,6 @@ public final class Suffering {
 		poses.clear();
 		terror.clear();
 		dread.clear();
+		bereavement.clear();
 	}
 }
