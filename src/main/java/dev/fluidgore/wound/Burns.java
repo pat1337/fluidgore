@@ -7,13 +7,14 @@ import dev.fluidgore.blood.SurfaceProbe;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.suffer.Corpse;
 import dev.fluidgore.trigger.EntityFilter;
+import dev.fluidgore.trigger.Fate;
 import it.unimi.dsi.fastutil.ints.Int2FloatMap;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
+import net.fabricmc.fabric.api.client.rendering.v1.RenderStateDataKey;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.fabricmc.fabric.api.client.rendering.v1.RenderStateDataKey;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -38,7 +39,7 @@ public final class Burns {
 	/** Ticks a body keeps smouldering after the fire on it has gone out. */
 	private static final int SMOULDER = 600;
 	private static final double RANGE_SQ = 64.0 * 64.0;
-	private static final RandomSource RANDOM = RandomSource.create();
+	private static final RandomSource RANDOM = Fate.stream("burns");
 
 	private final Int2FloatOpenHashMap charOf = new Int2FloatOpenHashMap();
 	/** Ticks since the entity was last on fire. */

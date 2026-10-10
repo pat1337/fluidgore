@@ -42,7 +42,7 @@ public final class DamageTracker {
 	/** Ticks to wait for a health update after a damage event before treating it as a light hit. */
 	private static final int PENDING_TIMEOUT = 4;
 	private static final double EFFECT_RANGE_SQ = 96.0 * 96.0;
-	private static final RandomSource RANDOM = RandomSource.create();
+	private static final RandomSource RANDOM = Fate.stream("tracker");
 
 	/**
 	 * @param explosion the hit was an explosion
@@ -120,7 +120,13 @@ public final class DamageTracker {
 				continue;
 			}
 
-			hurt(level, blood, dismemberment, suffering, living, damage, health <= 0.0F, hit);
+			// Seeded from what every client is told the same way, so everyone with the mod sees the same outcome.
+			Fate.begin(living, hit != null && hit.attackerId() >= 0 ? level.getEntity(hit.attackerId()) : null);
+			try {
+				hurt(level, blood, dismemberment, suffering, living, damage, health <= 0.0F, hit);
+			} finally {
+				Fate.end();
+			}
 		}
 
 		pending.int2ObjectEntrySet().removeIf(e -> tick - e.getValue().tick() > 100);

@@ -7,6 +7,7 @@ import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.trigger.EntityFilter;
+import dev.fluidgore.trigger.Fate;
 import dev.fluidgore.wound.HitFeedback;
 import dev.fluidgore.wound.Weapon;
 import dev.fluidgore.wound.Wounds;
@@ -36,7 +37,7 @@ import net.minecraft.world.phys.Vec3;
 public final class CorpseStrike {
 	private static final double REACH = 4.5;
 	private static final int COOLDOWN = 6;
-	private static final RandomSource RANDOM = RandomSource.create();
+	private static final RandomSource RANDOM = Fate.stream("corpseStrike");
 
 	private static int lastStrike = -100;
 

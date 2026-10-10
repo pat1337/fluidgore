@@ -4,6 +4,7 @@ import dev.fluidgore.config.BloodColor;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.config.GoreLevel;
 import dev.fluidgore.trigger.EntityFilter;
+import dev.fluidgore.trigger.Fate;
 import java.util.function.Supplier;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.particles.BlockParticleOption;
@@ -31,7 +32,7 @@ import org.jspecify.annotations.Nullable;
  * colour, crumbs of a matching block (redstone block for red blood) and bits of the animal's meat item.
  */
 public final class BloodEmitter {
-	private static final RandomSource RANDOM = RandomSource.create();
+	private static final RandomSource RANDOM = Fate.stream("blood");
 	private static final SoundEvent[] CRUNCH = {
 			SoundEvents.MUD_BREAK, SoundEvents.SLIME_BLOCK_BREAK, SoundEvents.HONEY_BLOCK_BREAK, SoundEvents.WART_BLOCK_BREAK
 	};

@@ -9,6 +9,7 @@ import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.suffer.Corpse;
 import dev.fluidgore.trigger.EntityFilter;
+import dev.fluidgore.trigger.Fate;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.fabricmc.fabric.api.client.rendering.v1.RenderStateDataKey;
@@ -35,7 +36,7 @@ public final class Wounds {
 	/** How long an attack click is remembered while waiting for the server to report the damage. */
 	private static final int AIM_TICKS = 10;
 	private static final double REACH = 8.0;
-	private static final RandomSource RANDOM = RandomSource.create();
+	private static final RandomSource RANDOM = Fate.stream("wounds");
 	/** Pitch and yaw offsets, in degrees, tried in order when another player's view ray misses the body. */
 	private static final float[][] VIEW_NUDGES = {{0, 0}, {2, 0}, {-2, 0}, {0, 2}, {0, -2}, {4, 0}, {-4, 0}, {0, 4}, {0, -4}};
 

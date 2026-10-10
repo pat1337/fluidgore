@@ -2,6 +2,7 @@ package dev.fluidgore.blood;
 
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.config.GoreLevel;
+import dev.fluidgore.trigger.Fate;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.DustParticleOptions;
@@ -27,7 +28,7 @@ public final class BoneEmitter {
 	/** Stands in for a blood colour wherever one is carried around: "this is bone, not blood". */
 	public static final int BONE = -1;
 	private static final int DUST = 0xE6E1CC;
-	private static final RandomSource RANDOM = RandomSource.create();
+	private static final RandomSource RANDOM = Fate.stream("bone");
 	private static final BlockParticleOption CRUMBS = new BlockParticleOption(ParticleTypes.BLOCK, Blocks.BONE_BLOCK.defaultBlockState());
 	private static final ItemParticleOption SHARD = new ItemParticleOption(ParticleTypes.ITEM, Items.BONE);
 	private static final ItemParticleOption POWDER = new ItemParticleOption(ParticleTypes.ITEM, Items.BONE_MEAL);

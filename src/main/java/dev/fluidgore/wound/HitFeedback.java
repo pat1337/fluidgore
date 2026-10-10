@@ -6,6 +6,7 @@ import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.blood.BoneEmitter;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.trigger.EntityFilter;
+import dev.fluidgore.trigger.Fate;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
@@ -21,7 +22,7 @@ import net.minecraft.world.phys.Vec3;
  * the blade cracks on it. Blood comes off the cut along the blow and out of the wound, as much as the weapon opens it.
  */
 public final class HitFeedback {
-	private static final RandomSource RANDOM = RandomSource.create();
+	private static final RandomSource RANDOM = Fate.stream("feedback");
 
 	private HitFeedback() {
 	}

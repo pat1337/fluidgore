@@ -6,6 +6,7 @@ import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.config.GoreLevel;
 import dev.fluidgore.suffer.Voice;
 import dev.fluidgore.trigger.EntityFilter;
+import dev.fluidgore.trigger.Fate;
 import dev.fluidgore.wound.Burns;
 import dev.fluidgore.wound.WoundSet;
 import dev.fluidgore.wound.Wounds;
@@ -38,7 +39,7 @@ public final class Dismemberment {
 	/** Bitmask of {@link BodyPart}s missing on the entity being rendered; attached to its render state. */
 	public static final RenderStateDataKey<Integer> MISSING_PARTS = RenderStateDataKey.create(() -> "fluidgore:missing_parts");
 
-	private static final RandomSource RANDOM = RandomSource.create();
+	private static final RandomSource RANDOM = Fate.stream("dismember");
 	/** Vanilla living-entity renderers shift the model down by this amount after flipping it. */
 	private static final float MODEL_Y_OFFSET = 1.501F;
 

@@ -2,6 +2,24 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.0]
+
+The multiplayer release: everyone on a server with the mod sees the same gore, still with nothing on the server.
+
+### Added
+- Shared dice. Every random choice a hit makes (wound depth, which part comes off, which of the deaths an animal dies,
+  how long it runs, how its body thrashes and whether it bursts at the end) is seeded from what the server tells every
+  client the same way: who was hit, who hit them, and their exact health afterwards. Two players watching the same
+  fight see the same wound, the same severed part and the same death. Mobs' and arrows' guessed hit spots match too.
+
+### Changed
+- Wounds on players are on by default, now that everyone sees the same ones. Existing configs are switched on once;
+  turn it off again under Settings if you prefer.
+
+### Fixed
+- The `deaths` game test sampled the broken-backed cow too late (screenshots between samples add ticks) and failed
+  most runs.
+
 ## [1.9.3]
 
 ### Fixed

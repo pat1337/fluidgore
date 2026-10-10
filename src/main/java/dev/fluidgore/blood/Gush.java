@@ -1,5 +1,6 @@
 package dev.fluidgore.blood;
 
+import dev.fluidgore.trigger.Fate;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -15,7 +16,7 @@ import net.minecraft.world.phys.Vec3;
  * followed by phases like a real bleed (see {@link #play}), all low, overlapping vanilla sounds.
  */
 public final class Gush {
-	private static final RandomSource RANDOM = RandomSource.create();
+	private static final RandomSource RANDOM = Fate.stream("gush");
 	private static final int MAX_QUEUED = 96;
 	private static final List<Pulse> QUEUE = new ArrayList<>();
 	private static final SoundEvent[] CLICK = {

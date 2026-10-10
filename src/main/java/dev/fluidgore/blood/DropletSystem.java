@@ -1,17 +1,18 @@
 package dev.fluidgore.blood;
 
 import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.trigger.Fate;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
-import net.minecraft.util.RandomSource;
 
 /**
  * Ballistic blood droplets. They fly under gravity and drag, ray-cast against block collision shapes each tick,
@@ -48,7 +49,7 @@ public final class DropletSystem {
 
 	private final BloodWorld world;
 	private final List<Droplet> droplets = new ArrayList<>();
-	private final RandomSource random = RandomSource.create();
+	private final RandomSource random = Fate.stream("droplets");
 
 	DropletSystem(BloodWorld world) {
 		this.world = world;

@@ -60,6 +60,10 @@ Mod Menu 21.0.0 (compile-only, soft dependency).
   `DemoPlayer.held`, hides command replies from chat). Needs cheats/op; nothing server-side.
 - `trigger/`: `DamageTracker` finds damage from synced health drops plus the damage-event packet (attacker), with
   no server mod needed. `EntityFilter` decides who bleeds, the blood colour, and which items count as bladed.
+  `Fate` (2.0) makes multiplayer agree: `DamageTracker` calls `Fate.begin(victim, attacker)` around each hit, which
+  reseeds every `Fate.stream(name)` from victim UUID + exact health after the hit + attacker UUID. **Any new random
+  choice that changes what a hit looks like must use a `Fate.stream`, not `RandomSource.create()`.** Things a body
+  does over time use `Corpse.random` (`Fate.body`), never a shared stream, since per-tick draws differ between clients.
 - `blood/`:
   - `BloodWorld` is the container.
   - `BloodEmitter` turns a hit into random wounds, droplets, redstone dust, chunks, spurts and crunch sounds.
@@ -168,3 +172,6 @@ severable parts; severed heads can't blink.
   `Giblets.thud` sounds are gated to 1 in 4.
 - **1.9.3**: other players' swings land where they looked (`Wounds.alongView`, synced view ray with small nudges)
   instead of a random guessed spot, so a head hit shows on the head for everyone with the mod.
+- **2.0.0**: multiplayer agreement with no server mod: `trigger/Fate` shared dice (see `trigger/`), `Corpse.random`
+  per-body throes dice, seeded death pop, `woundPlayers` on by default (`configVersion` 3). Game test: `sharedFate`
+  (same fight twice on a fixed-UUID cow must match). `deaths` test now samples the broken back at 70 ticks.

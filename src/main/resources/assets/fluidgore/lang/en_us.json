@@ -62,7 +62,7 @@
 	"fluidgore.option.wound_hostiles": "Wounds on Monsters",
 	"fluidgore.option.wound_hostiles.tooltip": "Show wounds on hostile mobs too: zombies tear, husks split open to a sickly ooze, skeletons scuff and crack.",
 	"fluidgore.option.wound_players": "Wounds on Players",
-	"fluidgore.option.wound_players.tooltip": "Show wounds on other players. Only you see them; nothing changes on the server.",
+	"fluidgore.option.wound_players.tooltip": "Show wounds on other players. Everyone with the mod sees the same wounds in the same places; nothing changes on the server.",
 
 	"fluidgore.header.suffering": "Animal Suffering",
 	"fluidgore.option.suffering_level": "Suffering",

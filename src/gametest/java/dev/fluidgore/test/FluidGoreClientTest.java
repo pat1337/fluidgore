@@ -49,6 +49,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			singleplayer.getConnection().waitForChunksRender();
 			suffering(context, singleplayer.getServer());
 			hackModel(context, singleplayer.getServer());
+			sharedFate(context, singleplayer.getServer());
 			babies(context, singleplayer.getServer());
 			grief(context, singleplayer.getServer());
 			weapons(context, singleplayer.getServer());
@@ -530,6 +531,70 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");
 	}
 
+	/**
+	 * Multiplayer without a server mod: every client must see the same outcome of the same hit. Two clients watching
+	 * one fight are two replays of the same facts (same victim UUID, same attacker, same health after each blow), so
+	 * the fight is played twice on a cow with a fixed UUID and both runs must match. The blows are aimed along the
+	 * player's view with no recorded click, the way another player's swings are resolved, so they must land on the head.
+	 */
+	private static void sharedFate(ClientGameTestContext context, TestServerContext server) {
+		String[] outcome = new String[2];
+		boolean[] onHead = new boolean[1];
+		for (int run = 0; run < 2; run++) {
+			server.runCommand("kill @e[type=!minecraft:player]");
+			context.waitTicks(40);
+			context.runOnClient(mc -> {
+				GoreSystems.blood().clear();
+				GoreSystems.dismemberment().clear();
+				GoreSystems.suffering().clear();
+			});
+			server.runCommand("tp @a 40.5 -60 0.5 0 15");
+			server.runCommand("item replace entity @a weapon.mainhand with minecraft:iron_sword");
+			server.runCommand("summon minecraft:cow 40.5 -60 2.5 {NoAI:1b,Rotation:[90f,0f],UUID:[I;1,2,3,4]}");
+			context.waitTicks(15);
+			int cowId = context.computeOnClient(mc -> {
+				for (Entity e : mc.level.entitiesForRendering()) {
+					if (e instanceof net.minecraft.world.entity.animal.cow.Cow) {
+						return e.getId();
+					}
+				}
+
+				return -1;
+			});
+			check(cowId >= 0, "shared-fate cow not found");
+			for (int blow = 0; blow < 4; blow++) {
+				context.runOnClient(mc -> {
+					var cow = (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(cowId);
+					var at = ModelHit.centre(cow, ModelParts.pose(cow), BodyPart.HEAD);
+					aimAt(mc, at.x, at.y, at.z);
+				});
+				server.runCommand("execute as @p run damage @e[type=minecraft:cow,limit=1] " + (blow < 3 ? 2 : 100) + " minecraft:player_attack by @s");
+				context.waitTicks(blow < 3 ? 15 : 40);
+			}
+
+			int r = run;
+			context.runOnClient(mc -> {
+				var set = GoreSystems.dismemberment().wounds().get(cowId);
+				var corpse = GoreSystems.suffering().corpse(cowId);
+				StringBuilder s = new StringBuilder(set == null ? "no wounds" : set.count() + " wounds");
+				for (BodyPart part : BodyPart.values()) {
+					s.append(' ').append(part).append('=').append(set == null ? 0.0F : set.severity(part));
+				}
+
+				s.append(" missing=").append(GoreSystems.dismemberment().missingMask(cowId));
+				s.append(corpse == null ? " no body" : " body=" + corpse.kind + " run=" + corpse.runTicks + " throes=" + corpse.throeTicks + " pops=" + corpse.pops);
+				outcome[r] = s.toString();
+				onHead[0] = set != null && set.severity(BodyPart.HEAD) > 0.0F || (GoreSystems.dismemberment().missingMask(cowId) & BodyPart.HEAD.bit()) != 0;
+			});
+			System.out.println("[FluidGoreTest] shared fate run " + run + ": " + outcome[run]);
+		}
+
+		check(onHead[0],
+				"a blow along the player's view did not land on the head: " + outcome[0]);
+		check(outcome[0].equals(outcome[1]), "the same fight came out differently: " + outcome[0] + " vs " + outcome[1]);
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");
+	}
+
 	/** The head, or for babies without one (a chick is a single block) the first part the model has. */
 	private static BodyPart severable(net.minecraft.world.entity.LivingEntity entity) {
 		var parts = ModelParts.index(ModelParts.pose(entity).model());
@@ -1001,7 +1066,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 				return "gone";
 			}
 
-			return c.kind + " upright=" + c.upright() + " pops=" + c.pops + " moved=" + String.format("%.2f", Math.hypot(c.position().x - start[i][0], c.position().z - start[i][1]))
+			return c.kind + " age=" + c.age + " run=" + c.runTicks + " upright=" + c.upright() + " pops=" + c.pops + " moved=" + String.format("%.2f", Math.hypot(c.position().x - start[i][0], c.position().z - start[i][1]))
 					+ " turned=" + String.format("%.0f", c.yaw() - start[i][2]) + " roll=" + String.format("%.2f", c.body.roll(1.0F));
 		});
 
@@ -1042,10 +1107,12 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		}
 
 		// Measured from 25 ticks on, once the knock of the killing blow is spent: the stunned cow lies where it dropped;
-		// the broken-backed one is still up at 130 ticks and has dragged itself along.
+		// the broken-backed one is still up at the 70-tick sample and has dragged itself along. (The samples are later than
+		// their names: every screenshot and teleport between them costs ticks, so "130" is about 210 ticks after death,
+		// past the 169-tick earliest collapse of a broken back at Extreme.)
 		check(seen.get(1)[1].contains("upright=false") && Math.abs(value(seen.get(1)[1], "moved") - value(seen.get(0)[1], "moved")) < 0.3,
 				"the stunned cow did not drop where it stood: " + seen.get(0)[1] + " -> " + seen.get(1)[1]);
-		check(seen.get(2)[4].contains("upright=true"), "the broken-backed cow went over too soon: " + seen.get(2)[4]);
+		check(seen.get(1)[4].contains("upright=true"), "the broken-backed cow went over too soon: " + seen.get(1)[4]);
 		check(value(seen.get(2)[4], "moved") - value(seen.get(0)[4], "moved") > 0.4, "the broken-backed cow did not drag itself: " + seen.get(0)[4] + " -> " + seen.get(2)[4]);
 		check(Math.abs(value(seen.get(1)[6], "turned")) > 150.0, "the brain-hurt cow did not walk in circles: " + seen.get(1)[6]);
 		check(Math.abs(value(seen.get(4)[6], "roll")) > 2.5, "the brain-hurt cow did not end on its back: " + seen.get(4)[6]);

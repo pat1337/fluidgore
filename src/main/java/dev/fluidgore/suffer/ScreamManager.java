@@ -1,6 +1,7 @@
 package dev.fluidgore.suffer;
 
 import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.trigger.Fate;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -31,7 +32,7 @@ public final class ScreamManager {
 
 	private final List<Clip> scheduled = new ArrayList<>();
 	private final List<ScreamSound> playing = new ArrayList<>();
-	private final RandomSource random = RandomSource.create();
+	private final RandomSource random = Fate.stream("screams");
 	private int tick;
 	private int totalPlayed;
 

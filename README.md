@@ -14,6 +14,10 @@ Everything is visual and local to your game. The mod adds no blocks, items, enti
 it works on **vanilla servers** and nobody else needs it installed. It never changes health, damage, drops, AI or game
 rules.
 
+**Multiplayer:** everyone on a server who has the mod sees the same gore: the same wound on the same spot, the same
+severed part, the same death. The clients never talk to each other; each one works the outcome out from what the server
+already tells everyone (see "How it works").
+
 ## Features
 
 ### Strike any part of the body
@@ -139,7 +143,7 @@ Tested alongside Sodium, Iris (without a shader pack), Lithium, FerriteCore, Ent
 | Blast Gore | On | Explosions shred, tear open and throw bodies by how close they were (see Explosions). |
 | Wounds | On | The hit-zone and wound system described above. |
 | Wounds on Monsters | Off | Wounds on hostile mobs too. |
-| Wounds on Players | Off | Wounds on other players, on your screen only. |
+| Wounds on Players | On | Wounds on other players. Everyone with the mod sees the same ones. |
 | Suffering | Medium | Screams, trembling, death throes and herd panic, separate from Gore Level. Off disables it. |
 | Scream Volume | 100% | Also follows the Friendly Creatures volume. |
 | Max Screams | 8 | Sounds playing at once; background whimpers and bellows are dropped first. |
@@ -169,7 +173,13 @@ Only in `config/fluidgore.json`:
 
 - **No server needed.** Vanilla servers already send a damage event (who hit whom) and every entity's health. The
   mod pairs the two to see each hit. When you swing, it records where your aim met the model at that moment (the
-  damage packet arrives a tick later, after knockback has moved the legs).
+  damage packet arrives a tick later, after knockback has moved the legs). Another player's swing is traced along where
+  the server says they are looking, so it lands on the same spot on everyone's screen.
+- **Shared dice.** Every random choice a hit makes (how deep the wound goes, whether a part comes off, which death an
+  animal dies, how its body thrashes) is seeded from facts every client gets the same way: the victim's UUID, the
+  attacker, and the victim's exact health after the blow. Every player with the mod rolls the same numbers, so two
+  players watching the same fight see the same thing. Severed parts and bodies still run their physics on each
+  client, so they can come to rest a little apart.
 - **Hit zones.** The ray is tested against the cubes of the entity's own model, posed exactly as it is drawn this
   frame, so it works for any mob built from model parts, modded ones included.
 - **Wounds** are stored in each model part's own space and drawn right after the model, inside the same part

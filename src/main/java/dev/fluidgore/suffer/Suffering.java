@@ -8,6 +8,7 @@ import dev.fluidgore.dismember.GorePart;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.trigger.DamageTracker;
 import dev.fluidgore.trigger.EntityFilter;
+import dev.fluidgore.trigger.Fate;
 import dev.fluidgore.wound.Weapon;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
@@ -94,7 +95,7 @@ public final class Suffering {
 	/** What each species has seen in this world: raised by every killing, fading slowly. */
 	private final Object2FloatOpenHashMap<EntityType<?>> dread = new Object2FloatOpenHashMap<>();
 	private final Bereavement bereavement = new Bereavement();
-	private final RandomSource random = RandomSource.create();
+	private final RandomSource random = Fate.stream("suffering");
 	private final Deaths deaths = new Deaths(screams, random);
 	private final Deaths.Posture posture = new Deaths.Posture();
 	/** Set by tests and demos: how the next animal to die will die, and whether it bursts at the end. */
@@ -736,8 +737,8 @@ public final class Suffering {
 			}
 
 			float spasmRate = 0.07F * (0.4F + 1.2F * self.frantic()) * (c.kind == Corpse.Kind.COLLAPSE ? 0.5F : 1.0F);
-			if (convulses && life > 0.0F && random.nextFloat() < spasmRate * life) {
-				body.spasm(random, 0.5F + random.nextFloat() * 0.5F);
+			if (convulses && life > 0.0F && c.random.nextFloat() < spasmRate * life) {
+				body.spasm(c.random, 0.5F + c.random.nextFloat() * 0.5F);
 			}
 
 			if (convulses) {
@@ -746,10 +747,10 @@ public final class Suffering {
 
 			boolean voiced = c.kind != Corpse.Kind.HEADLESS_RUN && c.kind != Corpse.Kind.QUICK && Deaths.voiced(c);
 			boolean breathes = voiced && (c.kind != Corpse.Kind.BRUTAL || ground > c.throeTicks / 2);
-			if (life > 0.0F && voiced && c.kind != Corpse.Kind.COLLAPSE && random.nextFloat() < 0.045F * envelope + 0.01F * life) {
+			if (life > 0.0F && voiced && c.kind != Corpse.Kind.COLLAPSE && c.random.nextFloat() < 0.045F * envelope + 0.01F * life) {
 				if (entity.isBaby() && config.ecology) {
 					// A dying young animal still calls for its mother, weaker each time.
-					if (random.nextBoolean()) {
+					if (c.random.nextBoolean()) {
 						screams.weakCall(follow(entity), c.voice, envelope);
 					}
 				} else {
@@ -809,16 +810,16 @@ public final class Suffering {
 
 		float density = Mth.clamp(0.1F + restTicks / 20.0F * 0.02F + neighbours * 0.1F, 0.0F, 1.0F);
 		Vec3 middle = centre(c);
-		if (random.nextFloat() < density * 0.5F) {
-			double angle = random.nextDouble() * Mth.TWO_PI;
-			double radius = 0.3 + random.nextDouble() * 0.5;
-			level.addParticle(FLY, middle.x + Math.cos(angle) * radius, middle.y + random.nextDouble() * 0.5, middle.z + Math.sin(angle) * radius,
+		if (c.random.nextFloat() < density * 0.5F) {
+			double angle = c.random.nextDouble() * Mth.TWO_PI;
+			double radius = 0.3 + c.random.nextDouble() * 0.5;
+			level.addParticle(FLY, middle.x + Math.cos(angle) * radius, middle.y + c.random.nextDouble() * 0.5, middle.z + Math.sin(angle) * radius,
 					-Math.sin(angle) * 0.15, 0.0, Math.cos(angle) * 0.15);
 		}
 
 		if (c.age >= c.nextFly) {
 			screams.flies(() -> middle, density);
-			c.nextFly = c.age + 50 + random.nextInt(30);
+			c.nextFly = c.age + 50 + c.random.nextInt(30);
 		}
 	}
 
@@ -833,16 +834,16 @@ public final class Suffering {
 		Vec3 middle = centre(c);
 		float heavy = 1.0F / c.body.heft;
 		float volume = Math.min(1.0F, 0.4F + speed * 4.0F);
-		if (random.nextInt(4) == 0) {
+		if (c.random.nextInt(4) == 0) {
 			// The hard crunch of a fall, now only one fall in four.
 			level.playLocalSound(middle.x, middle.y, middle.z, SoundEvents.GENERIC_BIG_FALL, SoundSource.NEUTRAL, volume * 0.8F,
-					0.75F + 0.25F / heavy + random.nextFloat() * 0.1F, false);
+					0.75F + 0.25F / heavy + c.random.nextFloat() * 0.1F, false);
 		} else {
 			// Otherwise a dull, heavy thud: meat and bone going down on the ground.
 			level.playLocalSound(middle.x, middle.y, middle.z, SoundEvents.MUD_BREAK, SoundSource.NEUTRAL, volume * 0.7F,
-					0.45F + 0.2F / heavy + random.nextFloat() * 0.1F, false);
+					0.45F + 0.2F / heavy + c.random.nextFloat() * 0.1F, false);
 			level.playLocalSound(middle.x, middle.y, middle.z, SoundEvents.WOOL_FALL, SoundSource.NEUTRAL, volume * 0.6F,
-					0.6F + random.nextFloat() * 0.1F, false);
+					0.6F + c.random.nextFloat() * 0.1F, false);
 		}
 
 		if (gore && !EntityFilter.isBloodless(c.entity)) {
@@ -850,7 +851,7 @@ public final class Suffering {
 			BloodEmitter.drip(GoreSystems.blood(), neck(c), color, 0.02F);
 		}
 
-		c.body.spasm(random, 0.4F);
+		c.body.spasm(c.random, 0.4F);
 	}
 
 	/** Walking into a body that is down shoves it along and jostles its limbs. */
@@ -868,8 +869,8 @@ public final class Suffering {
 		Ragdoll body = c.body;
 		body.vx += motion.x * 0.5 * body.heft;
 		body.vz += motion.z * 0.5 * body.heft;
-		if (random.nextFloat() < 0.3F) {
-			body.spasm(random, 0.2F);
+		if (c.random.nextFloat() < 0.3F) {
+			body.spasm(c.random, 0.2F);
 		}
 
 		c.keepFor(40);
@@ -881,11 +882,11 @@ public final class Suffering {
 		float yawRad = body.yaw * Mth.DEG_TO_RAD;
 		// Positive lean tips towards (cos yaw, sin yaw): the body's own right-hand side.
 		double lateral = body.vx * Mth.cos(yawRad) + body.vz * Mth.sin(yawRad);
-		float side = Math.abs(lateral) > 0.01 ? (float) Math.signum(lateral) : (random.nextBoolean() ? 1.0F : -1.0F);
+		float side = Math.abs(lateral) > 0.01 ? (float) Math.signum(lateral) : (c.random.nextBoolean() ? 1.0F : -1.0F);
 		float forward = (float) Math.hypot(body.vx, body.vz);
 		// A firm push, so it keels over about as fast as vanilla's tip-over instead of teetering.
 		body.topple(side, 0.05F + Math.min(0.2F, forward * 0.5F + (float) Math.abs(lateral)));
-		body.spasm(random, c.kind == Corpse.Kind.QUICK ? 1.0F : 0.6F);
+		body.spasm(c.random, c.kind == Corpse.Kind.QUICK ? 1.0F : 0.6F);
 	}
 
 	/**
@@ -903,8 +904,8 @@ public final class Suffering {
 			if (reach.horizontalDistanceSqr() > ahead.horizontalDistanceSqr() - 1.0E-6) {
 				body.vy = 0.42;
 			} else {
-				c.turnDir = random.nextBoolean() ? 1.0F : -1.0F;
-				c.turnTicks = 12 + random.nextInt(10);
+				c.turnDir = c.random.nextBoolean() ? 1.0F : -1.0F;
+				c.turnTicks = 12 + c.random.nextInt(10);
 			}
 		}
 
@@ -951,7 +952,13 @@ public final class Suffering {
 				GoreConfig config = GoreConfig.get();
 				if (corpse.pops && config.goreLevel.enabled() && !EntityFilter.isBloodless(entity)) {
 					Ragdoll body = corpse.body;
-					GoreSystems.dismemberment().pop(GoreSystems.blood(), level, entity, new Vec3(body.x, body.y, body.z), body.yaw, body.roll);
+					// The body's own dice: it bursts the same way on every client.
+					Fate.begin(corpse.random.nextLong());
+					try {
+						GoreSystems.dismemberment().pop(GoreSystems.blood(), level, entity, new Vec3(body.x, body.y, body.z), body.yaw, body.roll);
+					} finally {
+						Fate.end();
+					}
 				}
 			}
 

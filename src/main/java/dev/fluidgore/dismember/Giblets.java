@@ -6,6 +6,7 @@ import dev.fluidgore.blood.BrokenBlocks;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.config.GoreLevel;
 import dev.fluidgore.mixin.ModelPartAccessor;
+import dev.fluidgore.trigger.Fate;
 import dev.fluidgore.wound.Flesh;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,7 +37,7 @@ public final class Giblets {
 	public static final int CAPACITY = 4000;
 	private static final double GRAVITY = 0.06;
 	private static final double DRAG = 0.985;
-	private static final RandomSource RANDOM = RandomSource.create();
+	private static final RandomSource RANDOM = Fate.stream("giblets");
 
 	public final double[] x = new double[CAPACITY];
 	public final double[] y = new double[CAPACITY];

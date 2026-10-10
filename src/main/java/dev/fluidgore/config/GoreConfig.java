@@ -115,8 +115,8 @@ public final class GoreConfig {
 	public boolean wounds = true;
 	/** Wounds on hostile mobs as well as animals. */
 	public boolean woundHostiles = false;
-	/** Wounds on other players (only on your screen). */
-	public boolean woundPlayers = false;
+	/** Wounds on other players. Everyone with the mod sees the same wounds (see trigger/Fate). */
+	public boolean woundPlayers = true;
 	/** Severed parts can be punched, kicked, picked up, thrown and stomped. */
 	public boolean playWithParts = true;
 	/** How hard the killing blow throws a body in the direction it was struck, in percent. 0 turns it off. */
@@ -205,12 +205,17 @@ public final class GoreConfig {
 	}
 
 	/** Repairs values that a hand-edited file may have broken (missing enums, negative caps, null lists). */
-	private static final int CONFIG_VERSION = 2;
+	private static final int CONFIG_VERSION = 3;
 
 	private void sanitize() {
 		if (configVersion < 2) {
 			// 1.7: bodies lingered 45 s by default, which was too long. Only an untouched default is changed.
 			if (corpseLingerSeconds == 45) corpseLingerSeconds = 10;
+		}
+
+		if (configVersion < 3) {
+			// 2.0: wounds on players were off because each screen showed different ones. Now every player sees the same.
+			woundPlayers = true;
 		}
 
 		configVersion = CONFIG_VERSION;

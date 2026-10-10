@@ -1,6 +1,7 @@
 package dev.fluidgore.blood;
 
 import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.trigger.Fate;
 import net.minecraft.core.Direction;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.Level;
@@ -19,7 +20,7 @@ public final class BloodWorld {
 	private final DropletSystem droplets = new DropletSystem(this);
 	private final Footprints footprints = new Footprints(this);
 	private final Spurts spurts = new Spurts(this);
-	private final RandomSource random = RandomSource.create();
+	private final RandomSource random = Fate.stream("world");
 	private long serial;
 
 	public DecalManager decals() {

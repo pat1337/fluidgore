@@ -1,7 +1,9 @@
 package dev.fluidgore.suffer;
 
 import dev.fluidgore.dismember.ModelParts;
+import dev.fluidgore.trigger.Fate;
 import net.minecraft.util.Mth;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 
@@ -69,6 +71,8 @@ public final class Corpse {
 	public boolean unloaded;
 
 	public final Ragdoll body;
+	/** This body's own dice for its throes, seeded by the killing blow: the same on every client (see Fate). */
+	public final RandomSource random;
 	float walkPos;
 	float walkPosO;
 	float walkSpeed;
@@ -107,6 +111,7 @@ public final class Corpse {
 		this.throeTicks = throeTicks;
 		this.stillTicks = stillTicks;
 		this.seed = seed;
+		this.random = Fate.body(entity);
 		this.body = new Ragdoll(entity);
 		this.collapseAt = runTicks;
 		this.legs = ModelParts.legs(entity.getId());

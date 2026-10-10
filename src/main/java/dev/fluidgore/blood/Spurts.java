@@ -1,5 +1,6 @@
 package dev.fluidgore.blood;
 
+import dev.fluidgore.trigger.Fate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
@@ -37,7 +38,7 @@ public final class Spurts {
 
 	private final BloodWorld world;
 	private final List<Spurt> spurts = new ArrayList<>();
-	private final RandomSource random = RandomSource.create();
+	private final RandomSource random = Fate.stream("spurts");
 
 	Spurts(BloodWorld world) {
 		this.world = world;

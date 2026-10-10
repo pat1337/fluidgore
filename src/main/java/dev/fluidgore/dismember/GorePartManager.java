@@ -1,14 +1,15 @@
 package dev.fluidgore.dismember;
 
 import dev.fluidgore.blood.BloodEmitter;
+import dev.fluidgore.blood.BloodTextures;
 import dev.fluidgore.blood.BloodWorld;
-import dev.fluidgore.blood.BrokenBlocks;
 import dev.fluidgore.blood.BoneEmitter;
+import dev.fluidgore.blood.BrokenBlocks;
 import dev.fluidgore.blood.SurfaceProbe;
 import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.trigger.Fate;
 import java.util.ArrayList;
 import java.util.List;
-import dev.fluidgore.blood.BloodTextures;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -32,14 +33,14 @@ public final class GorePartManager {
 	private static final double GRAVITY = 0.06;
 	private static final double AIR_DRAG = 0.98;
 	private static final double BOUNCE = 0.3;
-	private static final RandomSource RANDOM = RandomSource.create();
+	private static final RandomSource RANDOM = Fate.stream("parts");
 	/** Speed (blocks/tick) above which hitting a surface splats blood and squelches. */
 	private static final double IMPACT_SPEED = 0.3;
 	/** A loose bone hitting anything faster than this breaks apart. */
 	private static final double BONE_BREAK_SPEED = 0.45;
 
 	private final List<GorePart> parts = new ArrayList<>();
-	private final RandomSource random = RandomSource.create();
+	private final RandomSource random = Fate.stream("partsMotion");
 
 	public List<GorePart> parts() {
 		return parts;

@@ -152,9 +152,9 @@ public final class Deaths {
 
 	/** The moment of death. */
 	void begin(ClientLevel level, Corpse c, int color, boolean gore) {
-		c.circleDir = random.nextBoolean() ? 1.0F : -1.0F;
+		c.circleDir = c.random.nextBoolean() ? 1.0F : -1.0F;
 		switch (c.kind) {
-			case STUNNED -> c.phaseAt = Math.round((35 + random.nextInt(25)) * Suffering.intensity());
+			case STUNNED -> c.phaseAt = Math.round((35 + c.random.nextInt(25)) * Suffering.intensity());
 			case BLEED_OUT -> {
 				if (gore && GoreConfig.get().arterialSpurts) {
 					// The opened artery jets with each beat, and blood runs down the body to the feet.
@@ -290,7 +290,7 @@ public final class Deaths {
 				p.stiff = Math.max(0.0F, 1.0F - (ground - c.phaseAt) / 6.0F);
 				p.kick = Math.max(p.kick, 0.9F * left * left);
 				p.kickRate = 0.5F + 0.4F * left;
-				if (life > 0.0F && random.nextFloat() < 0.012F) {
+				if (life > 0.0F && c.random.nextFloat() < 0.012F) {
 					screams.gasp(Suffering.follow(c.entity), c.voice, left);
 				}
 
@@ -343,7 +343,7 @@ public final class Deaths {
 					c.phaseAt = ground;
 				}
 
-				c.body.spasm(random, 0.8F);
+				c.body.spasm(c.random, 0.8F);
 			}
 			case BLEED_OUT -> {
 				if (gore) {
@@ -410,7 +410,7 @@ public final class Deaths {
 		float front = ramp(age, 0, 15);
 		float hind = ramp(age, 12, 30);
 		boolean down = age > 40;
-		if (down && age - c.attemptAt > ATTEMPT_TICKS && age < c.runTicks - 40 && random.nextFloat() < 0.025F) {
+		if (down && age - c.attemptAt > ATTEMPT_TICKS && age < c.runTicks - 40 && c.random.nextFloat() < 0.025F) {
 			c.attemptAt = age;
 			c.attempts++;
 			screams.strain(Suffering.follow(c.entity), c.voice, 1.0F / c.attempts);
@@ -422,9 +422,9 @@ public final class Deaths {
 			heave = Mth.sin(Mth.PI * into / ATTEMPT_TICKS) * Math.max(0.35F, 1.0F - 0.15F * c.attempts);
 			if (into == ATTEMPT_TICKS - 4) {
 				// Back down, hard.
-				c.body.spasm(random, 0.3F);
+				c.body.spasm(c.random, 0.3F);
 				Vec3 at = c.position();
-				if (random.nextInt(4) == 0) {
+				if (c.random.nextInt(4) == 0) {
 					c.entity.level().playLocalSound(at.x, at.y, at.z, SoundEvents.GENERIC_SMALL_FALL, SoundSource.NEUTRAL, 0.6F, 0.7F, false);
 				}
 			}
@@ -448,7 +448,7 @@ public final class Deaths {
 		if (c.age >= c.nextCough) {
 			c.phaseAt = c.age;
 			since = 0;
-			c.nextCough = c.age + 12 + random.nextInt(20) + Math.round(progress * 15.0F);
+			c.nextCough = c.age + 12 + c.random.nextInt(20) + Math.round(progress * 15.0F);
 			screams.cough(Suffering.follow(c.entity), c.voice, strength);
 			if (gore) {
 				Vec3 mouth = Suffering.neck(c);
