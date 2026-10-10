@@ -29,7 +29,7 @@ public abstract class LivingEntityMixin {
 	@Inject(method = "makePoofParticles", at = @At("HEAD"), cancellable = true)
 	private void fluidgore$holdPoof(CallbackInfo ci) {
 		LivingEntity self = (LivingEntity) (Object) this;
-		if (self.level().isClientSide() && GoreSystems.suffering().holdsBody(self.getId())) {
+		if (self.level().isClientSide() && (GoreSystems.suffering().holdsBody(self.getId()) || GoreSystems.dismemberment().vaporized(self.getId()))) {
 			ci.cancel();
 		}
 	}

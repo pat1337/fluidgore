@@ -1,6 +1,7 @@
 package dev.fluidgore;
 
 import dev.fluidgore.blood.BloodWorld;
+import dev.fluidgore.blood.BrokenBlocks;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.dismember.ModelParts;
@@ -67,6 +68,7 @@ public final class GoreSystems {
 
 		if (!gore && !suffering) {
 			TRACKER.clear();
+			BrokenBlocks.clear();
 			return;
 		}
 
@@ -84,6 +86,9 @@ public final class GoreSystems {
 		if (suffering) {
 			SUFFERING.tick(level);
 		}
+
+		// Every system has had its chance to react to this tick's broken blocks.
+		BrokenBlocks.clear();
 	}
 
 	public static void onChunkUnload(int chunkX, int chunkZ) {
@@ -101,6 +106,7 @@ public final class GoreSystems {
 	}
 
 	public static void clearAll() {
+		BrokenBlocks.clear();
 		ModelParts.clearDrawn();
 		SUFFERING.clear();
 		BLOOD.clear();

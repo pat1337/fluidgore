@@ -17,6 +17,11 @@ Easy follow-up work is listed in **TASKS.md**. Do those one at a time.
 4. Every tunable goes in `config/GoreConfig.java`, sanitized in `sanitize()`, and exposed in the settings screen
    if it is a user setting. Add `en_us.json` keys for every new option, including a `.tooltip` key.
 5. No TODOs or stubs in delivered code. Build and run the game test before calling something done.
+6. **Every release that adds something you can see adds a demo** to `demo/Demos.ALL` (newest first, tagged with
+   the version): the user replays them in game with `/gore demo <name>` to show their brother. Base it on the
+   game-test scene for the feature, placed with `Stage` (right/up/forward from the player). Only tag-scoped
+   commands: never `kill @e` without `tag=fluidgore_demo`, never `item replace` (use `Script.hold`). Terrain changes
+   mean `destructive = true`. The `demos` game test plays every demo, so a new one is tested for free.
 
 ## Environment (this PC)
 - JDK 25: `C:\Users\Thele\.jdks\jdk-25.0.4.1+1`. The system `java` is 21 and will not build this.
@@ -48,7 +53,11 @@ Mod Menu 21.0.0 (compile-only, soft dependency).
 - `config/`: `GoreConfig` (Gson JSON at `config/fluidgore.json`, read live every tick), `GoreLevel` (Off..Extreme
   multipliers), `BloodColor` (rgb + chunk block), `BloodStyle` (Redstone/Realistic/Mixed).
 - `ui/`: `GoreSettingsScreen` (vanilla `OptionsSubScreen` + `OptionInstance`), `ModMenuIntegration`,
-  `OptionsScreenButton` (the "Fluid Gore..." button on the Options screen).
+  `OptionsScreenButton` (the "Fluid Gore..." button on the Options screen), `GoreCommand` (`/gore demo`, a Fabric
+  client command).
+- `demo/`: `Demos` (the list), `Demo`, `Script` (steps: vanilla commands sent as the player, client actions,
+  narration, pauses), `Stage`, `DemoPlayer` (runs from the client tick, fakes the held item for the gore via
+  `DemoPlayer.held`, hides command replies from chat). Needs cheats/op; nothing server-side.
 - `trigger/`: `DamageTracker` finds damage from synced health drops plus the damage-event packet (attacker), with
   no server mod needed. `EntityFilter` decides who bleeds, the blood colour, and which items count as bladed.
 - `blood/`:
@@ -62,6 +71,10 @@ Mod Menu 21.0.0 (compile-only, soft dependency).
 - `dismember/`:
   - `Dismemberment` decides when to cut, spawns parts, and tracks missing-part masks.
   - `GorePart` + `GorePartManager` are severed-part rigid bodies.
+  - `Giblets` + `Tissue`: small flesh pieces (flat arrays, cap `Giblets.CAPACITY`), drawn by
+    `render/GibletRenderer` with `flesh.png` or the animal's own skin for hide. `vaporize` (shred) and `tear` live
+    in `Dismemberment`; `DamageTracker` grades blasts by vanilla's impact formula with the radius recorded by
+    `ClientPacketListenerMixin` (`SHRED_IMPACT`, `TEAR_IMPACT`).
   - `ModelParts` clones and measures model parts.
   - `PartInteraction` lets you punch, grab, throw, kick and stomp parts.
   - `BodyPart` maps parts to model-part names.
@@ -79,7 +92,7 @@ Mod Menu 21.0.0 (compile-only, soft dependency).
     (the damage packet arrives later, after knockback has moved the legs), applies the gore-level depth cap and
     decides targeted cuts. Only aimed blows sever precisely; guessed spots (other attackers) keep random severing.
   - `WoundRenderer` draws from `ModelFeatureRendererMixin` right after `renderToBuffer`, in the same part
-    transforms (`entityCutoutZOffset`, `wounds.png`). `Weapon` (blunt/blade/chop/pierce), `Flesh` (meat/bone/dried).
+    transforms (`entityCutoutZOffset`, `wounds.png`). `Weapon` (blunt/flint/blade/chop/pick/pierce/bite/blast), `Flesh` (meat/bone/dried).
 - `render/GoreRenderer`: draws decals, puddles, droplets, parts and removed corpses via
   `LevelRenderEvents.COLLECT_SUBMITS` and `submitCustomGeometry` / `submitModelPart` / the entity dispatcher.
 - `mixin/` (`fluidgore.mixins.json`, all client):
@@ -87,6 +100,8 @@ Mod Menu 21.0.0 (compile-only, soft dependency).
   - `LivingEntityRendererMixin`: copies gore state into render states, corpse overrides, whole-body motion.
   - `ModelFeatureRendererMixin`: hides severed parts and animates limbs right around `renderToBuffer`, then restores.
   - `MinecraftMixin`: routes attack/use clicks to severed parts.
+  - `ClientPacketListenerMixin`: records each explosion's centre and radius.
+  - `ClientLevelMixin`: records blocks that lose their collision in `blood/BrokenBlocks`, so resting gore drops at once.
   - Accessors and invokers for `ModelPart` and entity sounds.
 
 ## Textures
@@ -128,3 +143,9 @@ severable parts; severed heads can't blink.
 - **1.5.0**: `suffer/Bereavement`: mother and young (nearest grown/young animal of the same kind within 24 blocks).
   Calf cries and the mother answers (`ScreamManager.call` with delay), dying calves `weakCall`, survivors `grieve`
   for `griefSeconds`, pose turned to where it happened. Game test: `grief`.
+- **1.6.0**: explosions graded by impact (shred / tear open / throw), giblets, new weapons (flint, pick, bite,
+  blast), internal bleeding from beatings, and in-game demos (`/gore demo`). Game tests: `weapons`, `pigPit`, `demos`.
+- **1.7.0**: vanilla-feel deaths (`redDeath`: red until gone, faster keel-over, `Suffering.slam` landing), Terraria-style
+  knockback on dying bodies (`CorpseStrike`, `Corpse.flash`/`keepFor`, walking shoves them), `Dismemberment.pop` at
+  the end (`deathPop`), shorter High/Extreme lifetimes, `GoreConfig.configVersion` migration, and the floating-gore
+  fix (`BrokenBlocks`). Game test: `floorAndDeath`. Demos: `death`, `floor`.

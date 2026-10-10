@@ -137,7 +137,7 @@ public final class DecalManager {
 			d.age++;
 
 			// Spread the expensive checks: every decal is re-validated once per second, at a different tick each.
-			if (((d.serial + tickCount) % 20) == 0) {
+			if (((d.serial + tickCount) % 20) == 0 || BrokenBlocks.near(d.anchor)) {
 				BlockPos open = d.face == Direction.UP ? d.anchor.above() : d.anchor.relative(d.face);
 				if (!level.isLoaded(open) || !supportIntact(level, d)) {
 					continue;

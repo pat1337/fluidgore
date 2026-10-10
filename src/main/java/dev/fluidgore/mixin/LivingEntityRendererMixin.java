@@ -3,6 +3,7 @@ package dev.fluidgore.mixin;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import dev.fluidgore.GoreSystems;
+import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.suffer.BodyPose;
@@ -57,20 +58,26 @@ public abstract class LivingEntityRendererMixin {
 					body.z(partialTicks) - state.z, body.roll(partialTicks), body.joints(partialTicks)));
 			state.walkAnimationPos = corpse.walkPos(partialTicks);
 			state.walkAnimationSpeed = corpse.walkSpeed();
-			// Vanilla tints dying mobs red; over a long death that just looks wrong.
-			state.hasRedOverlay = corpse.age < 10;
+			// Vanilla keeps a dying mob red until it is gone. Without Red Death only the first moments and fresh blows are.
+			state.hasRedOverlay = GoreConfig.get().redDeath || corpse.age < 10 || corpse.flash > 0;
 		} else {
 			state.setData(BodyPose.KEY, null);
 		}
 	}
 
 	/**
-	 * Remembers the model this entity is drawn with. Subclasses pick it (baby or adult, per variant) right before
+	 * Skips bodies torn apart by a blast, and remembers the model this entity is drawn with. Subclasses pick it (baby or adult, per variant) right before
 	 * calling this method, so here it is the right one for this entity.
 	 */
-	@Inject(method = "submit(Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;Lnet/minecraft/client/renderer/state/level/CameraRenderState;)V", at = @At("HEAD"))
+	@Inject(method = "submit(Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;Lnet/minecraft/client/renderer/state/level/CameraRenderState;)V", at = @At("HEAD"), cancellable = true)
 	private void fluidgore$recordModel(LivingEntityRenderState state, PoseStack poseStack, SubmitNodeCollector collector, CameraRenderState camera, CallbackInfo ci) {
 		Integer id = state.getData(ModelParts.ENTITY_ID);
+		if (id != null && GoreSystems.dismemberment().vaporized(id)) {
+			// Torn apart by a blast: there is no body left to draw.
+			ci.cancel();
+			return;
+		}
+
 		if (id != null) {
 			ModelParts.recordDrawn(id, model);
 		}

@@ -2,6 +2,7 @@ package dev.fluidgore.dismember;
 
 import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.blood.BloodWorld;
+import dev.fluidgore.blood.BrokenBlocks;
 import dev.fluidgore.blood.BoneEmitter;
 import dev.fluidgore.blood.SurfaceProbe;
 import dev.fluidgore.config.GoreConfig;
@@ -192,8 +193,8 @@ public final class GorePartManager {
 			p.rotation.slerp(p.restTarget, 0.3F);
 		}
 
-		// Stay on the ground if the block below is removed.
-		if (p.restTicks % 20 == 0) {
+		// Fall if the block below is removed: checked at once when a block nearby breaks, otherwise once a second.
+		if (p.restTicks % 20 == 0 || BrokenBlocks.near(p.x, p.y, p.z)) {
 			float r = radius(p);
 			if (Double.isNaN(SurfaceProbe.surfaceBelow(level, p.x, p.y - r + 0.05, p.y - r - 0.05, p.z))) {
 				p.resting = false;

@@ -48,6 +48,11 @@ public final class WoundSet {
 	final float[] oz = new float[MAX];
 	final float[] yaw = new float[MAX];
 	int count;
+	/**
+	 * Crushing injury taken without the skin giving way: blows from fists, clubs and blasts. Past a point the animal
+	 * bleeds from the mouth and nose instead of from wounds.
+	 */
+	float trauma;
 
 	WoundSet(Model<?> model, Flesh flesh, int blood) {
 		this.model = model;
@@ -73,6 +78,10 @@ public final class WoundSet {
 	 * one that is already there is how parts come off (see {@link Wounds}).
 	 */
 	Change add(ModelHit.Result hit, Weapon weapon, float amount, float cap, Vec3 offset, float bodyYaw, RandomSource random) {
+		if (weapon == Weapon.BLUNT || weapon == Weapon.BLAST) {
+			trauma += amount;
+		}
+
 		int b = (hit.axis() + 1) % 3;
 		int c = (hit.axis() + 2) % 3;
 		float hu = hit.local().get(b);
@@ -81,7 +90,7 @@ public final class WoundSet {
 		if (i >= 0) {
 			float before = severity[i];
 			severity[i] = Math.max(before, Math.min(cap, before + amount));
-			radius[i] = Math.min(MAX_RADIUS, radius[i] + weapon.radius * 0.2F * Math.min(1.0F, amount * 2.0F));
+			radius[i] = Math.min(MAX_RADIUS, radius[i] + weapon.radius * weapon.spread * Math.min(1.0F, amount * 2.0F));
 			return new Change(i, before, severity[i]);
 		}
 
@@ -132,6 +141,11 @@ public final class WoundSet {
 		}
 
 		return deepest;
+	}
+
+	/** Crushing injury so far; see {@link #trauma}. */
+	public float trauma() {
+		return trauma;
 	}
 
 	public int count() {

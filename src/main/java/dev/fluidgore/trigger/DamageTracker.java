@@ -3,22 +3,28 @@ package dev.fluidgore.trigger;
 import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.config.GoreLevel;
+import dev.fluidgore.demo.DemoPlayer;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.suffer.Suffering;
-import dev.fluidgore.wound.Flesh;
 import dev.fluidgore.wound.HitFeedback;
 import dev.fluidgore.wound.Weapon;
 import dev.fluidgore.wound.Wounds;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.ServerExplosion;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
@@ -37,11 +43,26 @@ public final class DamageTracker {
 	private static final double EFFECT_RANGE_SQ = 96.0 * 96.0;
 	private static final RandomSource RANDOM = RandomSource.create();
 
-	private record PendingHit(int attackerId, boolean melee, int tick) {
+	/**
+	 * @param explosion the hit was an explosion
+	 * @param sourceAt  where the damage came from, if the packet says (often not for TNT: the TNT entity is gone)
+	 */
+	private record PendingHit(int attackerId, boolean melee, boolean explosion, @Nullable Vec3 sourceAt, int tick) {
 	}
+
+	/** An explosion the server told us about: where and how big (TNT is 4, a creeper 3, a charged one 6). */
+	private record Blast(Vec3 center, float radius, int tick) {
+	}
+
+	/** Blast radius assumed when no explosion packet matches (TNT). */
+	private static final float DEFAULT_BLAST_RADIUS = 4.0F;
+	/** Blast impact (0..1, vanilla's measure) at which a body is shredded outright, and at which it is torn open. */
+	private static final float SHRED_IMPACT = 0.72F;
+	public static final float TEAR_IMPACT = 0.45F;
 
 	private final Int2FloatOpenHashMap lastHealth = new Int2FloatOpenHashMap();
 	private final Int2ObjectOpenHashMap<PendingHit> pending = new Int2ObjectOpenHashMap<>();
+	private final List<Blast> blasts = new ArrayList<>();
 	private int tick;
 
 	public DamageTracker() {
@@ -52,7 +73,13 @@ public final class DamageTracker {
 	public void onDamageEvent(LivingEntity victim, DamageSource source) {
 		Entity attacker = source.getEntity();
 		boolean melee = attacker != null && source.getDirectEntity() == attacker;
-		pending.put(victim.getId(), new PendingHit(attacker == null ? -1 : attacker.getId(), melee, tick));
+		pending.put(victim.getId(), new PendingHit(attacker == null ? -1 : attacker.getId(), melee, source.is(DamageTypeTags.IS_EXPLOSION),
+				source.getSourcePosition(), tick));
+	}
+
+	/** Called on the client thread when an explosion packet arrives. */
+	public void onExplosion(Vec3 center, float radius) {
+		blasts.add(new Blast(center, radius, tick));
 	}
 
 	public void tick(ClientLevel level, BloodWorld blood, Dismemberment dismemberment, Suffering suffering) {
@@ -95,6 +122,7 @@ public final class DamageTracker {
 		}
 
 		pending.int2ObjectEntrySet().removeIf(e -> tick - e.getValue().tick() > 100);
+		blasts.removeIf(b -> tick - b.tick() > 100);
 	}
 
 	private void hurt(ClientLevel level, BloodWorld blood, Dismemberment dismemberment, Suffering suffering, LivingEntity victim,
@@ -107,9 +135,34 @@ public final class DamageTracker {
 
 		Entity attacker = hit != null && hit.attackerId() >= 0 ? level.getEntity(hit.attackerId()) : null;
 		LivingEntity meleeAttacker = attacker instanceof LivingEntity living && hit.melee() ? living : null;
+		// Where the blast went off, and how hard it hit this body, 0..1: vanilla's own measure (distance over twice
+		// the radius, times how much of the body the blast could see). Null and 0 for anything but a blast.
+		Vec3 blastAt = null;
+		float impact = 0.0F;
+		if (hit != null && hit.explosion()) {
+			Blast known = blastFor(victim, hit.sourceAt());
+			if (known != null || hit.sourceAt() != null) {
+				blastAt = known != null ? known.center() : hit.sourceAt();
+				float radius = known != null ? known.radius() : DEFAULT_BLAST_RADIUS;
+				double dist = Math.sqrt(victim.distanceToSqr(blastAt)) / (radius * 2.0);
+				impact = (float) Math.max(0.0, (1.0 - dist) * ServerExplosion.getSeenPercent(blastAt, victim));
+			} else {
+				// No idea where it went off (the explosion packet never came): a blast, but not a close one.
+				blastAt = victim.position();
+				impact = 0.3F;
+			}
+		}
+
 		Vec3 away = null;
 		Vec3 strike = null;
-		if (attacker != null) {
+		if (blastAt != null) {
+			Vec3 out = victim.position().add(0.0, victim.getBbHeight() * 0.5, 0.0).subtract(blastAt);
+			if (out.lengthSqr() > 1.0E-6) {
+				// A blast throws up as well as out, even from level ground.
+				strike = out.normalize().add(0.0, 0.5, 0.0).normalize();
+				away = new Vec3(strike.x, 0.0, strike.z).lengthSqr() > 1.0E-6 ? new Vec3(strike.x, 0.0, strike.z).normalize() : null;
+			}
+		} else if (attacker != null) {
 			Vec3 delta = new Vec3(victim.getX() - attacker.getX(), 0.0, victim.getZ() - attacker.getZ());
 			if (delta.lengthSqr() > 1.0E-6) {
 				away = delta.normalize();
@@ -122,30 +175,51 @@ public final class DamageTracker {
 			}
 		}
 
+		GoreConfig config = GoreConfig.get();
+		boolean torn = false;
+		if (gore && blastAt != null && lethal && config.blastGore && config.goreLevel.ordinal() >= GoreLevel.MEDIUM.ordinal()
+				&& !(victim instanceof Player)) {
+			if (impact >= SHRED_IMPACT) {
+				// Right next to the charge: the body is torn to pieces and there is nothing left to die slowly.
+				dismemberment.vaporize(blood, level, victim, blastAt);
+				gore = false;
+			} else if (impact >= TEAR_IMPACT) {
+				// Close: limbs and head torn off and thrown, the belly opened. The rest is thrown like a doll.
+				dismemberment.tear(blood, level, victim, blastAt, (impact - TEAR_IMPACT) / (SHRED_IMPACT - TEAR_IMPACT));
+				torn = true;
+			}
+		}
+
 		if (gore) {
-			BloodEmitter.bleed(blood, level, victim, damage, lethal, away);
-			Weapon weapon = meleeAttacker != null ? Weapon.of(meleeAttacker.getMainHandItem()) : Weapon.PIERCE;
-			Wounds.Strike wound = dismemberment.wounds().onDamage(victim, attacker, weapon, damage);
+			Weapon weapon = weapon(attacker, meleeAttacker, blastAt);
+			// No attacker and no blast: a fall, fire, drowning. Bruising and a little bleeding.
+			BloodEmitter.bleed(blood, level, victim, damage, lethal, away, weapon != null ? weapon.bleed : 0.25F);
+			Wounds.Strike wound = weapon == null ? null : blastAt != null
+					? dismemberment.wounds().onBlast(victim, blastAt, damage)
+					: dismemberment.wounds().onDamage(victim, attacker, weapon, damage);
 			if (wound != null) {
-				Vec3 blow = wound.hit().point().subtract(attacker.getEyePosition());
+				Vec3 from = blastAt != null ? blastAt : attacker.getEyePosition();
+				Vec3 blow = wound.hit().point().subtract(from);
 				if (blow.lengthSqr() > 1.0E-6) {
-					HitFeedback.hit(level, blood, wound, weapon, Flesh.of(victim), EntityFilter.bloodType(victim).rgb, blow.normalize());
+					HitFeedback.hit(level, blood, victim, wound, weapon, blow.normalize());
 				}
 			}
 
 			if (wound != null && wound.aimed()) {
 				// The player aimed this blow: only the part that was struck can come off.
 				BodyPart struck = wound.hit().bodyPart();
-				boolean heavy = damage >= GoreConfig.get().heavyHitDamage && !(victim instanceof Player);
-				boolean chop = weapon.cuts() && (lethal || heavy) && RANDOM.nextFloat() < GoreConfig.get().goreLevel.partChance;
+				boolean heavy = damage >= config.heavyHitDamage && !(victim instanceof Player);
+				boolean chop = weapon.cuts() && (lethal || heavy) && RANDOM.nextFloat() < config.goreLevel.partChance;
 				if (struck != null && (wound.cut() || chop)) {
 					dismemberment.severPart(blood, level, victim, struck, victim::position, Float.NaN, 0.0F, away);
 				}
-			} else if (EntityFilter.isBone(victim) && (meleeAttacker != null || lethal)
-					|| meleeAttacker != null && EntityFilter.isBladed(meleeAttacker.getMainHandItem())) {
+			} else if (torn) {
+				// Already torn apart above.
+			} else if (weapon != Weapon.BLAST && EntityFilter.isBone(victim) && (meleeAttacker != null || lethal)
+					|| meleeAttacker != null && EntityFilter.isBladed(DemoPlayer.held(meleeAttacker)) || weapon == Weapon.BLAST && lethal) {
 				// Spot unknown or guessed. Bone does not need a blade: any hard blow can snap a bone off.
 				// Players only lose parts on death; mobs can also lose one to a heavy hit and keep walking.
-				boolean heavy = damage >= GoreConfig.get().heavyHitDamage && !(victim instanceof Player);
+				boolean heavy = damage >= config.heavyHitDamage && !(victim instanceof Player);
 				if (lethal || heavy) {
 					dismemberment.onBladedHit(blood, level, victim, lethal, away);
 				}
@@ -154,9 +228,52 @@ public final class DamageTracker {
 
 		// After dismemberment, so a beheading on this very hit is known to the death throes.
 		if (suffers) {
-			boolean bareHanded = meleeAttacker != null && meleeAttacker.getMainHandItem().isEmpty();
-			suffering.onHurt(level, victim, damage, lethal, bareHanded, strike);
+			boolean bareHanded = meleeAttacker != null && DemoPlayer.held(meleeAttacker).isEmpty();
+			suffering.onHurt(level, victim, damage, lethal, bareHanded, strike, impact);
 		}
+	}
+
+	/**
+	 * What the blow was: the held item for a melee hit (an empty-handed zombie or player punches; an animal bites), a
+	 * projectile, or a blast. Null if nothing struck it (falling, burning, drowning).
+	 */
+	private static @Nullable Weapon weapon(@Nullable Entity attacker, @Nullable LivingEntity melee, @Nullable Vec3 blastAt) {
+		if (blastAt != null) {
+			return Weapon.BLAST;
+		}
+
+		if (melee != null) {
+			if (DemoPlayer.held(melee).isEmpty() && !(melee instanceof Player) && !(melee instanceof Zombie)) {
+				return Weapon.BITE;
+			}
+
+			return Weapon.of(DemoPlayer.held(melee));
+		}
+
+		return attacker != null ? Weapon.PIERCE : null;
+	}
+
+	/**
+	 * The explosion from the last few ticks that hurt {@code victim}: the one nearest the damage source if the packet
+	 * gave one, otherwise the nearest one whose reach (twice its radius) covers the victim. Null if none.
+	 */
+	private @Nullable Blast blastFor(LivingEntity victim, @Nullable Vec3 sourceAt) {
+		Blast best = null;
+		double bestSq = Double.MAX_VALUE;
+		for (Blast b : blasts) {
+			if (tick - b.tick() > 10) {
+				continue;
+			}
+
+			double d = sourceAt != null ? b.center().distanceToSqr(sourceAt) : victim.distanceToSqr(b.center());
+			double limit = sourceAt != null ? 2.5 : b.radius() * 2.0;
+			if (d < limit * limit && d < bestSq) {
+				best = b;
+				bestSq = d;
+			}
+		}
+
+		return best;
 	}
 
 	public void forget(int entityId) {
@@ -167,5 +284,6 @@ public final class DamageTracker {
 	public void clear() {
 		lastHealth.clear();
 		pending.clear();
+		blasts.clear();
 	}
 }

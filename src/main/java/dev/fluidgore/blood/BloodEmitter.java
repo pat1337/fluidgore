@@ -43,8 +43,11 @@ public final class BloodEmitter {
 	 * @param damage health lost (2 = one heart)
 	 * @param lethal true for the killing blow: much larger burst and a pool under the body
 	 * @param away   unit direction pointing away from the attacker, or null if unknown
+	 * @param open   how far the blow broke the skin: about 0.1 for a fist or club (a beating bleeds inside, not out),
+	 *               1 for a clean blade cut, more for an axe or a blast
 	 */
-	public static void bleed(BloodWorld world, ClientLevel level, LivingEntity entity, float damage, boolean lethal, @Nullable Vec3 away) {
+	public static void bleed(BloodWorld world, ClientLevel level, LivingEntity entity, float damage, boolean lethal, @Nullable Vec3 away,
+			float open) {
 		GoreConfig config = GoreConfig.get();
 		GoreLevel preset = config.goreLevel;
 		if (!preset.enabled()) {
@@ -62,8 +65,11 @@ public final class BloodEmitter {
 		float bodySize = Mth.clamp(entity.getBbWidth() * entity.getBbHeight() / (0.6F * 1.8F), 0.3F, 3.0F);
 		// How bad this particular wound is: most near 1, some barely bleed, some gush.
 		float severity = Mth.clamp(world.lognormal(0.5F), 0.3F, 4.0F);
-		float volume = Math.min(3.0F, (0.03F + damage * 0.03F) * preset.puddles * bodySize * (lethal ? 3.0F : 1.0F) * severity);
-		int count = Math.round((3.0F + damage * 2.5F) * preset.particles * (lethal ? 2.2F : 1.0F) * severity);
+		float volume = Math.min(3.0F, (0.03F + damage * 0.03F) * preset.puddles * bodySize * (lethal ? 3.0F : 1.0F) * severity * open);
+		int count = Math.round((3.0F + damage * 2.5F) * preset.particles * (lethal ? 2.2F : 1.0F) * severity * open);
+		if (count <= 0 && volume < 0.005F) {
+			return;
+		}
 
 		// The wound is a random point on the upper body, not always the exact centre.
 		double ox = (RANDOM.nextDouble() - 0.5) * entity.getBbWidth() * 0.6;
@@ -77,9 +83,12 @@ public final class BloodEmitter {
 
 		int trickle = Math.round((50 + RANDOM.nextInt(60)) * preset.duration * Math.min(2.0F, severity));
 		double width = entity.getBbWidth() * 0.25;
-		world.spurts().ooze(() -> new Vec3(entity.getX() + ox, entity.getY() + oy, entity.getZ() + oz),
-				() -> new Vec3(entity.getX() + ox, entity.getY() + 0.1, entity.getZ() + oz), width, rgb, trickle,
-				Mth.clamp(0.5F + damage * 0.1F, 0.5F, 1.5F));
+		// A bruise does not run.
+		if (open >= 0.3F) {
+			world.spurts().ooze(() -> new Vec3(entity.getX() + ox, entity.getY() + oy, entity.getZ() + oz),
+					() -> new Vec3(entity.getX() + ox, entity.getY() + 0.1, entity.getZ() + oz), width, rgb, trickle,
+					Mth.clamp(0.5F + damage * 0.1F, 0.5F, 1.5F));
+		}
 
 		if (lethal) {
 			double surface = SurfaceProbe.surfaceBelow(level, entity.getX(), entity.getY() + 0.3, entity.getY() - 1.5, entity.getZ());
@@ -89,11 +98,14 @@ public final class BloodEmitter {
 		}
 
 		boolean heavy = lethal || damage >= 5.0F;
-		if (config.goreChunks && (heavy || RANDOM.nextFloat() < 0.2F * severity)) {
+		// Only an open wound throws out bits of meat.
+		if (config.goreChunks && open >= 0.7F && (heavy || RANDOM.nextFloat() < 0.2F * severity)) {
 			chunks(level, origin, type, meatOf(entity), Math.round((lethal ? 14 : 6) * preset.particles * severity));
 		}
 
-		float spurtChance = Mth.clamp(damage / 14.0F + (lethal ? 0.35F : 0.0F) + (severity - 1.0F) * 0.2F, 0.0F, 0.9F) * Math.min(1.0F, preset.particles);
+		// Arteries are opened by edges and blasts, not by fists.
+		float spurtChance = Mth.clamp(damage / 14.0F + (lethal ? 0.35F : 0.0F) + (severity - 1.0F) * 0.2F, 0.0F, 0.9F) * Math.min(1.0F, preset.particles)
+				* Mth.clamp(open * open, 0.0F, 1.0F);
 		if (config.arterialSpurts && RANDOM.nextFloat() < spurtChance) {
 			Vec3 dir = new Vec3(RANDOM.nextGaussian() * 0.5 + (away != null ? away.x : 0.0), 0.6 + RANDOM.nextDouble() * 0.6,
 					RANDOM.nextGaussian() * 0.5 + (away != null ? away.z : 0.0));
@@ -161,6 +173,36 @@ public final class BloodEmitter {
 
 		spray(world, origin, away, scaled, volume * preset.puddles, rgb, 0.3, 0.12, 0.42);
 		redstoneDust(world, level, origin, rgb, Math.min(5, scaled / 3), 0.08);
+	}
+
+	/**
+	 * A body burst by a blast: blood driven out hard and wide along {@code away} (unit vector, or null for every way)
+	 * so it paints walls and floor several blocks off, and a hanging red mist where the body was.
+	 */
+	public static void blast(BloodWorld world, ClientLevel level, Vec3 origin, @Nullable Vec3 away, int rgb, float volume, int count) {
+		GoreLevel preset = GoreConfig.get().goreLevel;
+		int scaled = Math.round(count * preset.particles);
+		if (rgb == BoneEmitter.BONE) {
+			BoneEmitter.burst(level, origin, away, scaled, scaled * 2, 0.4);
+			return;
+		}
+
+		spray(world, origin, away != null ? new Vec3(away.x * 0.5, 0.0, away.z * 0.5) : null, scaled, volume * preset.puddles, rgb, 0.5, 0.25, 0.95);
+		int mist = Math.min(40, Math.round(scaled * 0.6F));
+		for (int i = 0; i < mist; i++) {
+			int color = world.vary(rgb, 0.25F);
+			float scale = 1.5F + RANDOM.nextFloat() * 2.5F;
+			level.addParticle(new DustColorTransitionOptions(color, darken(color), scale),
+					origin.x + RANDOM.nextGaussian() * 0.5, origin.y + RANDOM.nextGaussian() * 0.4, origin.z + RANDOM.nextGaussian() * 0.5,
+					RANDOM.nextGaussian() * 0.05, 0.02 + RANDOM.nextDouble() * 0.04, RANDOM.nextGaussian() * 0.05);
+		}
+	}
+
+	/** A whole body bursting: a wet, heavy rupture under the crack of the blast. */
+	public static void burstSound(ClientLevel level, Vec3 at, float volume) {
+		level.playLocalSound(at.x, at.y, at.z, SoundEvents.SLIME_BLOCK_BREAK, SoundSource.NEUTRAL, volume, 0.5F + RANDOM.nextFloat() * 0.15F, false);
+		level.playLocalSound(at.x, at.y, at.z, SoundEvents.HONEY_BLOCK_BREAK, SoundSource.NEUTRAL, volume * 0.9F, 0.45F + RANDOM.nextFloat() * 0.15F, false);
+		crunch(level, at, volume);
 	}
 
 	/** A weapon biting into a body that is already down: a wet crunch. */

@@ -114,6 +114,35 @@ public final class Wounds {
 		return guessed == null ? null : new Strike(guessed.hit(), guessed.severity(), guessed.cut(), false);
 	}
 
+	/**
+	 * A blast at {@code from}: shrapnel and the blast itself tear several wounds on the side facing it. Returns the
+	 * deepest, as a guessed spot.
+	 */
+	public @Nullable Strike onBlast(LivingEntity victim, Vec3 from, float damage) {
+		if (!applies(victim)) {
+			return null;
+		}
+
+		Strike deepest = null;
+		int tears = 2 + RANDOM.nextInt(3);
+		for (int k = 0; k < tears; k++) {
+			Vec3 target = victim.position().add((RANDOM.nextDouble() - 0.5) * victim.getBbWidth(), victim.getBbHeight() * RANDOM.nextDouble(),
+					(RANDOM.nextDouble() - 0.5) * victim.getBbWidth());
+			Vec3 dir = target.subtract(from);
+			double length = dir.length();
+			if (length < 1.0E-4) {
+				continue;
+			}
+
+			Strike strike = strike(victim, from, dir.scale(1.0 / length), length + 2.0, Weapon.BLAST, damage * 0.6F);
+			if (strike != null && (deepest == null || strike.severity() > deepest.severity())) {
+				deepest = strike;
+			}
+		}
+
+		return deepest == null ? null : new Strike(deepest.hit(), deepest.severity(), false, false);
+	}
+
 	/** Casts the blow against the model as posed now and opens or deepens the wound it lands on. */
 	public @Nullable Strike strike(LivingEntity victim, Vec3 from, Vec3 dir, double reach, Weapon weapon, float damage) {
 		if (!GoreConfig.get().goreLevel.enabled() || !applies(victim)) {
@@ -224,6 +253,14 @@ public final class Wounds {
 				continue;
 			}
 
+			if (set.trauma > 0.8F && RANDOM.nextFloat() < Math.min(0.6F, (set.trauma - 0.8F) * 0.35F)) {
+				// Beaten without the skin giving way: it bleeds inside, and the blood comes from the mouth and nose.
+				Vec3 mouth = mouth(corpse != null ? corpse.entity : (LivingEntity) entity);
+				if (mouth != null) {
+					BloodEmitter.drip(blood, mouth, set.blood, 0.004F * Math.min(3.0F, set.trauma) * puddles);
+				}
+			}
+
 			for (int i = 0; i < set.count; i++) {
 				float severity = set.severity[i];
 				if (severity < 0.25F || Float.isNaN(set.ox[i]) || RANDOM.nextFloat() > severity * 0.6F) {
@@ -234,6 +271,19 @@ public final class Wounds {
 				BloodEmitter.drip(blood, base.add(offset), set.blood, 0.004F * severity * puddles);
 			}
 		}
+	}
+
+	/** The front underside of the head as posed now, or null if the model has no head (or it is gone). */
+	private static @Nullable Vec3 mouth(LivingEntity entity) {
+		ModelParts.Posed posed = ModelParts.pose(entity);
+		Vec3 head = posed == null ? null : ModelHit.centre(entity, posed, BodyPart.HEAD);
+		if (head == null || (GoreSystems.dismemberment().missingMask(entity.getId()) & BodyPart.HEAD.bit()) != 0) {
+			return null;
+		}
+
+		float yaw = posed.state().bodyRot * Mth.DEG_TO_RAD;
+		double reach = entity.getBbWidth() * 0.25;
+		return head.add(-Mth.sin(yaw) * reach, -entity.getBbHeight() * 0.08, Mth.cos(yaw) * reach);
 	}
 
 	public void forget(int entityId) {

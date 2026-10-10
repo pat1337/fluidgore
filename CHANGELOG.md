@@ -2,6 +2,45 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.7.0]
+
+### Changed
+- Deaths feel like vanilla's, only harder: a dying body stays red until it is gone, keels over onto its side about as
+  fast as the vanilla tip-over, and lands with a heavy thud and a jolt of blood.
+- Hitting a dying body knocks it about like a struck mob (Terraria-style knockback): it flashes red, skids and hops,
+  harder the harder the hit, and every blow keeps it around a little longer. Walking into a body shoves it.
+- When a body finally goes it pops: a bigger puff of smoke, and what is left bursts into its head and limbs and some
+  scraps of flesh that can still be kicked about for a while.
+- Gore does not last as long on High and Extreme (decals, puddles, parts and spurts: High 1.5x -> 1.2x, Extreme
+  2x -> 1.3x). Flesh pieces last half as long as severed parts. Bodies lie 10 s after their throes instead of 45 s
+  (configs still on the old default are moved over), and the longest throes are shorter.
+- Settings: Red Death, Death Pop. Demos: `death`, `floor`.
+
+### Fixed
+- Gore floating in the air after explosions or broken blocks. Flesh pieces resting on a block never noticed it was
+  gone; now everything resting on or stuck to a block (flesh, parts, splats, puddles) drops the moment the block
+  breaks.
+
+## [1.6.0]
+
+### Added
+- Explosions graded like real ones, by distance and how much of the body the blast could see, using the real
+  blast radius from the server's explosion packet. Point blank: the body bursts into hundreds of pieces of
+  muscle, fat, bone, gut, organs, cud and its own hide, the near side seared black, in a red mist. Close: two to
+  four limbs or the head torn off and thrown, the belly opened and the gut spilled, the body thrown up and out
+  (out of pits too) and dead before it lands. Further off: shrapnel wounds and a hard throw.
+- Flesh pieces (giblets) as small tumbling boxes that bounce by tissue, smear walls and floors, stick to walls
+  and peel off, and patter down with wet slaps and clattering bone.
+- New weapons: flint (ragged, shallow cuts), pickaxe (digs in and knocks out pieces), bites from animals, and
+  blasts. Fists and clubs bleed far less on the outside; a long beating makes the animal bleed from the mouth.
+- Settings: Blast Gore, Max Flesh Pieces.
+- In-game demos: `/gore demo` lists a scene for every feature (pig pit and TNT, weapons, hacking a leg off,
+  headless run, a beating in front of the herd, grief, personalities, bones, launch) and plays it in front of
+  you. Needs cheats or op; client-side only.
+
+### Fixed
+- Skeletons killed by a hit whose attacker the client never learned dropped no bones.
+
 ## [1.5.0]
 
 ### Added

@@ -53,6 +53,10 @@
 
 	"fluidgore.option.play_with_parts": "Play With Parts",
 	"fluidgore.option.play_with_parts.tooltip": "Punch severed parts (attack), pick them up and throw them (use), kick them by walking into them and stomp them by landing on them.",
+	"fluidgore.option.blast_gore": "Blast Gore",
+	"fluidgore.option.blast_gore.tooltip": "Explosions are graded by how close each body was. Point blank, an animal bursts into pieces of muscle, fat, bone, hide, gut, half-digested grass and organs, in the proportions a real body is made of. Close by, its limbs and head are torn off and its belly opened, and the body is thrown. Further off, it is wounded and thrown. Medium gore level and up; never players.",
+	"fluidgore.option.max_giblets": "Max Flesh Pieces",
+	"fluidgore.option.max_giblets.tooltip": "Cap on the small pieces of flesh and bone from blasts, picks and axes. The oldest go first.",
 	"fluidgore.option.wounds": "Wounds",
 	"fluidgore.option.wounds.tooltip": "Every blow lands where you aimed it on the body and leaves a wound there that worsens with each blow to the same spot: bruise, gash, open meat, then bone. A blade through a wound that cannot get any deeper takes the limb or head off. The Gore Level sets how deep wounds go: Low stops at gashes, Medium at open meat, High and Extreme reach the bone. Works on living animals and on bodies after death.",
 	"fluidgore.option.wound_hostiles": "Wounds on Monsters",
@@ -78,6 +82,10 @@
 	"fluidgore.option.death_launch.tooltip": "How hard the killing blow throws a body in the direction it was struck. 0% turns it off.",
 	"fluidgore.option.corpse_linger": "Body Lingers",
 	"fluidgore.option.corpse_linger.tooltip": "How long a slaughtered animal's body stays where it fell after its death throes end. Flies gather the longer it stays.",
+	"fluidgore.option.red_death": "Red Death",
+	"fluidgore.option.red_death.tooltip": "Dying bodies stay tinted red the whole time, like the vanilla death, until they are gone.",
+	"fluidgore.option.death_pop": "Death Pop",
+	"fluidgore.option.death_pop.tooltip": "When a body finally goes, it pops in a puff of smoke and bursts into its head, limbs and scraps of flesh, which you can still kick about for a while.",
 	"fluidgore.option.herd_panic.tooltip": "Animals near a slaughter tremble and bellow in fear. The more killing nearby, the worse it gets.",
 
 	"fluidgore.unit.seconds": "%s s",

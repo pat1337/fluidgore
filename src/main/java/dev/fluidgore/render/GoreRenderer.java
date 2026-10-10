@@ -95,6 +95,8 @@ public final class GoreRenderer {
 		for (GorePart part : GoreSystems.dismemberment().parts().parts()) {
 			submitPart(collector, poseStack, part, cam, frustum, partialTick);
 		}
+
+		GibletRenderer.submit(GoreSystems.dismemberment().giblets(), collector, poseStack, cam, frustum, partialTick);
 	}
 
 	/**

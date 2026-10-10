@@ -58,6 +58,10 @@ public final class Corpse {
 	/** Remaining ticks of a deliberate turn away from a wall, and its direction. */
 	int turnTicks;
 	float turnDir;
+	/** Ticks left of the red flash from a blow, as vanilla flashes a mob when it is hurt. */
+	public int flash;
+	/** Extra ticks on the ground, added by blows after the throes so a body being knocked about does not vanish. */
+	int extraTicks;
 	SufferPose pose = new SufferPose(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
 	Corpse(LivingEntity entity, Kind kind, Voice voice, int runTicks, int throeTicks, int stillTicks, float seed) {
@@ -105,7 +109,12 @@ public final class Corpse {
 	}
 
 	public boolean done() {
-		return groundTicks() > Math.round(FALL_TICKS) + throeTicks + stillTicks;
+		return groundTicks() > Math.round(FALL_TICKS) + throeTicks + stillTicks + extraTicks;
+	}
+
+	/** Keeps the body on screen for at least {@code ticks} more. */
+	void keepFor(int ticks) {
+		extraTicks = Math.max(extraTicks, groundTicks() - Math.round(FALL_TICKS) - throeTicks - stillTicks + ticks);
 	}
 
 	public float walkPos(float partialTick) {

@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
 import dev.fluidgore.FluidGoreClient;
+import dev.fluidgore.dismember.Giblets;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
@@ -55,6 +56,13 @@ public final class GoreConfig {
 	public int partLifetimeSeconds = 60;
 	/** Cap on detached parts in the world. */
 	public int maxDetachedParts = 32;
+	/**
+	 * A blast that kills from close by tears the body into pieces of muscle, fat, bone, hide, gut and organs instead
+	 * of leaving it to die. Medium gore level and up; never players.
+	 */
+	public boolean blastGore = true;
+	/** Cap on the small pieces of flesh and bone (from blasts, picks and axes) in the world. */
+	public int maxGiblets = 3000;
 	/** Non-lethal hits at or above this damage count as heavy and may sever a part from a mob. */
 	public float heavyHitDamage = 6.0F;
 	/** Items that can cut. Entries are item ids ({@code minecraft:iron_sword}) or item tags ({@code #minecraft:swords}). */
@@ -83,7 +91,16 @@ public final class GoreConfig {
 	 */
 	public int griefSeconds = 600;
 	/** How long a body stays on the ground after its death throes, in seconds. */
-	public int corpseLingerSeconds = 45;
+	public int corpseLingerSeconds = 10;
+	/** Dying bodies stay tinted red, like vanilla's death, until they are gone. */
+	public boolean redDeath = true;
+	/**
+	 * When a body finally goes, it pops: a puff of smoke, and what is left of it bursts into its head and limbs and a
+	 * few scraps of flesh, which can still be kicked about for a little while.
+	 */
+	public boolean deathPop = true;
+	/** Version of the saved file, so changed defaults can reach configs saved by older versions. */
+	public int configVersion;
 	/**
 	 * Hack model: blows open wounds on the exact spot of the body they hit, deepening through bruise, gash, meat and
 	 * bone, and a blade through a wound that cannot get deeper takes that part off.
@@ -142,7 +159,8 @@ public final class GoreConfig {
 			"minecraft:allay",
 			"minecraft:creaking",
 			"minecraft:wither",
-			"minecraft:ender_dragon"
+			"minecraft:ender_dragon",
+			"claysoldiers:clay_soldier"
 	));
 
 	public static GoreConfig get() {
@@ -178,7 +196,15 @@ public final class GoreConfig {
 	}
 
 	/** Repairs values that a hand-edited file may have broken (missing enums, negative caps, null lists). */
+	private static final int CONFIG_VERSION = 2;
+
 	private void sanitize() {
+		if (configVersion < 2) {
+			// 1.7: bodies lingered 45 s by default, which was too long. Only an untouched default is changed.
+			if (corpseLingerSeconds == 45) corpseLingerSeconds = 10;
+		}
+
+		configVersion = CONFIG_VERSION;
 		if (goreLevel == null) goreLevel = GoreLevel.MEDIUM;
 		if (bloodStyle == null) bloodStyle = BloodStyle.REDSTONE;
 		if (bloodColor == null) bloodColor = BloodColor.RED;
@@ -189,6 +215,7 @@ public final class GoreConfig {
 		maxDroplets = clamp(maxDroplets, 50, 5000);
 		partLifetimeSeconds = clamp(partLifetimeSeconds, 5, 1800);
 		maxDetachedParts = clamp(maxDetachedParts, 1, 256);
+		maxGiblets = clamp(maxGiblets, 0, Giblets.CAPACITY);
 		if (!(heavyHitDamage > 0.0F)) heavyHitDamage = 6.0F;
 		if (sufferingLevel == null) sufferingLevel = GoreLevel.MEDIUM;
 		screamVolume = clamp(screamVolume, 0, 200);

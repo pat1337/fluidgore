@@ -10,6 +10,7 @@ import dev.fluidgore.wound.WoundSet;
 import dev.fluidgore.wound.Wounds;
 import it.unimi.dsi.fastutil.ints.Int2IntMap;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
+import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
@@ -44,6 +45,9 @@ public final class Dismemberment {
 	private final GorePartManager parts = new GorePartManager();
 	private final PartInteraction interaction = new PartInteraction(parts);
 	private final Wounds wounds = new Wounds();
+	private final Giblets giblets = new Giblets();
+	/** Bodies torn to pieces by a blast: not drawn at all any more. */
+	private final IntOpenHashSet vaporized = new IntOpenHashSet();
 	private int tick;
 
 	public PartInteraction interaction() {
@@ -52,6 +56,93 @@ public final class Dismemberment {
 
 	public Wounds wounds() {
 		return wounds;
+	}
+
+	public Giblets giblets() {
+		return giblets;
+	}
+
+	/** True if this entity was torn apart by a blast; its renderer is skipped. */
+	public boolean vaporized(int entityId) {
+		return vaporized.contains(entityId);
+	}
+
+	/**
+	 * A blast at {@code from} tore {@code entity} apart: it is no longer drawn, its body becomes a spray of pieces of
+	 * every tissue it is made of, and blood goes everywhere.
+	 */
+	public void vaporize(BloodWorld blood, ClientLevel level, LivingEntity entity, Vec3 from) {
+		if (!vaporized.add(entity.getId())) {
+			return;
+		}
+
+		giblets.burst(level, blood, entity, from);
+		int rgb = EntityFilter.bloodColor(entity);
+		Vec3 centre = entity.position().add(0.0, entity.getBbHeight() * 0.5, 0.0);
+		BloodEmitter.burst(blood, level, centre, rgb, 0.6F * entity.getBbWidth() * entity.getBbHeight(), Math.round(40 * entity.getBbWidth()));
+		Vec3 out = centre.subtract(from);
+		// A red mist: fine blood driven out hard in every direction, painting the walls and floor around.
+		BloodEmitter.blast(blood, level, centre, out.lengthSqr() > 1.0E-6 ? out.normalize() : null, rgb,
+				0.4F * entity.getBbWidth() * entity.getBbHeight(), Math.round(60 * entity.getBbWidth()));
+
+		if (GoreConfig.get().goreSounds) {
+			BloodEmitter.burstSound(level, centre, 1.0F);
+		}
+	}
+
+	/**
+	 * A blast close by, but not close enough to shred the body: it tears two to four limbs (or the head) off and
+	 * throws them, rips the belly open so the gut and organs spill out, and sprays blood over everything around.
+	 * {@code force} is how close it was to shredding the body, 0..1.
+	 */
+	public void tear(BloodWorld blood, ClientLevel level, LivingEntity entity, Vec3 from, float force) {
+		Vec3 centre = entity.position().add(0.0, entity.getBbHeight() * 0.5, 0.0);
+		Vec3 out = centre.subtract(from);
+		Vec3 flat = new Vec3(out.x, 0.0, out.z);
+		flat = flat.lengthSqr() > 1.0E-6 ? flat.normalize() : null;
+		List<BodyPart> candidates = remaining(entity);
+		int count = 2 + RANDOM.nextInt(2) + (force > 0.5F ? 1 : 0);
+		for (int i = 0; i < count && !candidates.isEmpty(); i++) {
+			BodyPart chosen = candidates.remove(RANDOM.nextInt(candidates.size()));
+			// Each piece goes its own way, roughly away from the blast.
+			Vec3 away = flat == null ? null : flat.yRot((float) (RANDOM.nextGaussian() * 0.6));
+			sever(blood, level, entity, chosen, away, entity::position, Float.NaN, 0.0F, 2.5 + 3.0 * force);
+		}
+
+		giblets.spill(level, blood, entity, from, force);
+		int rgb = EntityFilter.bloodColor(entity);
+		BloodEmitter.blast(blood, level, centre, out.lengthSqr() > 1.0E-6 ? out.normalize() : null, rgb,
+				0.25F * entity.getBbWidth() * entity.getBbHeight(), Math.round(30 * entity.getBbWidth()));
+		if (GoreConfig.get().goreSounds) {
+			BloodEmitter.burstSound(level, centre, 0.8F);
+		}
+	}
+
+	/**
+	 * The end of a death, Terraria style: what is left of a body lying at {@code at} bursts apart. Its head and limbs
+	 * are thrown up and out with a few scraps of flesh in a spray of blood, and can be kicked about until they fade,
+	 * sooner than ordinarily severed parts.
+	 */
+	public void pop(BloodWorld blood, ClientLevel level, LivingEntity entity, Vec3 at, float yaw, float roll) {
+		GoreConfig config = GoreConfig.get();
+		int lifetime = Math.max(100, Math.round(config.partLifetimeSeconds * 10 * config.goreLevel.duration));
+		for (BodyPart bodyPart : remaining(entity)) {
+			Vec3 away = new Vec3(RANDOM.nextGaussian(), 0.0, RANDOM.nextGaussian());
+			GorePart part = sever(blood, level, entity, bodyPart, away.lengthSqr() > 1.0E-6 ? away.normalize() : null, () -> at, yaw, roll, 1.4);
+			if (part != null) {
+				part.lifetime = lifetime;
+				part.voice = null;
+				part.twitchTicks = 0;
+			}
+		}
+
+		giblets.spill(level, blood, entity, at, 0.0F);
+		Vec3 centre = at.add(0.0, entity.getBbWidth() * 0.4, 0.0);
+		BloodEmitter.burst(blood, level, centre, EntityFilter.bloodColor(entity), 0.12F * entity.getBbWidth() * entity.getBbHeight(),
+				Math.round(24 * entity.getBbWidth()));
+		if (config.goreSounds) {
+			BloodEmitter.burstSound(level, centre, 0.6F);
+		}
 	}
 
 	public GorePartManager parts() {
@@ -81,7 +172,7 @@ public final class Dismemberment {
 					? BodyPart.HEAD
 					: candidates.get(RANDOM.nextInt(candidates.size()));
 			candidates.remove(chosen);
-			sever(blood, level, entity, chosen, away, entity::position, Float.NaN, 0.0F);
+			sever(blood, level, entity, chosen, away, entity::position, Float.NaN, 0.0F, 1.0);
 		}
 	}
 
@@ -92,7 +183,7 @@ public final class Dismemberment {
 	public void severOnBody(BloodWorld blood, ClientLevel level, LivingEntity entity, Supplier<Vec3> origin, float yaw, float roll, @Nullable Vec3 away) {
 		List<BodyPart> candidates = remaining(entity);
 		if (!candidates.isEmpty()) {
-			sever(blood, level, entity, candidates.get(RANDOM.nextInt(candidates.size())), away, origin, yaw, roll);
+			sever(blood, level, entity, candidates.get(RANDOM.nextInt(candidates.size())), away, origin, yaw, roll, 1.0);
 		}
 	}
 
@@ -103,7 +194,7 @@ public final class Dismemberment {
 	public void severPart(BloodWorld blood, ClientLevel level, LivingEntity entity, BodyPart part, Supplier<Vec3> origin, float yaw,
 			float roll, @Nullable Vec3 away) {
 		if ((missing.get(entity.getId()) & part.bit()) == 0) {
-			sever(blood, level, entity, part, away, origin, yaw, roll);
+			sever(blood, level, entity, part, away, origin, yaw, roll, 1.0);
 		}
 	}
 
@@ -115,18 +206,18 @@ public final class Dismemberment {
 	}
 
 	@SuppressWarnings({"unchecked", "rawtypes"})
-	private void sever(BloodWorld blood, ClientLevel level, LivingEntity entity, BodyPart bodyPart, @Nullable Vec3 away,
-			Supplier<Vec3> origin, float yawOverride, float roll) {
+	private @Nullable GorePart sever(BloodWorld blood, ClientLevel level, LivingEntity entity, BodyPart bodyPart, @Nullable Vec3 away,
+			Supplier<Vec3> origin, float yawOverride, float roll, double fling) {
 		ModelParts.Posed posed = ModelParts.pose(entity);
 		if (posed == null) {
-			return;
+			return null;
 		}
 
 		EntityModel model = posed.model();
 		LivingEntityRenderState state = posed.state();
 		ModelPart source = ModelParts.index(model)[bodyPart.ordinal()];
 		if (source == null) {
-			return;
+			return null;
 		}
 
 		Identifier texture = ((LivingEntityRenderer) posed.renderer()).getTextureLocation(state);
@@ -138,7 +229,7 @@ public final class Dismemberment {
 		Vector3f localCenter = new Vector3f((b[0] + b[3]) * 0.5F, (b[1] + b[4]) * 0.5F, (b[2] + b[5]) * 0.5F);
 		Vector3f modelCenter = ModelParts.toModelSpace(model.root(), source, localCenter);
 		if (modelCenter == null) {
-			return;
+			return null;
 		}
 
 		// Model space -> world, mirroring LivingEntityRenderer: rotate by body yaw, scale, flip X/Y, shift down.
@@ -173,15 +264,15 @@ public final class Dismemberment {
 
 		double ax = away != null ? away.x : RANDOM.nextDouble() - 0.5;
 		double az = away != null ? away.z : RANDOM.nextDouble() - 0.5;
-		part.vx = ax * 0.18 + (RANDOM.nextDouble() - 0.5) * 0.12;
-		part.vz = az * 0.18 + (RANDOM.nextDouble() - 0.5) * 0.12;
-		part.vy = 0.18 + RANDOM.nextDouble() * 0.15 + (bodyPart == BodyPart.HEAD ? 0.08 : 0.0);
+		part.vx = ax * 0.18 * fling + (RANDOM.nextDouble() - 0.5) * 0.12;
+		part.vz = az * 0.18 * fling + (RANDOM.nextDouble() - 0.5) * 0.12;
+		part.vy = 0.18 + RANDOM.nextDouble() * 0.15 + (bodyPart == BodyPart.HEAD ? 0.08 : 0.0) + 0.1 * (fling - 1.0);
 		part.spinAxis.set(RANDOM.nextFloat() - 0.5F, RANDOM.nextFloat() - 0.5F, RANDOM.nextFloat() - 0.5F).normalize();
 		if (!part.spinAxis.isFinite()) {
 			part.spinAxis.set(1.0F, 0.0F, 0.0F);
 		}
 
-		part.spinSpeed = 0.2F + RANDOM.nextFloat() * 0.35F;
+		part.spinSpeed = (0.2F + RANDOM.nextFloat() * 0.35F) * (float) Math.sqrt(fling);
 		part.bleedLeft = part.bone() ? 0.0F : 0.12F * preset.puddles;
 		part.light = net.minecraft.util.LightCoordsUtil.getLightCoords(level, entity.blockPosition());
 		if (bodyPart == BodyPart.HEAD && GoreConfig.get().sufferingLevel.enabled()) {
@@ -195,6 +286,7 @@ public final class Dismemberment {
 		// The stump stays attached to the body (which may keep moving); the part flies off on its own.
 		Vec3 stumpOffset = new Vec3(offset.x, offset.y, offset.z);
 		BloodEmitter.sever(blood, level, entity, () -> origin.get().add(stumpOffset), () -> new Vec3(part.x, part.y, part.z), rgb);
+		return part;
 	}
 
 	/** Physics for severed parts and bleeding stumps on entities that are still walking around. */
@@ -203,6 +295,7 @@ public final class Dismemberment {
 		interaction.tick(level, blood);
 		parts.tick(level, blood);
 		wounds.tick(level, blood);
+		giblets.tick(level, blood);
 		if (tick % 8 != 0 || missing.isEmpty()) {
 			return;
 		}
@@ -225,11 +318,13 @@ public final class Dismemberment {
 	/** An entity respawned or healed from death: give it its parts back. */
 	public void restore(int entityId) {
 		missing.remove(entityId);
+		vaporized.remove(entityId);
 		wounds.forget(entityId);
 	}
 
 	public void onEntityUnload(int entityId) {
 		missing.remove(entityId);
+		vaporized.remove(entityId);
 		wounds.forget(entityId);
 	}
 
@@ -237,6 +332,8 @@ public final class Dismemberment {
 		interaction.clear();
 		missing.clear();
 		wounds.clear();
+		giblets.clear();
+		vaporized.clear();
 		parts.clear();
 	}
 }

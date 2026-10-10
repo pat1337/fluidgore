@@ -8,8 +8,8 @@ public enum GoreLevel {
 	OFF(0.0F, 0.0F, 0.0F, 0, 0.0F, 0.0F, 0.0F),
 	LOW(0.4F, 0.5F, 0.15F, 1, 0.5F, 0.6F, 0.45F),
 	MEDIUM(1.0F, 1.0F, 0.35F, 2, 1.0F, 1.0F, 0.7F),
-	HIGH(1.7F, 1.5F, 0.6F, 3, 1.5F, 1.3F, 1.0F),
-	EXTREME(2.6F, 2.2F, 1.0F, 5, 2.0F, 1.8F, 1.0F);
+	HIGH(1.7F, 1.5F, 0.6F, 3, 1.2F, 1.3F, 1.0F),
+	EXTREME(2.6F, 2.2F, 1.0F, 5, 1.3F, 1.8F, 1.0F);
 
 	/** Multiplier for droplet and mist particle counts. */
 	public final float particles;

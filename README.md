@@ -24,14 +24,29 @@ after death. Open wounds drip, so a wounded animal leaves a trail.
 
 ![Wound layers on a leg: bruise, open meat, bone](docs/images/wound-layers.png)
 
-- **Weapons cut differently.** Fists bruise and split skin, swords cut, axes chop deep and wide, arrows punch small,
-  deep holes. Each has its own sound: a dull wet thud, a slice, a heavy chop, a crack once the blade reaches bone.
+- **Weapons cut differently.** Fists and clubs bruise and crush but barely break the skin, so a beating bleeds
+  little outside, and after enough of it the animal bleeds from the mouth and nose instead. A flint scrapes ragged,
+  shallow cuts; swords cut; axes chop deep and wide; a pickaxe digs in and knocks bits of fat, meat and bone out
+  like mining; arrows and spears punch small, deep holes; animals bite. Each has its own sound.
 - **Hack it off.** A blade through a wound that cannot get any deeper takes that limb or the head off. The body keeps
   a raw stump; the piece keeps its gashes and shows meat around bone where it was cut.
 - **Flesh by species.** Ordinary animals bleed red. Husks are dried leather that splits to a sickly, poison-coloured
   ooze. Skeletons never bleed: they scuff, crack, chip into shards and shatter.
 
 ![Severed pieces with raw cut ends](docs/images/severed.png)
+
+### Explosions
+A blast is graded the way a real one is, by how close each body was and how much of it the blast could see (the
+same measure the game uses for explosion damage, with the real radius of the TNT, creeper or bed):
+- **Point blank:** the body is gone. It bursts into hundreds of pieces of muscle, fat, bone, gut, organs, the
+  rumen's half-digested grass and hide cut from the animal's own skin, in the proportions a real body is made of.
+  The side that took the fireball is seared black. A red mist hangs where it stood.
+- **Close:** two to four limbs or the head torn off and thrown, the belly ripped open so the gut and organs spill,
+  and the rest thrown up and out like a doll, over walls and out of pits. Dead before it lands.
+- **Further off:** shrapnel wounds on the side facing the blast, thrown hard, and a slower death.
+
+Wet pieces smear the walls they hit; some stick there for a while before they peel off and drop. Meat rains down
+with a patter of wet slaps and the clatter of bone. Medium gore level and up; never players.
 
 ### Every animal is an individual
 - **Its own voice and nerve.** Each animal's personality is fixed by its species and identity: voice pitch, how loud
@@ -69,6 +84,16 @@ Droplets fly with gravity and splat on floors and walls. Puddles flow to lower g
 and drip off ledges. Arterial spurts pump in pulses. Blood dries and darkens, rain washes it away, footprints track
 through it, and a sponge or brush scrubs it off.
 
+## Demos
+Every feature has a short scene you can play in game, set up right in front of you: type `/gore demo` for the
+list (click one to play it), or `/gore demo <name>`. `pit` digs a 5x5 pit of pigs and lights a TNT in it;
+`weapons`, `hack`, `headless`, `beating`, `grief`, `personalities`, `bones` and `launch` show the rest.
+`/gore demo stop` ends one, `/gore demo clear` removes what demos summoned.
+
+Demos summon animals with ordinary commands, so they need cheats (singleplayer: Open to LAN, Allow Cheats) or
+operator rights on a server. Nothing is needed on the server itself. The `pit` demo digs and blows up the ground,
+so it asks you to click once more before it does.
+
 ## Install
 
 1. Install [Fabric Loader](https://fabricmc.net/use/) **0.19.5+** for Minecraft **26.3** and
@@ -102,9 +127,11 @@ Tested alongside Sodium, Iris (without a shader pack), Lithium, FerriteCore, Ent
 | Scrub Blood | On | Hold a sponge, wet sponge or brush and hold use on blood to wipe it away. Sneak to use the item normally. |
 | Fluid Cells/Tick | 64 | Fluid simulation budget per tick. Lower it on a weak CPU. |
 | Max Droplets | 600 | Cap on flying droplets. |
+| Max Flesh Pieces | 3000 | Cap on the small pieces of flesh and bone from blasts, picks and axes. The oldest go first. |
 | Part Lifetime | 60 s | How long severed parts stay at Medium (scaled by Gore Level). |
 | Max Severed Parts | 32 | Cap on loose parts; the oldest go first. |
 | Play With Parts | On | Punch severed parts, pick them up and throw them, kick them by walking into them, stomp them flat. |
+| Blast Gore | On | Explosions shred, tear open and throw bodies by how close they were (see Explosions). |
 | Wounds | On | The hit-zone and wound system described above. |
 | Wounds on Monsters | Off | Wounds on hostile mobs too. |
 | Wounds on Players | Off | Wounds on other players, on your screen only. |
@@ -116,7 +143,9 @@ Tested alongside Sodium, Iris (without a shader pack), Lithium, FerriteCore, Ent
 | Ecology | On | Animals remember killing and react by role: prey, herds, mothers, predators, flies. |
 | Grief | 600 s | How long a mother grieves for her killed young (and a young animal for its mother), at Medium suffering. 0 turns it off. |
 | Death Launch | 100% | How hard the killing blow throws a body. 0 turns it off. |
-| Body Lingers | 45 s | How long a body stays after its death throes. |
+| Body Lingers | 10 s | How long a body stays after its death throes. |
+| Red Death | On | Dying bodies stay red until they are gone, like the vanilla death. |
+| Death Pop | On | A body that finally goes pops into its head, limbs and scraps of flesh, which you can kick about. |
 
 Only in `config/fluidgore.json`:
 

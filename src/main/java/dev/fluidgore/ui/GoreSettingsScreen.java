@@ -63,7 +63,8 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 		this.list.addHeader(Component.translatable("fluidgore.header.performance"));
 		this.list.addSmall(
 				scaledSlider("fluidgore.option.cells_per_tick", 1, 64, 8, c.maxActiveCellsPerTick, null, v -> c.maxActiveCellsPerTick = v),
-				scaledSlider("fluidgore.option.max_droplets", 1, 100, 50, c.maxDroplets, null, v -> c.maxDroplets = v)
+				scaledSlider("fluidgore.option.max_droplets", 1, 100, 50, c.maxDroplets, null, v -> c.maxDroplets = v),
+				scaledSlider("fluidgore.option.max_giblets", 0, 80, 50, c.maxGiblets, null, v -> c.maxGiblets = v)
 		);
 
 		this.list.addHeader(Component.translatable("fluidgore.header.dismemberment"));
@@ -71,6 +72,7 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 				scaledSlider("fluidgore.option.part_lifetime", 1, 120, 5, c.partLifetimeSeconds, "fluidgore.unit.seconds", v -> c.partLifetimeSeconds = v),
 				scaledSlider("fluidgore.option.max_parts", 1, 128, 1, c.maxDetachedParts, null, v -> c.maxDetachedParts = v),
 				OptionInstance.createBoolean("fluidgore.option.play_with_parts", c.playWithParts, v -> c.playWithParts = v),
+				OptionInstance.createBoolean("fluidgore.option.blast_gore", c.blastGore, v -> c.blastGore = v),
 				OptionInstance.createBoolean("fluidgore.option.wounds", c.wounds, v -> c.wounds = v),
 				OptionInstance.createBoolean("fluidgore.option.wound_hostiles", c.woundHostiles, v -> c.woundHostiles = v),
 				OptionInstance.createBoolean("fluidgore.option.wound_players", c.woundPlayers, v -> c.woundPlayers = v)
@@ -86,7 +88,9 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 				OptionInstance.createBoolean("fluidgore.option.ecology", c.ecology, v -> c.ecology = v),
 				scaledSlider("fluidgore.option.grief", 0, 60, 30, c.griefSeconds, "fluidgore.unit.seconds", v -> c.griefSeconds = v),
 				scaledSlider("fluidgore.option.death_launch", 0, 30, 10, c.deathLaunchPercent, "fluidgore.unit.percent", v -> c.deathLaunchPercent = v),
-				scaledSlider("fluidgore.option.corpse_linger", 1, 120, 5, c.corpseLingerSeconds, "fluidgore.unit.seconds", v -> c.corpseLingerSeconds = v)
+				scaledSlider("fluidgore.option.corpse_linger", 1, 120, 5, c.corpseLingerSeconds, "fluidgore.unit.seconds", v -> c.corpseLingerSeconds = v),
+				OptionInstance.createBoolean("fluidgore.option.red_death", c.redDeath, v -> c.redDeath = v),
+				OptionInstance.createBoolean("fluidgore.option.death_pop", c.deathPop, v -> c.deathPop = v)
 		);
 	}
 

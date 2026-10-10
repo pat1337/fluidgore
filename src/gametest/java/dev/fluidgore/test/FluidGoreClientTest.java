@@ -51,6 +51,16 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			hackModel(context, singleplayer.getServer());
 			babies(context, singleplayer.getServer());
 			grief(context, singleplayer.getServer());
+			weapons(context, singleplayer.getServer());
+			pigPit(context, singleplayer.getServer());
+			floorAndDeath(context, singleplayer.getServer());
+			// Cheats are off in this world: demos must refuse, not half-run.
+			check(!context.computeOnClient(mc -> dev.fluidgore.demo.DemoPlayer.allowed(mc)), "demos allowed without cheats");
+		}
+
+		try (TestSingleplayerContext singleplayer = context.worldBuilder().adjustSettings(s -> s.setAllowCommands(true)).create()) {
+			singleplayer.getConnection().waitForChunksRender();
+			demos(context, singleplayer.getServer());
 		}
 
 		screens(context);
@@ -597,6 +607,11 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			check(result.contains("onDrawnModel=true") && !result.contains("wounds=0"), "baby wounds not on the model it is drawn with: " + result);
 		}
 
+		// Bodies from earlier scenes pop into parts when they go; keep them from filling the part cap here.
+		context.runOnClient(mc -> {
+			GoreSystems.suffering().clear();
+			GoreSystems.dismemberment().parts().clear();
+		});
 		int partsBefore = context.computeOnClient(mc -> GoreSystems.dismemberment().parts().parts().size());
 		for (int id : ids) {
 			context.runOnClient(mc -> {
@@ -693,6 +708,298 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		check(g[1].equals("true"), "the calf does not grieve for its killed mother");
 		check(Float.parseFloat(g[2]) > 0.3F, "the grieving mother does not hang her head: " + g[2]);
 		context.takeScreenshot("grief_02_mother_grieving");
+	}
+
+	/**
+	 * Weapons differ: a beating with fists must spill a small fraction of the blood the same blows with a sword do; a
+	 * pickaxe must knock pieces out of the wound; a flint is its own weapon; and a cow next to primed TNT must vanish
+	 * into pieces of flesh.
+	 */
+	private static void weapons(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("gamemode creative @a");
+		server.runCommand("tp @a 50.5 -60 0.5 0 15");
+		context.waitTicks(20);
+		context.runOnClient(mc -> GoreSystems.suffering().clear());
+
+		int fists = bloodFrom(context, server, "minecraft:air", 53.5);
+		int sword = bloodFrom(context, server, "minecraft:iron_sword", 47.5);
+		System.out.println("[FluidGoreTest] blood from three blows: fists " + fists + ", sword " + sword);
+		check(sword > 0 && fists * 3 < sword, "a beating with fists bled about as much as a sword: fists " + fists + ", sword " + sword);
+		context.takeScreenshot("weapon_01_fists_and_sword");
+
+		boolean flint = context.computeOnClient(mc -> Weapon.of(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.FLINT)) == Weapon.FLINT);
+		check(flint, "flint is not treated as a sharp rock");
+
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:iron_pickaxe");
+		server.runCommand("summon minecraft:cow 50.5 -60 3.5 {NoAI:1b,Rotation:[90f,0f],Tags:[\"mined\"]}");
+		context.waitTicks(15);
+		// Scraps from bodies that popped earlier would expire meanwhile and hide the new ones.
+		context.runOnClient(mc -> {
+			GoreSystems.suffering().clear();
+			GoreSystems.dismemberment().giblets().clear();
+		});
+		int before = context.computeOnClient(mc -> GoreSystems.dismemberment().giblets().count());
+		for (int i = 0; i < 3; i++) {
+			context.runOnClient(mc -> {
+				var cow = (net.minecraft.world.entity.LivingEntity) mc.level.getEntitiesOfClass(net.minecraft.world.entity.animal.cow.Cow.class,
+						mc.player.getBoundingBox().inflate(8.0)).getFirst();
+				var at = cow.position().add(0.0, cow.getBbHeight() * 0.6, 0.0);
+				aimAt(mc, at.x, at.y, at.z);
+				var eye = mc.player.getEyePosition();
+				GoreSystems.dismemberment().wounds().recordAim(cow, eye, at.subtract(eye).normalize());
+			});
+			server.runCommand("execute as @p run damage @e[tag=mined,limit=1] 2 minecraft:player_attack by @s");
+			context.waitTicks(12);
+		}
+
+		int chips = context.computeOnClient(mc -> GoreSystems.dismemberment().giblets().count()) - before;
+		System.out.println("[FluidGoreTest] pieces knocked out by three pickaxe blows: " + chips);
+		check(chips > 0, "the pickaxe knocked nothing out of the wound");
+		context.takeScreenshot("weapon_02_pickaxe");
+
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");
+		server.runCommand("summon minecraft:cow 50.5 -60 9.5 {NoAI:1b,Tags:[\"blasted\"]}");
+		context.waitTicks(15);
+		int cowId = context.computeOnClient(mc -> {
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e instanceof net.minecraft.world.entity.animal.cow.Cow cow && cow.isAlive() && Math.abs(cow.getZ() - 9.5) < 0.5) {
+					return e.getId();
+				}
+			}
+
+			return -1;
+		});
+		int gibsBefore = context.computeOnClient(mc -> GoreSystems.dismemberment().giblets().count());
+		server.runCommand("summon minecraft:tnt 50.5 -60 10.3 {fuse:1}");
+		// Checked straight away: once the server removes the dead entity, it is forgotten.
+		context.waitTicks(6);
+		boolean gone = context.computeOnClient(mc -> GoreSystems.dismemberment().vaporized(cowId));
+		context.waitTicks(24);
+		int gibs = context.computeOnClient(mc -> GoreSystems.dismemberment().giblets().count()) - gibsBefore;
+		System.out.println("[FluidGoreTest] cow next to TNT: torn apart " + gone + ", pieces " + gibs);
+		check(gone, "the cow next to the TNT was not torn apart");
+		check(gibs >= 50, "the TNT made too few pieces of the cow: " + gibs);
+		context.takeScreenshot("weapon_03_tnt");
+		context.waitTicks(40);
+		context.takeScreenshot("weapon_04_tnt_settled");
+	}
+
+	/**
+	 * A 5x5 pit of pigs with TNT in the middle. The blast must be graded like a real one: the pigs next to the charge
+	 * are shredded, the ones further off are torn open (limbs and heads thrown, guts out) and thrown, not left in a heap.
+	 */
+	private static void pigPit(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("fill 60 -63 -10 64 -61 -6 minecraft:air");
+		server.runCommand("tp @a 62.5 -60 -15.5 0 40");
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+		double[][] spots = {{61.5, -7.5}, {63.5, -7.5}, {62.5, -9.5}, {62.5, -5.5}, {60.5, -9.5}, {64.5, -9.5}, {60.5, -5.5}, {64.5, -5.5}};
+		for (double[] spot : spots) {
+			server.runCommand("summon minecraft:pig " + spot[0] + " -63 " + spot[1] + " {NoAI:1b,Tags:[\"pit\"]}");
+		}
+
+		context.waitTicks(20);
+		java.util.List<Integer> pigs = context.computeOnClient(mc -> {
+			java.util.List<Integer> ids = new java.util.ArrayList<>();
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e instanceof net.minecraft.world.entity.animal.pig.Pig pig && pig.isAlive()) {
+					ids.add(e.getId());
+				}
+			}
+
+			return ids;
+		});
+		check(pigs.size() == spots.length, "expected " + spots.length + " pigs in the pit, saw " + pigs.size());
+
+		server.runCommand("summon minecraft:tnt 62.5 -63 -7.5 {fuse:1}");
+		context.waitTicks(4);
+		int shredded = context.computeOnClient(mc -> (int) pigs.stream().filter(id -> GoreSystems.dismemberment().vaporized(id)).count());
+		int torn = context.computeOnClient(mc -> (int) pigs.stream()
+				.filter(id -> Integer.bitCount(GoreSystems.dismemberment().missingMask(id)) >= 2).count());
+		int parts = context.computeOnClient(mc -> GoreSystems.dismemberment().parts().parts().size());
+		context.takeScreenshot("pit_01_blast");
+		context.waitTicks(16);
+		int pieces = context.computeOnClient(mc -> GoreSystems.dismemberment().giblets().count());
+		context.takeScreenshot("pit_02_raining");
+		context.waitTicks(60);
+		context.takeScreenshot("pit_03_after");
+		System.out.println("[FluidGoreTest] pig pit: shredded " + shredded + ", torn open " + torn + ", parts thrown " + parts
+				+ ", flesh pieces " + pieces + " of " + spots.length + " pigs");
+		check(shredded >= 1, "no pig next to the TNT was shredded");
+		check(torn >= 1, "no pig further from the TNT was torn open");
+		check(pieces >= 150, "too few pieces of pig: " + pieces);
+	}
+
+	/**
+	 * Gore must never hang in the air: a pig is shredded on a raised floor, the floor is removed, and no piece may be
+	 * left at floor height. Then a cow is killed: it is knocked about by blows while it dies, and pops into parts.
+	 */
+	private static void floorAndDeath(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("tp @a 100.5 -60 -15.5 0 30");
+		server.runCommand("fill 96 -57 -12 104 -57 -4 minecraft:stone");
+		server.runCommand("summon minecraft:pig 100.5 -56 -8.5 {NoAI:1b}");
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+		context.waitTicks(20);
+		context.runOnClient(mc -> {
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e instanceof net.minecraft.world.entity.animal.pig.Pig pig) {
+					GoreSystems.dismemberment().vaporize(GoreSystems.blood(), mc.level, pig, pig.position().add(0.0, -0.3, 0.0));
+				}
+			}
+		});
+		context.waitTicks(80);
+		// Pieces lying on top of the floor (its top face is at y -56).
+		java.util.function.Function<net.minecraft.client.Minecraft, Integer> onFloor = mc -> {
+			var g = GoreSystems.dismemberment().giblets();
+			int n = 0;
+			for (int i = 0; i < g.count(); i++) {
+				if (g.y[i] > -56.3 && g.y[i] < -55.5 && Math.abs(g.x[i] - 100.5) < 4.5 && Math.abs(g.z[i] + 8.0) < 4.5) {
+					n++;
+				}
+			}
+
+			return n;
+		};
+		int before = context.computeOnClient(onFloor::apply);
+		int decalsBefore = context.computeOnClient(mc -> GoreSystems.blood().decals().size());
+		context.takeScreenshot("floor_01_on_floor");
+		server.runCommand("fill 96 -57 -12 104 -57 -4 minecraft:air");
+		context.waitTicks(30);
+		int after = context.computeOnClient(onFloor::apply);
+		int decalsAfter = context.computeOnClient(mc -> GoreSystems.blood().decals().size());
+		context.takeScreenshot("floor_02_fell");
+		System.out.println("[FluidGoreTest] floor: pieces on the floor before " + before + ", after removing it " + after
+				+ "; decals " + decalsBefore + " -> " + decalsAfter);
+		check(before >= 10, "too few pieces landed on the raised floor: " + before);
+		check(after == 0, after + " pieces were left hanging in the air where the floor was");
+
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("summon minecraft:cow 100.5 -60 -12.5 {NoAI:1b,Rotation:[90f,0f]}");
+		context.waitTicks(20);
+		int cowId = context.computeOnClient(mc -> {
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e instanceof net.minecraft.world.entity.animal.cow.Cow) {
+					return e.getId();
+				}
+			}
+
+			return -1;
+		});
+		check(cowId >= 0, "no cow for the death test");
+		context.runOnClient(mc -> GoreSystems.dismemberment().clear());
+		server.runCommand("execute as @p run damage @e[type=minecraft:cow,limit=1] 100 minecraft:player_attack by @s");
+		context.waitTicks(30);
+		context.takeScreenshot("death_01_down");
+		double[] moved = context.computeOnClient(mc -> {
+			var corpse = GoreSystems.suffering().corpse(cowId);
+			if (corpse == null) {
+				return new double[]{-1.0};
+			}
+
+			var start = corpse.position();
+			var eye = mc.player.getEyePosition();
+			var at = dev.fluidgore.suffer.CorpseStrike.centre(corpse);
+			dev.fluidgore.suffer.CorpseStrike.strike(mc.level, GoreSystems.blood(), corpse, eye, at.subtract(eye).normalize(), Weapon.BLUNT, 1.0F);
+			return new double[]{start.x, start.z, corpse.flash};
+		});
+		check(moved.length == 3, "the killed cow left no body");
+		check(moved[2] > 0, "a blow on the body did not flash it red");
+		context.waitTicks(10);
+		double shoved = context.computeOnClient(mc -> {
+			var corpse = GoreSystems.suffering().corpse(cowId);
+			return corpse == null ? -1.0 : Math.hypot(corpse.position().x - moved[0], corpse.position().z - moved[1]);
+		});
+		System.out.println("[FluidGoreTest] death: a punch knocked the body " + shoved + " blocks");
+		check(shoved > 0.3, "a punch barely moved the dying body: " + shoved);
+
+		int waited = 0;
+		while (context.computeOnClient(mc -> GoreSystems.suffering().corpse(cowId) != null) && waited < 1600) {
+			context.waitTicks(20);
+			waited += 20;
+		}
+
+		context.waitTicks(3);
+		int popped = context.computeOnClient(mc -> GoreSystems.dismemberment().parts().parts().size());
+		context.takeScreenshot("death_02_pop");
+		System.out.println("[FluidGoreTest] death: body gone after " + waited + " ticks, popped into " + popped + " parts");
+		check(waited < 1600, "the body never went");
+		check(popped >= 3, "the body did not pop into parts: " + popped);
+	}
+
+	/**
+	 * Every in-game demo ({@code /gore demo <name>}), played through the real client command, each on its own spot. Each
+	 * must run to the end and leave gore behind: bodies, parts or flesh pieces.
+	 */
+	private static void demos(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("time set noon");
+		server.runCommand("weather clear");
+		boolean allowed = context.computeOnClient(mc -> dev.fluidgore.demo.DemoPlayer.allowed(mc));
+		check(allowed, "the test player may not run demo commands");
+		int spot = 0;
+		for (dev.fluidgore.demo.Demo demo : dev.fluidgore.demo.Demos.ALL) {
+			server.runCommand("tp @a " + (200 + spot * 40) + ".5 -60 0.5 0 15");
+			spot++;
+			context.waitTicks(30);
+			context.runOnClient(mc -> {
+				GoreSystems.blood().clear();
+				GoreSystems.dismemberment().clear();
+				GoreSystems.suffering().clear();
+			});
+			// Destructive demos ask twice, as a player would click "go".
+			int runs = demo.destructive() ? 2 : 1;
+			for (int i = 0; i < runs; i++) {
+				context.runOnClient(mc -> mc.player.connection.sendCommand("gore demo " + demo.name()));
+			}
+
+			context.waitTicks(5);
+			check(context.computeOnClient(mc -> dev.fluidgore.demo.DemoPlayer.playing()), "demo " + demo.name() + " did not start");
+			int ticks = 0;
+			boolean shot = false;
+			while (context.computeOnClient(mc -> dev.fluidgore.demo.DemoPlayer.playing()) && ticks < 2400) {
+				context.waitTicks(10);
+				ticks += 10;
+				if (!shot && ticks >= 120) {
+					context.takeScreenshot("demo_" + demo.name());
+					shot = true;
+				}
+			}
+
+			int gore = context.computeOnClient(mc -> GoreSystems.suffering().corpses().size() + GoreSystems.dismemberment().parts().parts().size()
+					+ GoreSystems.dismemberment().giblets().count() + GoreSystems.blood().decals().decals().size());
+			System.out.println("[FluidGoreTest] demo " + demo.name() + ": ran " + ticks + " ticks, gore left " + gore);
+			check(ticks < 2400, "demo " + demo.name() + " never finished");
+			check(gore > 0, "demo " + demo.name() + " left no gore");
+		}
+	}
+
+	/** Blood decals and puddle cells made by three 2-damage blows with {@code item} on a fresh cow at {@code x}. */
+	private static int bloodFrom(ClientGameTestContext context, TestServerContext server, String item, double x) {
+		server.runCommand("item replace entity @a weapon.mainhand with " + item);
+		server.runCommand("summon minecraft:cow " + x + " -60 4.5 {NoAI:1b,Tags:[\"struck\"]}");
+		context.waitTicks(15);
+		context.runOnClient(mc -> GoreSystems.blood().clear());
+		for (int i = 0; i < 3; i++) {
+			server.runCommand("execute as @p run damage @e[tag=struck,limit=1] 2 minecraft:player_attack by @s");
+			context.waitTicks(12);
+		}
+
+		context.waitTicks(60);
+		int made = context.computeOnClient(mc -> GoreSystems.blood().decals().decals().size() + GoreSystems.blood().fluid().cells().size());
+		server.runCommand("kill @e[tag=struck]");
+		context.waitTicks(5);
+		return made;
 	}
 
 	private static void aimAt(net.minecraft.client.Minecraft mc, double x, double y, double z) {

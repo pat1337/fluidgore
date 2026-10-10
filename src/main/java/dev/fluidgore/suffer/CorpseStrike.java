@@ -7,7 +7,6 @@ import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.trigger.EntityFilter;
-import dev.fluidgore.wound.Flesh;
 import dev.fluidgore.wound.HitFeedback;
 import dev.fluidgore.wound.Weapon;
 import dev.fluidgore.wound.Wounds;
@@ -99,20 +98,24 @@ public final class CorpseStrike {
 		level.playLocalSound(point.x, point.y, point.z, blade ? SoundEvents.PLAYER_ATTACK_SWEEP : SoundEvents.PLAYER_ATTACK_WEAK,
 				SoundSource.PLAYERS, 0.8F, 0.8F, false);
 		if (wound != null) {
-			HitFeedback.hit(level, blood, wound, weapon, Flesh.of(entity), EntityFilter.bloodType(entity).rgb, look);
+			HitFeedback.hit(level, blood, entity, wound, weapon, look);
 		} else {
 			BloodEmitter.burst(blood, level, point, rgb, blade ? 0.07F : 0.025F, blade ? 14 : 5);
 			BloodEmitter.slash(level, point, blade ? 0.9F : 0.5F);
 		}
 
-		// The body takes the blow where it was struck: shoved along the swing, and rolled if hit off-centre.
-		double push = (blade ? 0.1 : 0.14) * body.heft;
+		// The body takes the blow like a struck mob takes knockback: flashes red, skids along the swing and hops, harder
+		// the harder the hit, and rolls if hit off-centre. Each blow keeps it around a little longer.
+		double push = (blade ? 0.25 : 0.32) * (0.8 + Math.min(damage, 10.0F) * 0.05) * body.heft;
 		body.vx += look.x * push;
 		body.vz += look.z * push;
-		body.vy += 0.05;
+		body.vy += (body.onGround ? 0.18 : 0.08) * body.heft;
+		body.onGround = false;
 		float yawRad = body.yaw * Mth.DEG_TO_RAD;
 		double lateral = look.x * Mth.cos(yawRad) + look.z * Mth.sin(yawRad);
-		body.rollV += (float) Math.max(-0.1, Math.min(0.1, lateral * 0.08));
+		body.rollV += (float) Math.max(-0.18, Math.min(0.18, lateral * 0.2));
+		corpse.flash = 6;
+		corpse.keepFor(60);
 		BodyPart struck = wound != null ? wound.hit().bodyPart() : null;
 		if (struck != null) {
 			body.strikeJoint(struck == BodyPart.HEAD ? -1 : List.of(ModelParts.LIMBS).indexOf(struck), blade ? 0.6F : 0.45F, RANDOM);

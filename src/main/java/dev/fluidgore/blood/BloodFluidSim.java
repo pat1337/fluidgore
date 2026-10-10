@@ -266,7 +266,7 @@ public final class BloodFluidSim {
 			cell.age++;
 			cell.volume -= cell.volume * EVAPORATION;
 
-			if (((cell.serial + tickCount) % 20) == 0) {
+			if (((cell.serial + tickCount) % 20) == 0 || BrokenBlocks.near(cell.bx + 0.5, cell.surfaceY, cell.bz + 0.5)) {
 				BlockPos pos = BlockPos.of(cell.key);
 				if (!level.isLoaded(pos)) {
 					it.remove();

@@ -48,6 +48,7 @@ public final class GenerateTextures {
 		drawPixelArt(atlas, 15, pixelDroplet(), new Random(9400));
 		ImageIO.write(atlas, "png", new File(misc, "blood.png"));
 		ImageIO.write(wounds(), "png", new File(misc, "wounds.png"));
+		ImageIO.write(flesh(), "png", new File(misc, "flesh.png"));
 
 		ImageIO.write(icon(), "png", new File(root, "icon.png"));
 		System.out.println("Wrote textures to " + root.getAbsolutePath());
@@ -487,6 +488,31 @@ public final class GenerateTextures {
 				image.setRGB(ox + x, oy + y, inside ? argb(1.0, light) : 0);
 			}
 		}
+	}
+
+	/**
+	 * flesh.png: 16x16 greyscale pixel noise with faint fibres, fully opaque. Giblets show a random 4x4 window of it,
+	 * tinted by tissue, so every piece has its own grain.
+	 */
+	private static BufferedImage flesh() {
+		BufferedImage image = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+		Random random = new Random(15000);
+		for (int y = 0; y < 16; y++) {
+			for (int x = 0; x < 16; x++) {
+				double light = 0.72 + random.nextDouble() * 0.2;
+				if ((x + y * 3) % 7 == 0) {
+					light -= 0.12;
+				}
+
+				if (random.nextDouble() > 0.93) {
+					light = 1.0;
+				}
+
+				image.setRGB(x, y, argb(1.0, light));
+			}
+		}
+
+		return image;
 	}
 
 	private static int argb(double alpha, double light) {

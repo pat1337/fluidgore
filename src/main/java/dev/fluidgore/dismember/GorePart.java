@@ -21,7 +21,7 @@ public final class GorePart {
 	public final Vector3f halfExtents;
 	public final float scale;
 	public final int bloodRgb;
-	public final int lifetime;
+	public int lifetime;
 
 	public double x, y, z;
 	public double prevX, prevY, prevZ;

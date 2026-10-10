@@ -3,6 +3,8 @@
 	"package": "dev.fluidgore.mixin",
 	"compatibilityLevel": "JAVA_25",
 	"client": [
+		"ClientLevelMixin",
+		"ClientPacketListenerMixin",
 		"LivingEntityMixin",
 		"LivingEntityRendererMixin",
 		"LivingEntitySoundInvoker",

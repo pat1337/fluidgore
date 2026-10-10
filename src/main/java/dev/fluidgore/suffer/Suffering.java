@@ -5,6 +5,7 @@ import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.GorePart;
+import dev.fluidgore.trigger.DamageTracker;
 import dev.fluidgore.trigger.EntityFilter;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
@@ -18,10 +19,13 @@ import java.util.Set;
 import java.util.function.Supplier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
@@ -162,8 +166,10 @@ public final class Suffering {
 	 *
 	 * @param bareHanded the attacker hit with an empty hand (beating an animal to death makes for the worst death)
 	 * @param strike unit vector from the attacker towards the victim, or null if unknown; the body is thrown along it
+	 * @param blast  how hard an explosion hit the body (0..1), 0 if it was not one
 	 */
-	public void onHurt(ClientLevel level, LivingEntity entity, float damage, boolean lethal, boolean bareHanded, @Nullable Vec3 strike) {
+	public void onHurt(ClientLevel level, LivingEntity entity, float damage, boolean lethal, boolean bareHanded, @Nullable Vec3 strike,
+			float blast) {
 		State state = state(entity);
 		state.hits++;
 		if (bareHanded) {
@@ -195,7 +201,7 @@ public final class Suffering {
 			return;
 		}
 
-		startDeath(level, entity, state, damage, headless, strike);
+		startDeath(level, entity, state, damage, headless, strike, blast);
 	}
 
 	/** A young animal is hurt: it cries for its mother, and she answers, turns to it and is beside herself. */
@@ -211,8 +217,15 @@ public final class Suffering {
 		}
 	}
 
-	private void startDeath(ClientLevel level, LivingEntity entity, State state, float lastBlow, boolean headless, @Nullable Vec3 strike) {
+	private void startDeath(ClientLevel level, LivingEntity entity, State state, float lastBlow, boolean headless, @Nullable Vec3 strike,
+			float blast) {
 		if (corpses.containsKey(entity.getId())) {
+			return;
+		}
+
+		if (GoreSystems.dismemberment().vaporized(entity.getId())) {
+			// Torn apart at once: no body, no throes, no cry. Only those left behind.
+			mourn(level, entity);
 			return;
 		}
 
@@ -222,7 +235,10 @@ public final class Suffering {
 		int ordeal = tick - state.firstHitTick;
 		float blowShare = lastBlow / Math.max(1.0F, entity.getMaxHealth());
 		Corpse.Kind kind;
-		if (headless) {
+		if (blast >= DamageTracker.TEAR_IMPACT) {
+			// Torn open by a blast close by: dead before it lands. A few kicks of the legs, nothing more.
+			kind = Corpse.Kind.QUICK;
+		} else if (headless) {
 			kind = Corpse.Kind.HEADLESS_RUN;
 		} else if (state.beatenHits >= 2 || state.hits >= 5 || ordeal > 100) {
 			kind = Corpse.Kind.BRUTAL;
@@ -248,7 +264,7 @@ public final class Suffering {
 		switch (kind) {
 			case QUICK -> throes = 30 + random.nextInt(20);
 			case NORMAL -> throes = 80 + random.nextInt(40);
-			case BRUTAL -> throes = Math.min(360, 140 + 25 * state.hits + 40 * state.beatenHits + ordeal / 4);
+			case BRUTAL -> throes = Math.min(240, 140 + 25 * state.hits + 40 * state.beatenHits + ordeal / 4);
 			case BOLT -> {
 				run = Math.max(8, Math.round((16 + random.nextInt(20) + 14 * self.frantic()) * intensity));
 				throes = 70 + random.nextInt(40);
@@ -278,7 +294,9 @@ public final class Suffering {
 		int launch = GoreConfig.get().deathLaunchPercent;
 		if (launch > 0 && strike != null) {
 			float share = Math.min(1.0F, lastBlow / Math.max(1.0F, entity.getMaxHealth()));
-			corpse.body.launch(strike, (0.1 + 0.3 * share) * launch / 100.0);
+			// A blast throws a body far harder than any blow: up and out, over walls and out of pits.
+			double speed = blast > 0.0F ? 0.15 + 0.85 * blast : 0.1 + 0.3 * share;
+			corpse.body.launch(strike, speed * launch / 100.0);
 		}
 
 		float length = switch (kind) {
@@ -294,6 +312,11 @@ public final class Suffering {
 			screams.death(follow(entity), state.voice, intensity, length);
 		}
 
+		mourn(level, entity);
+	}
+
+	/** {@code entity} has been killed: its mother (or its young) starts to grieve. */
+	private void mourn(ClientLevel level, LivingEntity entity) {
 		GoreConfig config = GoreConfig.get();
 		if (config.ecology) {
 			int grief = Math.round(config.griefSeconds * 20 * config.sufferingLevel.duration);
@@ -550,6 +573,10 @@ public final class Suffering {
 
 	private void tickCorpse(ClientLevel level, Corpse c) {
 		c.age++;
+		if (c.flash > 0) {
+			c.flash--;
+		}
+
 		c.walkPosO = c.walkPos;
 		Ragdoll body = c.body;
 		body.beginTick();
@@ -570,8 +597,10 @@ public final class Suffering {
 			topple(c);
 		}
 
-		if (c.toppled && body.tip() > 0.0F && gore && c.kind != Corpse.Kind.QUICK) {
-			BloodEmitter.drip(GoreSystems.blood(), neck(c), color, 0.02F);
+		shove(c, box);
+		float landing = c.toppled ? body.tip() : 0.0F;
+		if (landing > 0.0F) {
+			slam(level, c, landing, color, gore);
 		}
 
 		// Legs follow distance actually covered (as vanilla does), so feet never slide; none while down.
@@ -718,6 +747,42 @@ public final class Suffering {
 		return new Vec3(b.x, b.y + c.entity.getBbHeight() * (0.15 + 0.4 * Mth.cos(b.roll)), b.z);
 	}
 
+	/** The body hits the ground on its side: a heavy thud, a jolt of blood out of it, and the legs kick with it. */
+	private void slam(ClientLevel level, Corpse c, float speed, int color, boolean gore) {
+		Vec3 middle = centre(c);
+		float heavy = 1.0F / c.body.heft;
+		level.playLocalSound(middle.x, middle.y, middle.z, SoundEvents.GENERIC_BIG_FALL, SoundSource.NEUTRAL,
+				Math.min(1.0F, 0.4F + speed * 4.0F), 0.75F + 0.25F / heavy + random.nextFloat() * 0.1F, false);
+		if (gore && !EntityFilter.isBloodless(c.entity)) {
+			BloodEmitter.burst(GoreSystems.blood(), level, middle, color, 0.02F + speed * 0.2F, 4 + Math.round(speed * 40.0F));
+			BloodEmitter.drip(GoreSystems.blood(), neck(c), color, 0.02F);
+		}
+
+		c.body.spasm(random, 0.4F);
+	}
+
+	/** Walking into a body that is down shoves it along and jostles its limbs. */
+	private void shove(Corpse c, AABB box) {
+		LocalPlayer player = Minecraft.getInstance().player;
+		if (player == null || !c.toppled || !player.getBoundingBox().intersects(box)) {
+			return;
+		}
+
+		Vec3 motion = player.getDeltaMovement();
+		if (motion.horizontalDistanceSqr() < 0.0025) {
+			return;
+		}
+
+		Ragdoll body = c.body;
+		body.vx += motion.x * 0.5 * body.heft;
+		body.vz += motion.z * 0.5 * body.heft;
+		if (random.nextFloat() < 0.3F) {
+			body.spasm(random, 0.2F);
+		}
+
+		c.keepFor(40);
+	}
+
 	/** Starts the fall: the push comes from the body's own momentum, so a hit knocks it over away from the blow. */
 	private void topple(Corpse c) {
 		Ragdoll body = c.body;
@@ -726,7 +791,8 @@ public final class Suffering {
 		double lateral = body.vx * Mth.cos(yawRad) + body.vz * Mth.sin(yawRad);
 		float side = Math.abs(lateral) > 0.01 ? (float) Math.signum(lateral) : (random.nextBoolean() ? 1.0F : -1.0F);
 		float forward = (float) Math.hypot(body.vx, body.vz);
-		body.topple(side, Math.min(0.2F, forward * 0.5F + (float) Math.abs(lateral)));
+		// A firm push, so it keels over about as fast as vanilla's tip-over instead of teetering.
+		body.topple(side, 0.05F + Math.min(0.2F, forward * 0.5F + (float) Math.abs(lateral)));
 		body.spasm(random, c.kind == Corpse.Kind.QUICK ? 1.0F : 0.6F);
 	}
 
@@ -784,10 +850,16 @@ public final class Suffering {
 		if (corpse.unloaded) {
 			// The vanilla "poof" was held back while the body lay there; play it now that it disappears.
 			if (entity.level() instanceof ClientLevel level) {
-				for (int i = 0; i < 12; i++) {
+				for (int i = 0; i < 20; i++) {
 					level.addParticle(ParticleTypes.POOF,
 							entity.getRandomX(1.0), entity.getRandomY(), entity.getRandomZ(1.0),
 							random.nextGaussian() * 0.02, random.nextGaussian() * 0.02, random.nextGaussian() * 0.02);
+				}
+
+				GoreConfig config = GoreConfig.get();
+				if (config.deathPop && config.goreLevel.enabled() && !EntityFilter.isBloodless(entity)) {
+					Ragdoll body = corpse.body;
+					GoreSystems.dismemberment().pop(GoreSystems.blood(), level, entity, new Vec3(body.x, body.y, body.z), body.yaw, body.roll);
 				}
 			}
 
