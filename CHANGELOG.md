@@ -2,6 +2,40 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.8.0]
+
+### Added
+- Nine realistic deaths, picked by where and with what the killing blow landed and by the animal itself, with
+  enough chance in it that a herd killed the same way dies many different ways:
+  - **Stunned**: a heavy blow to the head. It drops where it stands like a sack, lies rigid with its legs locked
+    out and its head arched back, then the legs paddle on their own and slowly stop. Not a sound.
+  - **Bled out**: an opened artery. It stands swaying while its blood pumps out with every heartbeat, slower each
+    time, into a pool that keeps growing; its front knees go, then its hind end, and it lies on its chest before it
+    rolls onto its side.
+  - **The death run**: it bolts blind, screaming and bleeding, and crashes nose first.
+  - **The downer**: down on its front knees, then its chest, head turned back against its flank. It keeps trying to
+    heave its hind end up, groaning, and falls back each time, until it rolls over.
+  - **Broken back**: the hind end drops into a dog-sit and it drags itself on its front legs, bellowing and
+    smearing blood behind it. Falls make this one likely.
+  - **Drowning in blood**: neck stretched out low, it coughs up frothy blood with every heave and gasps for air,
+    sinks onto its chest and coughs there until it stops.
+  - **Gut-shot** and **agonal thrashing after a beating**, as before.
+  - **Brain hurt**: it walks in tight circles with its head cocked, crashes over, rolls onto its back kicking at the
+    sky, and stiffens there, legs up.
+- Every death answers a blow while it dies: a stunned cow's legs start paddling, a bleeding one gushes, a downer
+  heaves to get up, a broken-backed one drags itself away from you, a choking one coughs, a circling one turns.
+- New sounds built from vanilla ones: a wet cough, a groan of straining to stand, a gasp.
+- Burnt bodies: animals on fire char from seared through roasted brown to black and stay that way, alive or dead.
+  They smoke, sizzle and smoulder, die writhing, and leave a black scorch mark. Fire sears wounds shut, so burning
+  does not bleed.
+- On High and Extreme, a body that was beaten or burnt to death lies there a good while as evidence, and blood
+  stays on the ground longer than the flesh.
+- Settings: Death Pop Chance, Burnt Bodies. Demos: `deaths`, `burnt`, `evidence`.
+
+### Changed
+- The death that bursts the body apart at the end (Death Pop) is now rare: one death in twenty (Death Pop Chance,
+  5% by default). Every other body is left lying and goes with the vanilla puff of smoke.
+
 ## [1.7.0]
 
 ### Changed

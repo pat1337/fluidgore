@@ -154,6 +154,36 @@ public final class ModelParts {
 		return DRAWN.get(entityId);
 	}
 
+	/**
+	 * What an entity stands on.
+	 *
+	 * @param fold how far the body sinks when its legs fold flat under it, in blocks at model scale
+	 * @param four it stands on four legs (front legs, not arms or wings)
+	 * @param span distance from the front to the hind legs, in blocks at model scale (0 unless {@code four})
+	 */
+	public record Legs(float fold, boolean four, float span) {
+		public static final Legs NONE = new Legs(0.0F, false, 0.0F);
+	}
+
+	/** The legs of the model this entity was last drawn with ({@link Legs#NONE} if not drawn yet or legless). */
+	public static Legs legs(int entityId) {
+		EntityModel<?> model = DRAWN.get(entityId);
+		if (model == null) {
+			return Legs.NONE;
+		}
+
+		ModelPart leg = index(model)[BodyPart.RIGHT_LEG.ordinal()];
+		if (leg == null) {
+			return Legs.NONE;
+		}
+
+		// A folded leg lies flat at its hip, so the body comes down by the leg's length less half its thickness.
+		float[] b = bounds(leg);
+		float fold = Math.max(0.0F, (b[4] - b[1]) - (b[3] - b[0]) * 0.5F);
+		ModelPart front = model.root().createPartLookup().apply("right_front_leg");
+		return new Legs(fold, front != null, front != null ? Math.abs(front.z - leg.z) / 16.0F : 0.0F);
+	}
+
 	public static void forgetDrawn(int entityId) {
 		DRAWN.remove(entityId);
 	}

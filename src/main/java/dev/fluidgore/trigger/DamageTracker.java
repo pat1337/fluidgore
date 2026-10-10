@@ -7,6 +7,7 @@ import dev.fluidgore.config.GoreLevel;
 import dev.fluidgore.demo.DemoPlayer;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.Dismemberment;
+import dev.fluidgore.suffer.Deaths;
 import dev.fluidgore.suffer.Suffering;
 import dev.fluidgore.wound.HitFeedback;
 import dev.fluidgore.wound.Weapon;
@@ -47,7 +48,7 @@ public final class DamageTracker {
 	 * @param explosion the hit was an explosion
 	 * @param sourceAt  where the damage came from, if the packet says (often not for TNT: the TNT entity is gone)
 	 */
-	private record PendingHit(int attackerId, boolean melee, boolean explosion, boolean fire, @Nullable Vec3 sourceAt, int tick) {
+	private record PendingHit(int attackerId, boolean melee, boolean explosion, boolean fire, boolean fall, @Nullable Vec3 sourceAt, int tick) {
 	}
 
 	/** An explosion the server told us about: where and how big (TNT is 4, a creeper 3, a charged one 6). */
@@ -74,6 +75,7 @@ public final class DamageTracker {
 		Entity attacker = source.getEntity();
 		boolean melee = attacker != null && source.getDirectEntity() == attacker;
 		pending.put(victim.getId(), new PendingHit(attacker == null ? -1 : attacker.getId(), melee, source.is(DamageTypeTags.IS_EXPLOSION), source.is(DamageTypeTags.IS_FIRE),
+				source.is(DamageTypeTags.IS_FALL),
 				source.getSourcePosition(), tick));
 	}
 
@@ -190,8 +192,9 @@ public final class DamageTracker {
 			}
 		}
 
+		Weapon weapon = weapon(attacker, meleeAttacker, blastAt);
+		Deaths.Zone zone = Deaths.Zone.UNKNOWN;
 		if (gore) {
-			Weapon weapon = weapon(attacker, meleeAttacker, blastAt);
 			// No attacker and no blast: a fall, fire, drowning. Bruising and a little bleeding.
 			// Fire sears the flesh shut instead: it chars (see Burns) but does not bleed.
 			if (hit == null || !hit.fire()) {
@@ -201,6 +204,11 @@ public final class DamageTracker {
 			Wounds.Strike wound = weapon == null ? null : blastAt != null
 					? dismemberment.wounds().onBlast(victim, blastAt, damage)
 					: dismemberment.wounds().onDamage(victim, attacker, weapon, damage);
+			if (wound != null) {
+				BodyPart part = wound.hit().bodyPart();
+				zone = part == null ? Deaths.Zone.BODY : part == BodyPart.HEAD ? Deaths.Zone.HEAD : Deaths.Zone.LEG;
+			}
+
 			if (wound != null) {
 				Vec3 from = blastAt != null ? blastAt : attacker.getEyePosition();
 				Vec3 blow = wound.hit().point().subtract(from);
@@ -233,7 +241,7 @@ public final class DamageTracker {
 		// After dismemberment, so a beheading on this very hit is known to the death throes.
 		if (suffers) {
 			boolean bareHanded = meleeAttacker != null && DemoPlayer.held(meleeAttacker).isEmpty();
-			suffering.onHurt(level, victim, damage, lethal, bareHanded, strike, impact);
+			suffering.onHurt(level, victim, damage, lethal, bareHanded, strike, impact, weapon, zone, hit != null && hit.fall());
 		}
 	}
 

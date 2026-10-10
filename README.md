@@ -53,9 +53,14 @@ with a patter of wet slaps and the clatter of bone. Medium gore level and up; ne
   and long it screams, how quickly it panics, stoic or frantic. Two cows never scream or die alike.
 - **Screams** are built from each animal's own vanilla sounds, pitch-bent, layered and re-triggered into screams,
   whimpers, gurgles and panicked bellows.
-- **Death throes depend on how it died**: a quick cut-off cry after one clean blow, kicking that dies away, a long,
-  brutal wail with spasms after a beating, or a headless run with blood pumping from the neck. Some bolt, some
-  collapse slowly, some fold over the wound. Then laboured breaths, and the last one.
+- **Nine ways to die, the way animals really do**, picked by where and with what the killing blow landed and by the
+  animal itself: stunned (drops like a sack, lies rigid, then the legs paddle on their own), bled out (stands swaying
+  while its blood pumps out into a growing pool, then sinks onto its chest), the death run (bolts blind and crashes
+  nose first), the downer (down on its chest, head against its flank, trying again and again to get up), a broken
+  back (drags itself on its front legs), drowning in blood (coughs it up with every breath), gut-shot (curls over the
+  wound), agonal thrashing after a beating, and brain hurt (walks in circles, ends on its back with its legs in the
+  air). A beheaded body still runs. Each one answers a blow in its own way while it dies. Then laboured breaths, and
+  the last one. One death in twenty ends with the body bursting apart when it finally goes.
 - **Bodies stay.** The body outlives the server's entity: it falls, is thrown along the killing blow, and can still
   be struck, shoved and cut where it lies.
 
@@ -145,7 +150,8 @@ Tested alongside Sodium, Iris (without a shader pack), Lithium, FerriteCore, Ent
 | Death Launch | 100% | How hard the killing blow throws a body. 0 turns it off. |
 | Body Lingers | 10 s | How long a body stays after its death throes. |
 | Red Death | On | Dying bodies stay red until they are gone, like the vanilla death. |
-| Death Pop | On | A body that finally goes pops into its head, limbs and scraps of flesh, which you can kick about. |
+| Death Pop | On | Some bodies, when they finally go, pop into their head, limbs and scraps of flesh, which you can kick about. |
+| Death Pop Chance | 5% | How many deaths end in that burst; the rest die one of the nine realistic deaths and are left lying. |
 
 Only in `config/fluidgore.json`:
 

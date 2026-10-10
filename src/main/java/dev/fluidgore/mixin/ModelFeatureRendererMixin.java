@@ -42,6 +42,12 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 	@Shadow
 	@Final
 	private PoseStack poseStack;
+	/** A folded leg lies flat under the body. */
+	@Unique
+	private static final float FOLD = 1.45F;
+	/** How far a stiff leg is thrust out from straight down. */
+	@Unique
+	private static final float STIFF = 0.75F;
 	@Unique
 	private final List<ModelPart> fluidgore$hidden = new ArrayList<>();
 	@Unique
@@ -125,20 +131,23 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 
 	/**
 	 * Legs kick out of phase with each other (paddling), the head is thrown around and everything shivers.
-	 * Amplitudes come from the pose; the motion itself is computed from time so it stays smooth every frame.
+	 * Amplitudes come from the pose; the motion itself is computed from time so it stays smooth every frame. Folded
+	 * legs are tucked under the body (front ones back, hind ones forward, as a cow lies down); stiff legs are locked
+	 * straight out with the head arched back.
 	 */
 	@Unique
 	private void fluidgore$animate(ModelPart[] parts, SufferPose pose, float t) {
 		ModelPart head = parts[BodyPart.HEAD.ordinal()];
-		if (head != null && (pose.thrash() > 0.01F || pose.tremble() > 0.01F || pose.headDip() != 0.0F || pose.lookYaw() != 0.0F)) {
+		if (head != null && (pose.thrash() > 0.01F || pose.tremble() > 0.01F || pose.headDip() != 0.0F || pose.lookYaw() != 0.0F
+				|| pose.stiff() > 0.0F || pose.headTilt() != 0.0F)) {
 			fluidgore$save(head);
 			float shiver = pose.tremble() * 0.06F;
-			head.xRot += Mth.sin(t * 0.83F) * pose.thrash() * 0.6F + SufferPose.noise(t * 5.0F, 1.0F) * shiver + pose.headDip();
+			head.xRot += Mth.sin(t * 0.83F) * pose.thrash() * 0.6F + SufferPose.noise(t * 5.0F, 1.0F) * shiver + pose.headDip() - 0.8F * pose.stiff();
 			head.yRot += Mth.sin(t * 1.37F + 1.0F) * pose.thrash() * 0.7F + SufferPose.noise(t * 5.5F, 2.0F) * shiver + pose.lookYaw();
-			head.zRot += Mth.sin(t * 2.1F) * pose.thrash() * 0.3F;
+			head.zRot += Mth.sin(t * 2.1F) * pose.thrash() * 0.3F + pose.headTilt();
 		}
 
-		if (pose.kick() > 0.01F) {
+		if (pose.kick() > 0.01F || pose.foldFront() > 0.0F || pose.foldHind() > 0.0F || pose.stiff() > 0.0F) {
 			BodyPart[] legs = {BodyPart.RIGHT_ARM, BodyPart.LEFT_ARM, BodyPart.RIGHT_LEG, BodyPart.LEFT_LEG};
 			for (int i = 0; i < legs.length; i++) {
 				ModelPart leg = parts[legs[i].ordinal()];
@@ -147,9 +156,13 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 				}
 
 				fluidgore$save(leg);
+				boolean front = i < 2;
+				float fold = front ? pose.foldFront() : pose.foldHind();
+				leg.xRot = Mth.lerp(fold, leg.xRot, front ? FOLD : -FOLD) + (front ? -STIFF : STIFF) * pose.stiff();
 				float phase = i * 1.9F;
-				leg.xRot += Mth.sin(t * pose.kickRate() + phase) * pose.kick() * 0.9F;
-				leg.zRot += SufferPose.noise(t * 2.0F, phase) * pose.kick() * 0.2F;
+				float kick = pose.kick() * (1.0F - 0.7F * fold);
+				leg.xRot += Mth.sin(t * pose.kickRate() + phase) * kick * 0.9F;
+				leg.zRot += SufferPose.noise(t * 2.0F, phase) * kick * 0.2F;
 			}
 		}
 	}

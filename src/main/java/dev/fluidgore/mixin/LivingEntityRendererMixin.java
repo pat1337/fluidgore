@@ -104,8 +104,11 @@ public abstract class LivingEntityRendererMixin {
 		BodyPose body = state.getData(BodyPose.KEY);
 		if (body != null) {
 			// The lean pivots on the feet, so a body lying on its side would sink half its width into the floor.
-			// Lift it by the half-width it swings below the pivot (pose scale is already applied here).
-			poseStack.translate(0.0F, state.boundingBoxWidth * 0.5F / entityScale * Mth.abs(Mth.sin(body.roll())), 0.0F);
+			// Lift it by the half-width it swings below the pivot (pose scale is already applied here). Past the side, on
+			// its way onto its back, the whole height of the body swings below the feet as well.
+			float roll = body.roll();
+			float lift = state.boundingBoxWidth * 0.5F * Mth.abs(Mth.sin(roll)) + state.boundingBoxHeight * Math.max(0.0F, -Mth.cos(roll)) * 0.7F;
+			poseStack.translate(0.0F, lift / entityScale, 0.0F);
 			poseStack.rotateDegrees(Axis.ZP, body.roll() * Mth.RAD_TO_DEG);
 		}
 

@@ -87,7 +87,9 @@
 	"fluidgore.option.burns": "Burnt Bodies",
 	"fluidgore.option.burns.tooltip": "Animals on fire char from seared through roasted brown to black and stay that way, alive or dead. They smoke and sizzle, smoulder afterwards, and leave a black scorch mark where they burn to death. Fire sears wounds shut, so burning does not bleed.",
 	"fluidgore.option.death_pop": "Death Pop",
-	"fluidgore.option.death_pop.tooltip": "When a body finally goes, it pops in a puff of smoke and bursts into its head, limbs and scraps of flesh, which you can still kick about for a while.",
+	"fluidgore.option.death_pop.tooltip": "Some bodies, when they finally go, pop in a puff of smoke and burst into their head, limbs and scraps of flesh, which you can still kick about for a while. How many: Death Pop Chance.",
+	"fluidgore.option.death_pop_chance": "Death Pop Chance",
+	"fluidgore.option.death_pop_chance.tooltip": "How many deaths end with the body bursting apart. The rest die one of nine realistic deaths (stunned, bled out, death run, downer, broken back, drowning in blood, gut-shot, agonal thrashing, brain-hurt circling) and are left lying.",
 	"fluidgore.option.herd_panic.tooltip": "Animals near a slaughter tremble and bellow in fear. The more killing nearby, the worse it gets.",
 
 	"fluidgore.unit.seconds": "%s s",

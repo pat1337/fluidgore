@@ -112,6 +112,24 @@ public final class ScreamManager {
 		clip(voice.self(), 0, HIGH, voice.death(), at, 0.62F, 0.5F, 0.02F, 0.4F, 0.55F, 0.9F, 44);
 	}
 
+	/** A wet cough from an animal drowning in its own blood: a short choked bark and the splutter of froth. */
+	public void cough(Supplier<Vec3> at, Voice voice, float strength) {
+		float pitch = 0.68F + random.nextFloat() * 0.1F;
+		clip(voice.self(), 0, LOW, voice.hurt(), at, pitch, pitch - 0.12F, 0.05F, 3.0F, 0.3F + 0.45F * strength, 0.3F, 7);
+		clip(Personality.NEUTRAL, 1, LOW, SoundEvents.SLIME_SQUISH_SMALL, at, 0.55F, 0.5F, 0.0F, 0.0F, 0.35F + 0.4F * strength, 0.4F, 8);
+	}
+
+	/** Straining to get up and failing: a deep groan from the chest that breaks off. */
+	public void strain(Supplier<Vec3> at, Voice voice, float strength) {
+		clip(voice.self(), 0, HIGH, voice.ambient(), at, 0.6F, 0.68F, 0.05F, 0.9F, 0.45F + 0.4F * strength, 0.45F, 24);
+		clip(voice.self(), 20 + random.nextInt(4), LOW, voice.hurt(), at, 0.62F, 0.52F, 0.03F, 0.6F, 0.3F * strength + 0.15F, 0.7F, 14);
+	}
+
+	/** A short, sucking gasp for air. */
+	public void gasp(Supplier<Vec3> at, Voice voice, float strength) {
+		clip(voice.self(), 0, LOW, voice.ambient(), at, 0.75F, 0.95F, 0.02F, 0.5F, 0.15F + 0.3F * strength, 0.6F, 10);
+	}
+
 	/** A mother calling for her young, or a young animal calling for its mother. */
 	public void call(Supplier<Vec3> at, Voice voice, boolean young, float urgency) {
 		call(at, voice, young, urgency, 0);

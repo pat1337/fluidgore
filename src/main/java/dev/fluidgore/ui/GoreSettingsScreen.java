@@ -91,6 +91,7 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 				scaledSlider("fluidgore.option.corpse_linger", 1, 120, 5, c.corpseLingerSeconds, "fluidgore.unit.seconds", v -> c.corpseLingerSeconds = v),
 				OptionInstance.createBoolean("fluidgore.option.red_death", c.redDeath, v -> c.redDeath = v),
 				OptionInstance.createBoolean("fluidgore.option.death_pop", c.deathPop, v -> c.deathPop = v),
+				scaledSlider("fluidgore.option.death_pop_chance", 0, 20, 5, c.deathPopPercent, "fluidgore.unit.percent", v -> c.deathPopPercent = v),
 				OptionInstance.createBoolean("fluidgore.option.burns", c.burns, v -> c.burns = v)
 		);
 	}

@@ -116,6 +116,7 @@ public final class CorpseStrike {
 		body.rollV += (float) Math.max(-0.18, Math.min(0.18, lateral * 0.2));
 		corpse.flash = 6;
 		corpse.keepFor(60);
+		GoreSystems.suffering().struck(level, corpse, look);
 		BodyPart struck = wound != null ? wound.hit().bodyPart() : null;
 		if (struck != null) {
 			body.strikeJoint(struck == BodyPart.HEAD ? -1 : List.of(ModelParts.LIMBS).indexOf(struck), blade ? 0.6F : 0.45F, RANDOM);

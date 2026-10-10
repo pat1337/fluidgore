@@ -1,5 +1,6 @@
 package dev.fluidgore.suffer;
 
+import dev.fluidgore.dismember.ModelParts;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
@@ -8,25 +9,45 @@ import net.minecraft.world.phys.Vec3;
  * The body of a slaughtered animal, kept on the client after the server removes the entity so its death can
  * last as long as the way it was killed warrants.
  *
+ * <p>How animals really die, chosen by how the animal was killed and who it is (see {@link Deaths#choose}):
  * <ul>
- * <li>{@link Kind#QUICK}: one clean, heavy blow. A short violent spasm and a cut-off cry.</li>
- * <li>{@link Kind#NORMAL}: an ordinary kill. Screams, then kicking that dies away over a few seconds.</li>
- * <li>{@link Kind#BRUTAL}: beaten with bare hands, hit many times, or a long drawn-out fight. A long wail sagging
- *     into gurgles, and agonal kicking with sudden spasms that can go on for many seconds.</li>
+ * <li>{@link Kind#STUNNED}: a heavy blow to the head. It drops where it stands like a sack, lies rigid with its legs
+ *     locked out and its head arched back, then the legs paddle on their own and slowly stop. Not a sound.</li>
+ * <li>{@link Kind#BLEED_OUT}: an opened artery. It stands swaying while its blood pumps out with every heartbeat,
+ *     the beats slowing, into a pool that keeps growing; the knees go, it sinks onto its chest, then onto its side.</li>
+ * <li>{@link Kind#BOLT}: the death run. It bolts blind, screaming and bleeding, until it crashes nose first.</li>
+ * <li>{@link Kind#DOWNER}: down and unable to rise. Front knees first, then the hind end, it lies on its chest with
+ *     its head turned back against its flank, and keeps trying to get up, groaning, until it rolls onto its side.</li>
+ * <li>{@link Kind#BROKEN_BACK}: the spine gone. The hind end drops into a dog-sit and it drags itself on its front
+ *     legs, bellowing and smearing blood behind it, until the front gives out too.</li>
+ * <li>{@link Kind#CHOKING}: blood in the lungs. Neck stretched low, it coughs up froth and blood with every heave,
+ *     gasps, sinks onto its chest and coughs there until it drowns.</li>
+ * <li>{@link Kind#CURL}: gut-shot. It hunches over the wound, whimpering and shaking, and folds before it falls.</li>
+ * <li>{@link Kind#BRUTAL}: beaten with bare hands, burnt, or a long drawn-out fight. A long wail sagging into gurgles,
+ *     and agonal kicking with sudden spasms that can go on for many seconds.</li>
+ * <li>{@link Kind#CIRCLING}: the brain hurt. It walks in tight circles with its head cocked, crashes over, rolls onto
+ *     its back kicking at the sky, and stiffens there, legs up.</li>
+ * </ul>
+ * And the rest, chosen by the killing alone or for the rare body that bursts at the end ({@link #pops}):
+ * <ul>
  * <li>{@link Kind#HEADLESS_RUN}: beheaded. Spinal reflexes keep the body running blindly while the neck pumps
  *     blood, then it collapses and twitches. Silent: there is no head left to scream with.</li>
- * <li>{@link Kind#BOLT}: a frantic animal that bolts, screaming and bleeding, until its legs give out.</li>
+ * <li>{@link Kind#QUICK}: one clean, heavy blow or a close blast. A short violent spasm and a cut-off cry.</li>
+ * <li>{@link Kind#NORMAL}: screams, then kicking that dies away over a few seconds.</li>
  * <li>{@link Kind#COLLAPSE}: a stoic animal that does not run. Its legs buckle slowly, it goes down on its knees
  *     and then onto its side, and breathes laboured breaths until the last one.</li>
- * <li>{@link Kind#CURL}: gut-shot. It hunches over the wound, whimpering and shaking, and folds before it falls.</li>
  * </ul>
  *
- * <p>Which one an animal gets depends on how it was hit and on its {@link Personality}, so the same cow killed
- * the same way twice still dies differently from the next cow.
+ * <p>Every one of them can be struck while it dies, and answers in its own way (see {@link Deaths#struck}).
  */
 public final class Corpse {
 	public enum Kind {
-		QUICK, NORMAL, BRUTAL, HEADLESS_RUN, BOLT, COLLAPSE, CURL
+		QUICK, NORMAL, BRUTAL, HEADLESS_RUN, BOLT, COLLAPSE, CURL, STUNNED, BLEED_OUT, DOWNER, BROKEN_BACK, CHOKING, CIRCLING;
+
+		/** Played out by {@link Deaths} rather than by the older throes in {@link Suffering}. */
+		boolean scripted() {
+			return ordinal() >= STUNNED.ordinal();
+		}
 	}
 
 	/** Length of the vanilla tip-over animation in ticks. */
@@ -35,7 +56,10 @@ public final class Corpse {
 	public final LivingEntity entity;
 	public final Kind kind;
 	public final Voice voice;
-	/** Ticks before the body goes down: a headless run or a bolt, or the buckling of a collapse or a curl. */
+	/**
+	 * Ticks before the body goes over onto its side: a headless run or a bolt, the buckling of a collapse or a curl, or
+	 * for the scripted deaths everything it does on its feet and on its chest first.
+	 */
 	public final int runTicks;
 	public final int throeTicks;
 	public final int stillTicks;
@@ -62,7 +86,18 @@ public final class Corpse {
 	public int flash;
 	/** Extra ticks on the ground, added by blows after the throes so a body being knocked about does not vanish. */
 	int extraTicks;
-	SufferPose pose = new SufferPose(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+	/** It bursts into pieces when it finally goes: the rare end, see {@link Deaths#popChance}. */
+	public boolean pops;
+	/** Its legs, measured from its model at death. */
+	final ModelParts.Legs legs;
+	/** Where a scripted death is in its own story; see {@link Deaths}. */
+	int phaseAt;
+	int nextBeat;
+	int nextCough;
+	int attempts;
+	int attemptAt = -100;
+	float circleDir;
+	SufferPose pose = SufferPose.IDLE;
 
 	Corpse(LivingEntity entity, Kind kind, Voice voice, int runTicks, int throeTicks, int stillTicks, float seed) {
 		this.entity = entity;
@@ -74,10 +109,16 @@ public final class Corpse {
 		this.seed = seed;
 		this.body = new Ragdoll(entity);
 		this.collapseAt = runTicks;
+		this.legs = ModelParts.legs(entity.getId());
 	}
 
 	public boolean running() {
 		return (kind == Kind.HEADLESS_RUN || kind == Kind.BOLT) && age < runTicks;
+	}
+
+	/** Not yet gone over onto its side. */
+	public boolean upright() {
+		return age < collapseAt;
 	}
 
 	/** The legs are giving out but the body is still on its feet. */

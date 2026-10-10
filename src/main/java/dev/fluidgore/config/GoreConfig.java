@@ -99,6 +99,11 @@ public final class GoreConfig {
 	 * few scraps of flesh, which can still be kicked about for a little while.
 	 */
 	public boolean deathPop = true;
+	/**
+	 * Percent of deaths that end with the body bursting apart (with Death Pop on). The rest die one of the nine
+	 * realistic deaths and are left lying.
+	 */
+	public int deathPopPercent = 5;
 	/** Animals on fire char from seared to black, smoke and smoulder, and leave a scorch mark where they burn to death. */
 	public boolean burns = true;
 	/** Version of the saved file, so changed defaults can reach configs saved by older versions. */
@@ -227,6 +232,7 @@ public final class GoreConfig {
 		if (sufferingAnimals == null) sufferingAnimals = new ArrayList<>();
 		if (bladedItems == null) bladedItems = new ArrayList<>();
 		deathLaunchPercent = clamp(deathLaunchPercent, 0, 300);
+		deathPopPercent = clamp(deathPopPercent, 0, 100);
 		if (cleaningItems == null) cleaningItems = new ArrayList<>();
 		if (boneEntities == null) boneEntities = new ArrayList<>();
 		if (bloodlessEntities == null) bloodlessEntities = new ArrayList<>();

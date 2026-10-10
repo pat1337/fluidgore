@@ -80,7 +80,8 @@ Mod Menu 21.0.0 (compile-only, soft dependency).
   - `BodyPart` maps parts to model-part names.
 - `suffer/`:
   - `Suffering` handles per-animal fear and pain, herd panic, corpses and severed-head moans.
-  - `Corpse` keeps a body on screen after server removal for its death throes (QUICK/NORMAL/BRUTAL/HEADLESS_RUN).
+  - `Corpse` keeps a body on screen after server removal for its death throes; `Deaths` picks and plays the nine realistic
+    deaths (see its javadoc and `Corpse`).
   - `ScreamManager` + `ScreamSound` are pitch-bent, layered vanilla sounds. `Voice` is the entity's own sounds.
   - `SufferPose` holds animation amplitudes.
 - `wound/` (the hack model, 1.3):
@@ -149,3 +150,11 @@ severable parts; severed heads can't blink.
   knockback on dying bodies (`CorpseStrike`, `Corpse.flash`/`keepFor`, walking shoves them), `Dismemberment.pop` at
   the end (`deathPop`), shorter High/Extreme lifetimes, `GoreConfig.configVersion` migration, and the floating-gore
   fix (`BrokenBlocks`). Game test: `floorAndDeath`. Demos: `death`, `floor`.
+- **1.8.0**: `wound/Burns` (charring, smoke, scorch marks; burnt -> BRUTAL), evidence linger on High/Extreme
+  (`GoreLevel.linger`, `bloodDuration`), and nine realistic deaths in `suffer/Deaths` (STUNNED, BLEED_OUT, BOLT,
+  DOWNER, BROKEN_BACK, CHOKING, CURL, BRUTAL, CIRCLING): `Deaths.choose` weighs them by weapon, hit zone, fall and
+  personality; `Deaths.upright` plays the part before the body goes over (leg folding via `SufferPose.foldFront/foldHind`,
+  `stiff`, `headTilt`; `ModelParts.legs` measures how far a body sinks), `Deaths.ground` adds to the shared throes,
+  `Deaths.struck` answers blows. The death pop is now a `deathPopPercent` roll (5%); those bodies keep the old
+  `classic` choice. `Suffering.forceNextDeath` for tests and demos. `Ragdoll.rollLimit` = PI lets a body end on its
+  back. Game test: `deaths`. Demo: `deaths`.

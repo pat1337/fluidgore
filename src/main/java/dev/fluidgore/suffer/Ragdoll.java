@@ -52,6 +52,8 @@ public final class Ragdoll {
 	boolean onGround;
 	/** Hit a block sideways during the last step. */
 	boolean blocked;
+	/** How far the body can roll: onto its side (PI/2), or over onto its back (PI) for a body that ends legs-up. */
+	float rollLimit = Mth.HALF_PI;
 
 	/**
 	 * How readily the body moves, from its size: about 1 for a cow, more for a chicken, less for a horse. Blows,
@@ -166,7 +168,7 @@ public final class Ragdoll {
 	float tip() {
 		rollV = (rollV + TOPPLE_TORQUE * Mth.sin(roll)) * 0.97F;
 		roll += rollV;
-		float limit = Mth.HALF_PI;
+		float limit = rollLimit;
 		if (Math.abs(roll) < limit) {
 			return 0.0F;
 		}
