@@ -2,6 +2,23 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.9.0]
+
+### Added
+- Each mob has its own measure of blood (`blood/BloodAmount`): a cow or horse gushes, a chicken or rabbit barely
+  bleeds. Exaggerated further on Extreme. Override per mob with `bloodAmounts` in the config.
+- Death blood sounds are built like a real bleed (`blood/Gush`): the wound opens, the heart pumps it out in
+  weakening jets, it drips and pools, and a heavy kill gurgles. Sounds vary from death to death.
+- Blasts sound like one low wet thud and a soft patter of gore coming back down; weeping carcasses and stumps drip
+  faintly now and then.
+
+### Fixed
+- The clicking: single short sounds are rare now, screams fade to silence instead of being cut off, and burning
+  animals sizzle softly and rarely instead of hissing sharply many times a second.
+- Flames on a dying, ragdolled animal hung in the air where it used to stand. They are now flame particles on the
+  body.
+- Gore sounds stacking into a wall of noise: they are quieter and rate-limited when many things die at once.
+
 ## [1.8.0]
 
 ### Added

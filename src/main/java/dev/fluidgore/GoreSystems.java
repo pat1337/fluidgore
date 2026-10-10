@@ -2,6 +2,7 @@ package dev.fluidgore;
 
 import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.blood.BrokenBlocks;
+import dev.fluidgore.blood.Gush;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.dismember.ModelParts;
@@ -77,6 +78,7 @@ public final class GoreSystems {
 		}
 
 		tickCount++;
+		Gush.tick();
 		TRACKER.tick(level, BLOOD, DISMEMBERMENT, SUFFERING);
 		if (gore) {
 			BLOOD.tick(level, tickCount);
@@ -106,6 +108,7 @@ public final class GoreSystems {
 	}
 
 	public static void clearAll() {
+		Gush.clear();
 		BrokenBlocks.clear();
 		ModelParts.clearDrawn();
 		SUFFERING.clear();

@@ -153,6 +153,8 @@ public final class GoreConfig {
 			"minecraft:parched",
 			"minecraft:skeleton_horse"
 	));
+	/** Per-mob blood measure overrides, by entity id (1 = average). Mobs not listed use the built-in amounts. */
+	public java.util.Map<String, Float> bloodAmounts = new java.util.HashMap<>();
 	/** Entities that never bleed or lose parts (constructs, decorations). */
 	public List<String> bloodlessEntities = new ArrayList<>(List.of(
 			"minecraft:armor_stand",
@@ -236,6 +238,9 @@ public final class GoreConfig {
 		if (cleaningItems == null) cleaningItems = new ArrayList<>();
 		if (boneEntities == null) boneEntities = new ArrayList<>();
 		if (bloodlessEntities == null) bloodlessEntities = new ArrayList<>();
+		if (bloodAmounts == null) bloodAmounts = new java.util.HashMap<>();
+		bloodAmounts.values().removeIf(v -> v == null || !(v >= 0.0F));
+		bloodAmounts.replaceAll((k, v) -> Math.min(v, 10.0F));
 	}
 
 	private static int clamp(int value, int min, int max) {

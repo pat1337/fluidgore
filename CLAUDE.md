@@ -158,3 +158,6 @@ severable parts; severed heads can't blink.
   `Deaths.struck` answers blows. The death pop is now a `deathPopPercent` roll (5%); those bodies keep the old
   `classic` choice. `Suffering.forceNextDeath` for tests and demos. `Ragdoll.rollLimit` = PI lets a body end on its
   back. Game test: `deaths`. Demo: `deaths`.
+- **1.9.0**: `blood/BloodAmount` (per-mob blood measure, `bloodAmounts` override), `blood/Gush` (phased, rate-limited
+  death/blast/ooze blood sounds, global `GAIN`), screams fade to silence, softer burn sizzle, corpses hide vanilla
+  flames and burn with flame particles in `Burns`.

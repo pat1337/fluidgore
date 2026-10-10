@@ -53,6 +53,9 @@ public abstract class LivingEntityRendererMixin {
 			Ragdoll body = corpse.body;
 			// The ragdoll does its own falling over; vanilla's scripted tip-over stays off.
 			state.deathTime = 0.0F;
+			// Vanilla draws the flames at the entity's real spot, not where the ragdoll has the body: they hang in the air.
+			// Burns puts flame particles on the body itself.
+			state.displayFireAnimation = false;
 			state.bodyRot = body.yaw(partialTicks);
 			state.yRot = 0.0F;
 			state.xRot = 0.0F;

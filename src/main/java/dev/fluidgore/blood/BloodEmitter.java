@@ -62,11 +62,12 @@ public final class BloodEmitter {
 		damage = Mth.clamp(damage, 0.5F, 40.0F);
 		BloodColor type = EntityFilter.bloodType(entity);
 		int rgb = type.rgb;
-		float bodySize = Mth.clamp(entity.getBbWidth() * entity.getBbHeight() / (0.6F * 1.8F), 0.3F, 3.0F);
+		float measure = BloodAmount.measure(entity);
+		float bodySize = Mth.clamp(entity.getBbWidth() * entity.getBbHeight() / (0.6F * 1.8F), 0.3F, 3.0F) * measure;
 		// How bad this particular wound is: most near 1, some barely bleed, some gush.
 		float severity = Mth.clamp(world.lognormal(0.5F), 0.3F, 4.0F);
 		float volume = Math.min(3.0F, (0.03F + damage * 0.03F) * preset.puddles * bodySize * (lethal ? 3.0F : 1.0F) * severity * open);
-		int count = Math.round((3.0F + damage * 2.5F) * preset.particles * (lethal ? 2.2F : 1.0F) * severity * open);
+		int count = Math.round((3.0F + damage * 2.5F) * preset.particles * (lethal ? 2.2F : 1.0F) * severity * open * BloodAmount.countFactor(measure));
 		if (count <= 0 && volume < 0.005F) {
 			return;
 		}
@@ -81,7 +82,7 @@ public final class BloodEmitter {
 		// Only a light mist at the wound; the blood itself is the falling droplets and the trickle below.
 		redstoneDust(world, level, origin, rgb, Math.min(12, Math.round(count * 0.25F)), entity.getBbWidth() * 0.3);
 
-		int trickle = Math.round((50 + RANDOM.nextInt(60)) * preset.duration * Math.min(2.0F, severity));
+		int trickle = Math.round((50 + RANDOM.nextInt(60)) * preset.duration * Math.min(2.0F, severity) * Mth.clamp(measure, 0.3F, 2.0F));
 		double width = entity.getBbWidth() * 0.25;
 		// A bruise does not run.
 		if (open >= 0.3F) {
@@ -200,9 +201,7 @@ public final class BloodEmitter {
 
 	/** A whole body bursting: a wet, heavy rupture under the crack of the blast. */
 	public static void burstSound(ClientLevel level, Vec3 at, float volume) {
-		level.playLocalSound(at.x, at.y, at.z, SoundEvents.SLIME_BLOCK_BREAK, SoundSource.NEUTRAL, volume, 0.5F + RANDOM.nextFloat() * 0.15F, false);
-		level.playLocalSound(at.x, at.y, at.z, SoundEvents.HONEY_BLOCK_BREAK, SoundSource.NEUTRAL, volume * 0.9F, 0.45F + RANDOM.nextFloat() * 0.15F, false);
-		crunch(level, at, volume);
+		Gush.blast(level, at, volume);
 	}
 
 	/** A weapon biting into a body that is already down: a wet crunch. */
@@ -216,6 +215,11 @@ public final class BloodEmitter {
 	public static void drip(BloodWorld world, Vec3 origin, int rgb, float volume) {
 		if (rgb == BoneEmitter.BONE) {
 			return;
+		}
+
+		ClientLevel here = net.minecraft.client.Minecraft.getInstance().level;
+		if (here != null && GoreConfig.get().goreSounds && RANDOM.nextInt(25) == 0) {
+			Gush.ooze(here, origin);
 		}
 
 		world.droplets().spawn(origin.x + (RANDOM.nextDouble() - 0.5) * 0.1, origin.y, origin.z + (RANDOM.nextDouble() - 0.5) * 0.1,
@@ -286,9 +290,7 @@ public final class BloodEmitter {
 	}
 
 	private static void crunch(ClientLevel level, Vec3 at, float volume) {
-		SoundEvent sound = CRUNCH[RANDOM.nextInt(CRUNCH.length)];
-		level.playLocalSound(at.x, at.y, at.z, sound, SoundSource.NEUTRAL, volume * (0.6F + RANDOM.nextFloat() * 0.4F),
-				0.55F + RANDOM.nextFloat() * 0.45F, false);
+		Gush.play(level, at, volume);
 	}
 
 	/** The meat a body is made of: what the animal drops, rotten flesh for monsters, beef otherwise. */

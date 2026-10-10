@@ -120,6 +120,13 @@ public final class Burns {
 			}
 
 			if (since == 0) {
+				// A corpse's vanilla flames are hidden (they would stay where the entity was), so burn on the body itself.
+				if (entity.isOnFire() && GoreSystems.suffering().corpse(id) != null && RANDOM.nextFloat() < 0.6F) {
+					level.addParticle(ParticleTypes.FLAME, at.x + (RANDOM.nextDouble() - 0.5) * entity.getBbWidth(),
+							at.y - entity.getBbHeight() * 0.3 + RANDOM.nextDouble() * entity.getBbHeight() * 0.6,
+							at.z + (RANDOM.nextDouble() - 0.5) * entity.getBbWidth(), 0.0, 0.02, 0.0);
+				}
+
 				// Burning: greasy black smoke, flakes of ash coming off, the fat sizzling.
 				if (RANDOM.nextFloat() < 0.3F + c * 0.4F) {
 					level.addParticle(ParticleTypes.LARGE_SMOKE, at.x + (RANDOM.nextDouble() - 0.5) * entity.getBbWidth(), at.y,
@@ -131,9 +138,10 @@ public final class Burns {
 							at.z + (RANDOM.nextDouble() - 0.5) * entity.getBbWidth(), 0.0, 0.0, 0.0);
 				}
 
-				if (config.goreSounds && RANDOM.nextFloat() < 0.04F + c * 0.04F) {
-					level.playLocalSound(at.x, at.y, at.z, SoundEvents.FIRE_EXTINGUISH, SoundSource.NEUTRAL, 0.15F + c * 0.2F,
-							1.6F + RANDOM.nextFloat() * 0.4F, false);
+				if (config.goreSounds && RANDOM.nextFloat() < 0.008F + c * 0.01F) {
+					// A rare, soft sizzle: many sharp high hisses a second were the clicking.
+					level.playLocalSound(at.x, at.y, at.z, SoundEvents.FIRE_EXTINGUISH, SoundSource.NEUTRAL, 0.12F + c * 0.12F,
+							0.8F + RANDOM.nextFloat() * 0.2F, false);
 				}
 			}
 

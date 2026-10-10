@@ -58,6 +58,8 @@ public final class ScreamSound extends AbstractTickableSoundInstance {
 		z = pos.z;
 		float t = age / (float) life;
 		pitch = Mth.lerp(t, startPitch, endPitch) + wobble * Mth.sin(age * wobbleRate);
-		volume = startVolume * (1.0F - fade * t);
+		// Always end at silence: stopping a sound while it is still audible is a click.
+		float tail = Mth.clamp((1.0F - t) / 0.25F, 0.0F, 1.0F);
+		volume = startVolume * (1.0F - fade * t) * tail;
 	}
 }
