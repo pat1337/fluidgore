@@ -6,6 +6,8 @@ import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.suffer.Suffering;
+import dev.fluidgore.wound.Flesh;
+import dev.fluidgore.wound.HitFeedback;
 import dev.fluidgore.wound.Weapon;
 import dev.fluidgore.wound.Wounds;
 import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
@@ -124,6 +126,13 @@ public final class DamageTracker {
 			BloodEmitter.bleed(blood, level, victim, damage, lethal, away);
 			Weapon weapon = meleeAttacker != null ? Weapon.of(meleeAttacker.getMainHandItem()) : Weapon.PIERCE;
 			Wounds.Strike wound = dismemberment.wounds().onDamage(victim, attacker, weapon, damage);
+			if (wound != null) {
+				Vec3 blow = wound.hit().point().subtract(attacker.getEyePosition());
+				if (blow.lengthSqr() > 1.0E-6) {
+					HitFeedback.hit(level, blood, wound, weapon, Flesh.of(victim), EntityFilter.bloodType(victim).rgb, blow.normalize());
+				}
+			}
+
 			if (wound != null && wound.aimed()) {
 				// The player aimed this blow: only the part that was struck can come off.
 				BodyPart struck = wound.hit().bodyPart();

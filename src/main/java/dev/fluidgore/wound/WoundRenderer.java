@@ -38,7 +38,7 @@ public final class WoundRenderer {
 
 	/** Draws the wounds of {@code set}; {@code poseStack} holds the model's root transform, as after renderToBuffer. */
 	public static void draw(WoundSet set, PoseStack poseStack, VertexConsumer buffer, int light, int overlay) {
-		ModelPart root = set.model.root();
+		ModelPart root = set.root;
 		for (int i = 0; i < set.count; i++) {
 			ModelPart[] chain = ModelParts.chain(root, set.part[i]);
 			if (chain.length == 0 || !visible(chain)) {
@@ -53,6 +53,13 @@ public final class WoundRenderer {
 			wound(set, i, poseStack.last(), buffer, light, overlay);
 			poseStack.popPose();
 		}
+	}
+
+	/** Draws the wounds of a severed part; {@code pose} is where the part itself is drawn. */
+	public static void draw(WoundSet set, PoseStack.Pose pose, VertexConsumer buffer, int light, int overlay) {
+		PoseStack stack = new PoseStack();
+		stack.last().set(pose);
+		draw(set, stack, buffer, light, overlay);
 	}
 
 	private static boolean visible(ModelPart[] chain) {

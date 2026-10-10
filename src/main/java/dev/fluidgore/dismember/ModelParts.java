@@ -6,6 +6,7 @@ import dev.fluidgore.suffer.BodyPose;
 import dev.fluidgore.suffer.Ragdoll;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -66,6 +67,24 @@ public final class ModelParts {
 		copy.loadPose(PartPose.ZERO);
 		copy.visible = true;
 		return copy;
+	}
+
+	/** Maps every part of {@code source} to the matching part of {@code copy}, made from it by {@link #copy}. */
+	public static Map<ModelPart, ModelPart> correspondence(ModelPart source, ModelPart copy) {
+		Map<ModelPart, ModelPart> map = new IdentityHashMap<>();
+		match(source, copy, map);
+		return map;
+	}
+
+	private static void match(ModelPart source, ModelPart copy, Map<ModelPart, ModelPart> map) {
+		map.put(source, copy);
+		Map<String, ModelPart> copies = ((ModelPartAccessor) (Object) copy).fluidgore$getChildren();
+		((ModelPartAccessor) (Object) source).fluidgore$getChildren().forEach((name, child) -> {
+			ModelPart twin = copies.get(name);
+			if (twin != null) {
+				match(child, twin, map);
+			}
+		});
 	}
 
 	private static ModelPart copyTree(ModelPart source) {

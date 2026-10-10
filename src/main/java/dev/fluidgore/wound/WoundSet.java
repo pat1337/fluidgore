@@ -1,6 +1,7 @@
 package dev.fluidgore.wound;
 
 import dev.fluidgore.dismember.BodyPart;
+import java.util.Map;
 import net.minecraft.client.model.Model;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.util.Mth;
@@ -20,8 +21,13 @@ public final class WoundSet {
 	/** Widest a wound can be hacked open, in model pixels. */
 	private static final float MAX_RADIUS = 4.5F;
 
-	/** Wounds are only drawn on this model (not on armour or other layers that share the render state). */
-	final Model<?> model;
+	/**
+	 * Wounds are only drawn on this model (not on armour or other layers that share the render state). Null for a
+	 * severed part, which is drawn on its own.
+	 */
+	final @Nullable Model<?> model;
+	/** The part tree the wounds sit in: the model's root, or a severed part. */
+	final ModelPart root;
 	final Flesh flesh;
 	final int blood;
 
@@ -45,6 +51,15 @@ public final class WoundSet {
 
 	WoundSet(Model<?> model, Flesh flesh, int blood) {
 		this.model = model;
+		this.root = model.root();
+		this.flesh = flesh;
+		this.blood = blood;
+	}
+
+	/** Wounds on a severed part, carried with it. */
+	WoundSet(ModelPart root, Flesh flesh, int blood) {
+		this.model = null;
+		this.root = root;
 		this.flesh = flesh;
 		this.blood = blood;
 	}
@@ -136,6 +151,30 @@ public final class WoundSet {
 		}
 
 		return deepest;
+	}
+
+	/**
+	 * Copies the wounds on parts in {@code parts} (body part -> its copy on the severed piece) into {@code target}, so
+	 * a limb that was hacked at keeps its gashes after it comes off.
+	 */
+	void transferTo(WoundSet target, Map<ModelPart, ModelPart> parts) {
+		for (int i = 0; i < count && target.count < MAX; i++) {
+			ModelPart moved = parts.get(part[i]);
+			if (moved != null) {
+				int j = target.count++;
+				target.part[j] = moved;
+				target.cube[j] = cube[i];
+				target.bodyPart[j] = bodyPart[i];
+				target.axis[j] = axis[i];
+				target.sign[j] = sign[i];
+				target.variant[j] = variant[i];
+				target.u[j] = u[i];
+				target.v[j] = v[i];
+				target.radius[j] = radius[i];
+				target.severity[j] = severity[i];
+				target.ox[j] = target.oy[j] = target.oz[j] = Float.NaN;
+			}
+		}
 	}
 
 	/** Drops the wounds on a part that has just been cut off (it takes them with it). */

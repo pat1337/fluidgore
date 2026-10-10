@@ -7,6 +7,8 @@ import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.trigger.EntityFilter;
+import dev.fluidgore.wound.Flesh;
+import dev.fluidgore.wound.HitFeedback;
 import dev.fluidgore.wound.Weapon;
 import dev.fluidgore.wound.Wounds;
 import java.util.Collection;
@@ -94,19 +96,17 @@ public final class CorpseStrike {
 		Wounds.Strike wound = GoreSystems.dismemberment().wounds().strike(entity, eye, look, REACH + 2.0, weapon, damage);
 		Vec3 point = wound != null ? wound.hit().point() : box(corpse).clip(eye, eye.add(look.scale(REACH + 2.0))).orElse(centre(corpse));
 		int rgb = EntityFilter.bloodColor(entity);
-		BloodEmitter.burst(blood, level, point, rgb, blade ? 0.07F : 0.025F, blade ? 14 : 5);
-		BloodEmitter.slash(level, point, blade ? 0.9F : 0.5F);
-		boolean bone = wound != null && wound.severity() >= 0.75F;
 		level.playLocalSound(point.x, point.y, point.z, blade ? SoundEvents.PLAYER_ATTACK_SWEEP : SoundEvents.PLAYER_ATTACK_WEAK,
 				SoundSource.PLAYERS, 0.8F, 0.8F, false);
-		if (bone) {
-			// Down to the bone: the blade grates and cracks on it.
-			level.playLocalSound(point.x, point.y, point.z, SoundEvents.BONE_BLOCK_BREAK, SoundSource.PLAYERS, 0.9F,
-					0.6F + RANDOM.nextFloat() * 0.25F, false);
+		if (wound != null) {
+			HitFeedback.hit(level, blood, wound, weapon, Flesh.of(entity), EntityFilter.bloodType(entity).rgb, look);
+		} else {
+			BloodEmitter.burst(blood, level, point, rgb, blade ? 0.07F : 0.025F, blade ? 14 : 5);
+			BloodEmitter.slash(level, point, blade ? 0.9F : 0.5F);
 		}
 
 		// The body takes the blow where it was struck: shoved along the swing, and rolled if hit off-centre.
-		double push = blade ? 0.1 : 0.14;
+		double push = (blade ? 0.1 : 0.14) * body.heft;
 		body.vx += look.x * push;
 		body.vz += look.z * push;
 		body.vy += 0.05;

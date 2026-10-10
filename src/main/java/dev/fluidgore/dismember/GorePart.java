@@ -1,6 +1,7 @@
 package dev.fluidgore.dismember;
 
 import dev.fluidgore.suffer.Voice;
+import dev.fluidgore.wound.WoundSet;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.resources.Identifier;
 import org.joml.Quaternionf;
@@ -46,6 +47,8 @@ public final class GorePart {
 	public float squash = 1.0F;
 	/** Being carried by the player (see {@link PartInteraction}). */
 	public boolean held;
+	/** Wounds carried by the piece: those cut into it before it came off, and the raw face where it was joined. */
+	public @Nullable WoundSet wounds;
 	/** Blows taken by a bone part; it breaks apart on the second. */
 	public int hits;
 	/** Broke apart this tick; removed by the manager. */

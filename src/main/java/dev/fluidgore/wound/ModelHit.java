@@ -120,6 +120,32 @@ public final class ModelHit {
 		return best[0];
 	}
 
+	/**
+	 * The cut face of a severed part: the spot on its own cubes nearest its pivot, where it was joined to the body.
+	 * In the part's own space (no world position). Null if the part has no cubes of its own.
+	 */
+	public static @Nullable Result cutFace(ModelPart part, @Nullable BodyPart bodyPart) {
+		Result best = null;
+		float bestDist = Float.MAX_VALUE;
+		for (ModelPart.Cube cube : ((ModelPartAccessor) (Object) part).fluidgore$getCubes()) {
+			float[] min = {cube.minX, cube.minY, cube.minZ};
+			float[] max = {cube.maxX, cube.maxY, cube.maxZ};
+			for (int axis = 0; axis < 3; axis++) {
+				for (int sign = -1; sign <= 1; sign += 2) {
+					Vector3f onFace = new Vector3f(Mth.clamp(0.0F, min[0], max[0]), Mth.clamp(0.0F, min[1], max[1]), Mth.clamp(0.0F, min[2], max[2]));
+					onFace.setComponent(axis, sign > 0 ? max[axis] : min[axis]);
+					float dist = onFace.lengthSquared();
+					if (dist < bestDist) {
+						bestDist = dist;
+						best = new Result(part, cube, axis, sign, onFace, bodyPart, Vec3.ZERO, Vec3.ZERO, Math.sqrt(dist));
+					}
+				}
+			}
+		}
+
+		return best;
+	}
+
 	/** World-space centre of a severable part as posed now, or null if the model has none. For tests and aiming. */
 	public static @Nullable Vec3 centre(LivingEntity entity, ModelParts.Posed posed, BodyPart target) {
 		ModelPart wanted = ModelParts.index(posed.model())[target.ordinal()];

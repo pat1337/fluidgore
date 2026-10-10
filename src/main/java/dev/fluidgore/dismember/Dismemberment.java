@@ -6,6 +6,7 @@ import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.config.GoreLevel;
 import dev.fluidgore.suffer.Voice;
 import dev.fluidgore.trigger.EntityFilter;
+import dev.fluidgore.wound.WoundSet;
 import dev.fluidgore.wound.Wounds;
 import it.unimi.dsi.fastutil.ints.Int2IntMap;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
@@ -129,8 +130,9 @@ public final class Dismemberment {
 		}
 
 		Identifier texture = ((LivingEntityRenderer) posed.renderer()).getTextureLocation(state);
-		// Before the part is marked missing, while the stump's neighbours are still found around it.
-		wounds.onSevered(entity, posed, source, bodyPart);
+		ModelPart piece = ModelParts.copy(source);
+		// Before the part is marked missing, so the stump is found on the parts around it.
+		WoundSet pieceWounds = wounds.onSevered(entity, posed, source, piece, bodyPart);
 
 		float[] b = ModelParts.bounds(source);
 		Vector3f localCenter = new Vector3f((b[0] + b[3]) * 0.5F, (b[1] + b[4]) * 0.5F, (b[2] + b[5]) * 0.5F);
@@ -159,7 +161,8 @@ public final class Dismemberment {
 		GoreLevel preset = GoreConfig.get().goreLevel;
 		int lifetime = Math.max(100, Math.round(GoreConfig.get().partLifetimeSeconds * 20 * preset.duration));
 
-		GorePart part = new GorePart(ModelParts.copy(source), texture, localCenter, half, scale, rgb, lifetime);
+		GorePart part = new GorePart(piece, texture, localCenter, half, scale, rgb, lifetime);
+		part.wounds = pieceWounds;
 		Vec3 base = origin.get();
 		part.x = part.prevX = base.x + offset.x;
 		part.y = part.prevY = base.y + offset.y;

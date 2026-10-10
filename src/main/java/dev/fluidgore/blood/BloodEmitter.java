@@ -150,6 +150,19 @@ public final class BloodEmitter {
 		redstoneDust(world, level, origin, rgb, Math.min(6, scaled / 3), 0.1);
 	}
 
+	/** Blood thrown out of a fresh cut along {@code away} (unit vector): off the blade and out of the wound. */
+	public static void cut(BloodWorld world, ClientLevel level, Vec3 origin, Vec3 away, int rgb, float volume, int count) {
+		GoreLevel preset = GoreConfig.get().goreLevel;
+		int scaled = Math.round(count * preset.particles);
+		if (rgb == BoneEmitter.BONE) {
+			BoneEmitter.burst(level, origin, away, scaled, scaled * 2, 0.2);
+			return;
+		}
+
+		spray(world, origin, away, scaled, volume * preset.puddles, rgb, 0.3, 0.12, 0.42);
+		redstoneDust(world, level, origin, rgb, Math.min(5, scaled / 3), 0.08);
+	}
+
 	/** A weapon biting into a body that is already down: a wet crunch. */
 	public static void slash(ClientLevel level, Vec3 at, float volume) {
 		if (GoreConfig.get().goreSounds) {

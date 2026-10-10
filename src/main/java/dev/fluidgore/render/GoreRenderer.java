@@ -11,9 +11,8 @@ import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.GorePart;
 import dev.fluidgore.suffer.Corpse;
 import dev.fluidgore.suffer.SufferPose;
-import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
-import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.world.entity.LivingEntity;
+import dev.fluidgore.wound.WoundRenderer;
+import dev.fluidgore.wound.WoundSet;
 import java.util.Collection;
 import java.util.List;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
@@ -21,11 +20,14 @@ import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.culling.Frustum;
+import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
+import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.Direction;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Quaternionf;
@@ -336,6 +338,13 @@ public final class GoreRenderer {
 		poseStack.translate(-part.localCenter.x, -part.localCenter.y, -part.localCenter.z);
 		collector.submitModelPart(part.model, poseStack, RenderTypes.entityTranslucent(part.texture), part.light, OVERLAY, null,
 				argb(0xFFFFFF, alpha));
+		WoundSet wounds = part.wounds;
+		// Cutout wounds cannot fade, so they go just before the piece starts to.
+		if (wounds != null && wounds.count() > 0 && alpha >= 1.0F) {
+			int light = part.light;
+			collector.submitCustomGeometry(poseStack, WoundRenderer.renderType(), (pose, buffer) -> WoundRenderer.draw(wounds, pose, buffer, light, OVERLAY));
+		}
+
 		poseStack.popPose();
 	}
 

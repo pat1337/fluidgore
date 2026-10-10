@@ -506,6 +506,12 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		});
 		System.out.println("[FluidGoreTest] head chopped off the body, wounds left on it: " + wounds);
 		check(wounds > 0, "the body kept no wounds or stump after its head came off");
+		int headWounds = context.computeOnClient(mc -> {
+			var head = GoreSystems.dismemberment().parts().parts().getLast();
+			return head.wounds == null ? 0 : head.wounds.count();
+		});
+		System.out.println("[FluidGoreTest] wounds on the severed head (cut face included): " + headWounds);
+		check(headWounds > 0, "the severed head has no raw cut face");
 		context.waitTicks(10);
 		context.takeScreenshot("hack_03_beheaded_body");
 		server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");

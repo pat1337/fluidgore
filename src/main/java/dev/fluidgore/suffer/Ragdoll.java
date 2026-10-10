@@ -40,6 +40,8 @@ public final class Ragdoll {
 	private static final float JOINT_STIFFNESS = 0.16F;
 	private static final float JOINT_DAMPING = 0.14F;
 	private static final float JOINT_LIMIT = 1.3F;
+	/** Bounding-box volume of an adult cow, the reference body for {@link #heft}. */
+	private static final float COW_VOLUME = 0.9F * 0.9F * 1.4F;
 
 	double x, y, z;
 	double px, py, pz;
@@ -50,6 +52,12 @@ public final class Ragdoll {
 	boolean onGround;
 	/** Hit a block sideways during the last step. */
 	boolean blocked;
+
+	/**
+	 * How readily the body moves, from its size: about 1 for a cow, more for a chicken, less for a horse. Blows,
+	 * launches and bounces are scaled by it, and heavy limbs swing more slowly, so big carcasses feel heavy.
+	 */
+	final float heft;
 
 	private final float[] joint = new float[JOINTS];
 	private final float[] jointO = new float[JOINTS];
@@ -65,6 +73,9 @@ public final class Ragdoll {
 		this.vz = motion.z;
 		this.yaw = this.pyaw = entity.yBodyRot;
 		this.onGround = entity.onGround();
+		float width = entity.getBbWidth();
+		float volume = width * width * entity.getBbHeight();
+		this.heft = Mth.clamp(1.0F / Mth.sqrt(Math.max(0.01F, volume) / COW_VOLUME), 0.55F, 1.8F);
 	}
 
 	double distanceToSqr(Ragdoll other) {
@@ -119,7 +130,7 @@ public final class Ragdoll {
 		if (landed) {
 			float impact = (float) -vy;
 			if (impact > 0.15F) {
-				jolt(impact * 2.0F);
+				jolt(impact * 2.0F * heft);
 			}
 
 			vy = 0.0;
@@ -136,6 +147,7 @@ public final class Ragdoll {
 
 	/** Throws the body along a direction (unit vector) at the given horizontal speed, with a hop so it leaves the ground. */
 	void launch(Vec3 direction, double speed) {
+		speed *= heft;
 		vx += direction.x * speed;
 		vz += direction.z * speed;
 		vy += 0.1 + speed * 0.25 + Math.max(0.0, direction.y) * speed;
@@ -163,7 +175,7 @@ public final class Ragdoll {
 		float speed = rollV * side;
 		roll = side * limit;
 		if (speed > 0.04F) {
-			rollV = -rollV * 0.28F;
+			rollV = -rollV * 0.28F * Math.min(1.3F, heft);
 			jolt(speed * 3.0F);
 			return speed;
 		}
@@ -217,8 +229,9 @@ public final class Ragdoll {
 			jointV[LIMB_Z + i] += lag * (i % 2 == 0 ? 1.0F : -1.0F);
 		}
 
+		float stiffness = JOINT_STIFFNESS * Mth.clamp(heft, 0.7F, 1.4F);
 		for (int i = 0; i < JOINTS; i++) {
-			jointV[i] -= JOINT_STIFFNESS * joint[i] + JOINT_DAMPING * jointV[i];
+			jointV[i] -= stiffness * joint[i] + JOINT_DAMPING * jointV[i];
 			joint[i] = Mth.clamp(joint[i] + jointV[i], -JOINT_LIMIT, JOINT_LIMIT);
 		}
 	}

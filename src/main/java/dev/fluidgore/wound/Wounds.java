@@ -149,18 +149,32 @@ public final class Wounds {
 		return new Strike(hit, change.after(), cut, true);
 	}
 
-	/** A part was just cut off {@code entity}: its wounds go with it and the body keeps a raw stump. */
-	public void onSevered(LivingEntity entity, ModelParts.Posed posed, ModelPart severed, BodyPart bodyPart) {
+	/**
+	 * A part was just cut off {@code entity} and {@code piece} is the loose copy that flies off. The wounds already on
+	 * the part go with the piece, which also gets a raw cut face where it was joined; the body keeps a stump.
+	 * Returns the piece's wounds, or null if wounds are off for this entity.
+	 */
+	public @Nullable WoundSet onSevered(LivingEntity entity, ModelParts.Posed posed, ModelPart severed, ModelPart piece, BodyPart bodyPart) {
 		if (!applies(entity)) {
-			return;
+			return null;
 		}
 
+		Flesh flesh = Flesh.of(entity);
+		int blood = EntityFilter.bloodType(entity).rgb;
+		WoundSet pieceWounds = new WoundSet(piece, flesh, blood);
 		WoundSet set = sets.get(entity.getId());
 		if (set == null || set.model != posed.model()) {
-			set = new WoundSet(posed.model(), Flesh.of(entity), EntityFilter.bloodType(entity).rgb);
+			set = new WoundSet(posed.model(), flesh, blood);
 			sets.put(entity.getId(), set);
 		} else {
+			set.transferTo(pieceWounds, ModelParts.correspondence(severed, piece));
 			set.removePart(bodyPart);
+		}
+
+		ModelHit.Result face = ModelHit.cutFace(piece, bodyPart);
+		if (face != null) {
+			float[] pb = ModelParts.bounds(piece);
+			pieceWounds.stump(face, Math.min(pb[3] - pb[0], pb[5] - pb[2]) * 16.0F * 0.5F, RANDOM);
 		}
 
 		ModelHit.Result at = ModelHit.stump(entity, posed, severed);
@@ -169,6 +183,8 @@ public final class Wounds {
 			float size = Math.min(b[3] - b[0], b[5] - b[2]) * 16.0F * 0.5F;
 			set.stump(at, size, RANDOM);
 		}
+
+		return pieceWounds;
 	}
 
 	/** Open wounds on living animals and fresh bodies drip, so a wounded animal leaves a trail. */
