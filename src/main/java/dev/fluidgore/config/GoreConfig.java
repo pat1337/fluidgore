@@ -53,7 +53,7 @@ public final class GoreConfig {
 	/** Cap on flying droplets simulated at once. */
 	public int maxDroplets = 600;
 	/** Seconds a detached body part stays before fading. Scaled by the gore level. */
-	public int partLifetimeSeconds = 60;
+	public int partLifetimeSeconds = 600;
 	/** Cap on detached parts in the world. */
 	public int maxDetachedParts = 160;
 	/**
@@ -218,7 +218,7 @@ public final class GoreConfig {
 	}
 
 	/** Repairs values that a hand-edited file may have broken (missing enums, negative caps, null lists). */
-	private static final int CONFIG_VERSION = 5;
+	private static final int CONFIG_VERSION = 6;
 
 	private void sanitize() {
 		if (configVersion < 2) {
@@ -241,6 +241,11 @@ public final class GoreConfig {
 			if (maxDetachedParts == 64) maxDetachedParts = 160;
 		}
 
+		if (configVersion < 6) {
+			// 2.8: severed limbs stay for ten minutes by default instead of one.
+			if (partLifetimeSeconds == 60) partLifetimeSeconds = 600;
+		}
+
 		configVersion = CONFIG_VERSION;
 		if (goreLevel == null) goreLevel = GoreLevel.MEDIUM;
 		if (bloodStyle == null) bloodStyle = BloodStyle.REDSTONE;
@@ -250,7 +255,7 @@ public final class GoreConfig {
 		maxBloodDecals = clamp(maxBloodDecals, 50, 10000);
 		maxActiveCellsPerTick = clamp(maxActiveCellsPerTick, 8, 1024);
 		maxDroplets = clamp(maxDroplets, 50, 5000);
-		partLifetimeSeconds = clamp(partLifetimeSeconds, 5, 1800);
+		partLifetimeSeconds = clamp(partLifetimeSeconds, 5, 3600);
 		maxDetachedParts = clamp(maxDetachedParts, 1, 256);
 		maxGiblets = clamp(maxGiblets, 0, Giblets.CAPACITY);
 		if (!(heavyHitDamage > 0.0F)) heavyHitDamage = 6.0F;

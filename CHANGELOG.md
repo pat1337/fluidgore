@@ -2,6 +2,23 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.8.0]
+
+Endermen of their own, and limbs that stay.
+
+### Added
+- Endermen (and endermites) bleed bright violet ender blood that crumbles like purpur. Under the black hide their flesh is dark
+  violet, cut glowing magenta, with bones pale as end stone. Portal sparks pour out of every wound, and their flesh rings like
+  crystal when hit.
+- Severed enderman limbs will not lie still: for half a minute they blink to another spot close by every few seconds. Water
+  and rain burn them, so a wet piece fizzes and keeps blinking until it finds somewhere dry. Cutting them up throws ender
+  pearl crumbs.
+- Demo: `ender`.
+
+### Changed
+- Severed limbs and pieces stay for 10 minutes by default (was 1 minute). The Part Lifetime slider now goes up to an hour in
+  30-second steps. Configs still on the old default are moved up.
+
 ## [2.7.0]
 
 Pork, steak and a bloodied herd.

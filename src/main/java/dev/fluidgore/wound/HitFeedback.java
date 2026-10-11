@@ -8,6 +8,7 @@ import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.trigger.EntityFilter;
 import dev.fluidgore.trigger.Fate;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -62,6 +63,16 @@ public final class HitFeedback {
 			}
 		}
 
+		// An enderman's wounds leak the End: portal sparks pour out of them along with the blood.
+		if (flesh == Flesh.ENDER) {
+			Vec3 n = strike.hit().normal();
+			int sparks = Math.round(6 + 20 * depth);
+			for (int i = 0; i < sparks; i++) {
+				level.addParticle(ParticleTypes.PORTAL, at.x, at.y, at.z, n.x * 0.6 + (RANDOM.nextDouble() - 0.5), n.y * 0.6 + (RANDOM.nextDouble() - 0.5),
+						n.z * 0.6 + (RANDOM.nextDouble() - 0.5));
+			}
+		}
+
 		// Into the fleece, its own and its neighbours'.
 		GoreSystems.dismemberment().wool().hit(level, entity, at, depth);
 
@@ -84,6 +95,14 @@ public final class HitFeedback {
 				play(level, at, SoundEvents.BONE_BLOCK_HIT, 1.0F, 0.9F);
 				if (weapon != Weapon.BLUNT) {
 					play(level, at, SoundEvents.BONE_BLOCK_BREAK, 0.8F, 1.15F);
+				}
+			}
+			case ENDER -> {
+				// Wet flesh that rings like crystal, and the End crackling out of the wound.
+				play(level, at, SoundEvents.SLIME_BLOCK_BREAK, 0.7F, 0.6F);
+				play(level, at, SoundEvents.AMETHYST_BLOCK_HIT, 0.9F, 0.5F + (bone ? 0.3F : 0.0F));
+				if (weapon.cuts()) {
+					play(level, at, SoundEvents.CHORUS_FRUIT_TELEPORT, 0.35F, 1.6F);
 				}
 			}
 			case DRIED -> {

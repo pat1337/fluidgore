@@ -13,6 +13,7 @@ import java.util.List;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.LightCoordsUtil;
@@ -38,6 +39,8 @@ public final class GorePartManager {
 	private static final double IMPACT_SPEED = 0.3;
 	/** A loose bone hitting anything faster than this breaks apart. */
 	private static final double BONE_BREAK_SPEED = 0.45;
+	/** How long an enderman's pieces keep blinking about after they come off, in ticks, unless water keeps them at it. */
+	private static final int ENDER_RESTLESS = 600;
 
 	private final List<GorePart> parts = new ArrayList<>();
 	private final RandomSource random = Fate.stream("partsMotion");
@@ -65,6 +68,67 @@ public final class GorePartManager {
 		parts.subList(write, parts.size()).clear();
 	}
 
+	/**
+	 * An enderman's pieces will not lie still. For a while after they come off they blink to another spot close by every
+	 * few seconds, in a puff of portal sparks; water burns them as it burns an enderman, so a wet piece fizzes and keeps
+	 * blinking until it finds somewhere dry. Returns true if the piece moved this tick.
+	 */
+	private boolean blink(Level level, GorePart p) {
+		BlockPos at = BlockPos.containing(p.x, p.y, p.z);
+		boolean wet = level.isRainingAt(at) || level.getFluidState(at).is(net.minecraft.tags.FluidTags.WATER);
+		if (wet && p.age % 4 == 0) {
+			level.addParticle(ParticleTypes.SMOKE, p.x, p.y + 0.1, p.z, 0.0, 0.04, 0.0);
+			if (p.age % 20 == 0) {
+				level.playLocalSound(p.x, p.y, p.z, SoundEvents.FIRE_EXTINGUISH, SoundSource.NEUTRAL, 0.25F, 1.6F, false);
+			}
+		}
+
+		if (!wet && p.age > ENDER_RESTLESS) {
+			return false;
+		}
+
+		if (p.blinkIn <= 0) {
+			p.blinkIn = wet ? 10 + random.nextInt(15) : 40 + random.nextInt(100);
+			return false;
+		}
+
+		if (--p.blinkIn > 0) {
+			return false;
+		}
+
+		for (int tries = 0; tries < 10; tries++) {
+			double x = p.x + (random.nextDouble() - 0.5) * 6.0;
+			double z = p.z + (random.nextDouble() - 0.5) * 6.0;
+			for (int dy = 2; dy >= -3; dy--) {
+				BlockPos spot = BlockPos.containing(x, p.y + dy, z);
+				if (level.getBlockState(spot).getCollisionShape(level, spot).isEmpty() && level.getFluidState(spot).isEmpty()
+						&& !level.getBlockState(spot.below()).getCollisionShape(level, spot.below()).isEmpty()) {
+					portal(level, p.x, p.y, p.z);
+					p.x = p.prevX = x;
+					p.y = p.prevY = spot.getY() + 0.3;
+					p.z = p.prevZ = z;
+					p.vx = p.vz = 0.0;
+					p.vy = 0.1;
+					p.resting = false;
+					p.landed = false;
+					p.restTarget = null;
+					p.spinSpeed = 0.2F;
+					portal(level, p.x, p.y, p.z);
+					level.playLocalSound(p.x, p.y, p.z, SoundEvents.ENDERMAN_TELEPORT, SoundSource.NEUTRAL, 0.4F, 1.3F + random.nextFloat() * 0.3F, false);
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	private void portal(Level level, double x, double y, double z) {
+		for (int i = 0; i < 16; i++) {
+			level.addParticle(ParticleTypes.PORTAL, x, y, z, (random.nextDouble() - 0.5) * 1.5, random.nextDouble() * 0.8, (random.nextDouble() - 0.5) * 1.5);
+		}
+	}
+
 	private boolean step(Level level, BloodWorld blood, GorePart p) {
 		p.prevX = p.x;
 		p.prevY = p.y;
@@ -80,6 +144,10 @@ public final class GorePartManager {
 
 		if (p.held) {
 			// Positioned by PartInteraction while carried.
+			return true;
+		}
+
+		if (p.ender() && blink(level, p)) {
 			return true;
 		}
 

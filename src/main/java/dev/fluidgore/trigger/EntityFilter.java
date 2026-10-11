@@ -77,6 +77,10 @@ public final class EntityFilter {
 			return BloodColor.ROTTEN;
 		}
 
+		if (Flesh.ender(entity.getType())) {
+			return BloodColor.ENDER;
+		}
+
 		return entity instanceof Enemy ? config.monsterBloodColor : config.bloodColor;
 	}
 

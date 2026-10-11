@@ -50,6 +50,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			horsesAndFractures(context, singleplayer.getServer());
 			butchery(context, singleplayer.getServer());
 			meatsAndWool(context, singleplayer.getServer());
+			endermen(context, singleplayer.getServer());
 			suffering(context, singleplayer.getServer());
 			hackModel(context, singleplayer.getServer());
 			sharedFate(context, singleplayer.getServer());
@@ -847,6 +848,87 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		}
 		System.out.println("[FluidGoreTest] horses and fractures passed");
 	}
+	/**
+	 * Endermen: violet ender blood and flesh, and limbs that keep blinking about after they come off; every severed
+	 * limb now stays for minutes.
+	 */
+	private static void endermen(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("time set noon");
+		server.runCommand("weather clear");
+		server.runCommand("tp @a 140.5 -60 -1.5 0 25");
+		server.runCommand("summon minecraft:enderman 140.5 -60 2.5 {NoAI:1b,Rotation:[90f,0f]}");
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+		context.waitTicks(15);
+		int id = context.computeOnClient(mc -> {
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e instanceof net.minecraft.world.entity.monster.Enderman) {
+					return e.getId();
+				}
+			}
+
+			return -1;
+		});
+		check(id >= 0, "test enderman not found");
+		String kind = context.computeOnClient(mc -> {
+			var enderman = (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(id);
+			var posed = ModelParts.pose(enderman);
+			var target = ModelHit.centre(enderman, posed, ModelParts.torso(posed.model()));
+			var eye = target.add(0.0, 0.3, -1.5);
+			var dir = target.subtract(eye).normalize();
+			var hit = GoreSystems.dismemberment().wounds().strike(enderman, eye, dir, 8, Weapon.BLADE, 10);
+			if (hit != null) {
+				dev.fluidgore.wound.HitFeedback.hit(mc.level, GoreSystems.blood(), enderman, hit, Weapon.BLADE, dir);
+			}
+
+			return dev.fluidgore.trigger.EntityFilter.bloodType(enderman) + " " + dev.fluidgore.wound.Flesh.of(enderman) + " " + (hit != null);
+		});
+		System.out.println("[FluidGoreTest] enderman blood, flesh, wounded: " + kind);
+		check("ENDER ENDER true".equals(kind), "enderman is not ender flesh and blood: " + kind);
+		context.takeScreenshot("enderman_wounded");
+
+		// Its arms off; they must stay for minutes and keep blinking about.
+		java.util.List<double[]> before = context.computeOnClient(mc -> {
+			var enderman = (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(id);
+			for (BodyPart part : new BodyPart[]{BodyPart.RIGHT_ARM, BodyPart.LEFT_ARM}) {
+				GoreSystems.dismemberment().severPart(GoreSystems.blood(), mc.level, enderman, part, enderman::position, enderman.yBodyRot, 0.0F, null);
+			}
+
+			java.util.List<double[]> at = new java.util.ArrayList<>();
+			for (var p : GoreSystems.dismemberment().parts().parts()) {
+				check(p.ender(), "an enderman's arm is not an ender piece");
+				check(p.lifetime >= 6000, "a severed limb fades too soon: " + p.lifetime + " ticks");
+				at.add(new double[]{p.x, p.z});
+			}
+
+			return at;
+		});
+		check(before.size() >= 2, "enderman arms did not come off: " + before.size());
+		context.waitTicks(160);
+		double moved = context.computeOnClient(mc -> {
+			double most = 0.0;
+			var parts = GoreSystems.dismemberment().parts().parts();
+			for (int i = 0; i < Math.min(parts.size(), before.size()); i++) {
+				most = Math.max(most, Math.hypot(parts.get(i).x - before.get(i)[0], parts.get(i).z - before.get(i)[1]));
+			}
+
+			return most;
+		});
+		System.out.println("[FluidGoreTest] enderman limbs blinked up to " + moved + " blocks");
+		check(moved > 0.8, "enderman limbs did not teleport: " + moved);
+		context.takeScreenshot("enderman_limbs");
+		server.runCommand("kill @e[type=!minecraft:player]");
+		context.runOnClient(mc -> {
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+		System.out.println("[FluidGoreTest] endermen passed");
+	}
+
 	/** Pork and beef diced into their own cuts of meat; a sheep cut up in its herd bloodies its own wool and theirs. */
 	private static void meatsAndWool(ClientGameTestContext context, TestServerContext server) {
 		server.runCommand("kill @e[type=!minecraft:player]");

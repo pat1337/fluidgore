@@ -24,6 +24,7 @@ import org.jspecify.annotations.Nullable;
  */
 public final class Demos {
 	public static final List<Demo> ALL = List.of(
+			new Demo("ender", "2.8.0", "An enderman cut apart: violet ender blood, portal sparks from its wounds, and limbs that keep teleporting", false, Demos::ender),
 			new Demo("meats", "2.7.0", "A pig and a cow diced into pork and steak, and a sheep cut up in its herd, the wool soaking red", false, Demos::meats),
 			new Demo("dice", "2.6.0", "A horse and a donkey butchered like chickens: split in a few chops, then diced down to raw chunks", false, Demos::dice),
 			new Demo("horse", "2.5.0", "Horse death, broken bones and a split carcass", false, Demos::horse),
@@ -85,6 +86,25 @@ public final class Demos {
 			}
 		}).pause(100);
 	}
+	/** An enderman hacked apart: ender blood and portal sparks, then its severed limbs blinking about on their own. */
+	private static void ender(Script s, Stage st) {
+		s.summon(st, "enderman", "fgd_enderman", 0, 0, 4, 90.0F, "");
+		s.pause(20).hold("minecraft:iron_sword").say("An enderman bleeds the End: violet blood, and portal sparks pour from its wounds");
+		for (int i = 0; i < 4; i++) {
+			s.hit("fgd_enderman", 4.0F).pause(15);
+		}
+
+		s.say("Its limbs come off and will not lie still: they keep teleporting");
+		s.client(mc -> {
+			for (LivingEntity e : mc.level.getEntitiesOfClass(LivingEntity.class, mc.player.getBoundingBox().inflate(16), x -> x.getType() == EntityTypes.ENDERMAN)) {
+				for (BodyPart part : new BodyPart[]{BodyPart.RIGHT_ARM, BodyPart.LEFT_ARM, BodyPart.RIGHT_LEG}) {
+					GoreSystems.dismemberment().severPart(GoreSystems.blood(), mc.level, e, part, e::position, e.yBodyRot, 0.0F, null);
+				}
+			}
+		}).pause(20);
+		s.hit("fgd_enderman", 100).pause(260);
+	}
+
 	/** Pork and steak on the block, then a sheep hacked at in the middle of its herd until their wool is red. */
 	private static void meats(Script s, Stage st) {
 		s.summon(st, "pig", "fgd_pig", -2, 0, 4, 90.0F, "");

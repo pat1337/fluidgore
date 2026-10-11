@@ -47,7 +47,7 @@
 	"fluidgore.option.max_droplets": "Max Droplets",
 	"fluidgore.option.max_droplets.tooltip": "Cap on flying blood droplets at once.",
 	"fluidgore.option.part_lifetime": "Part Lifetime",
-	"fluidgore.option.part_lifetime.tooltip": "How long severed parts stay at Medium before fading.",
+	"fluidgore.option.part_lifetime.tooltip": "How long severed limbs and pieces stay at Medium before fading, up to an hour. Ten minutes by default.",
 	"fluidgore.option.max_parts": "Max Severed Parts",
 	"fluidgore.option.max_parts.tooltip": "Cap on severed parts in the world. The oldest are removed first.",
 
@@ -122,6 +122,7 @@
 	"fluidgore.color.purple": "Purple",
 	"fluidgore.color.black": "Black",
 	"fluidgore.color.rotten": "Rotten",
+	"fluidgore.color.ender": "Ender",
 
 	"modmenu.descriptionTranslation.fluidgore": "Client-side cosmetic gore: blood spray, lasting blood decals, a lightweight blood fluid simulation and dismemberment. Works on vanilla servers."
 }

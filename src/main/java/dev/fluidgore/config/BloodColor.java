@@ -18,7 +18,9 @@ public enum BloodColor {
 	PURPLE(0x5B1A7A, () -> Blocks.AMETHYST_BLOCK),
 	BLACK(0x1A1414, () -> Blocks.COAL_BLOCK),
 	/** What is left in a walking corpse: dark, brown and clotted. */
-	ROTTEN(0x3A2414, () -> Blocks.MUD);
+	ROTTEN(0x3A2414, () -> Blocks.MUD),
+	/** An enderman's: bright violet, and it crumbles like purpur and chorus. */
+	ENDER(0x9A2AD8, () -> Blocks.PURPUR_BLOCK);
 
 	public final int rgb;
 	private final Supplier<Block> chunkBlock;

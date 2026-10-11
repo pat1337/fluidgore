@@ -19,6 +19,8 @@ public enum Flesh {
 	PORK,
 	/** Beef: deep red steak, marbled with creamy fat. */
 	BEEF,
+	/** An enderman: black hide over dark violet flesh, cut glowing magenta, its bones pale as end stone. */
+	ENDER,
 	BONE,
 	DRIED,
 	/**
@@ -45,6 +47,10 @@ public enum Flesh {
 			return POULTRY;
 		}
 
+		if (ender(type)) {
+			return ENDER;
+		}
+
 		if (type == EntityTypes.PIG) {
 			return PORK;
 		}
@@ -58,6 +64,11 @@ public enum Flesh {
 		}
 
 		return rotten(type) && GoreConfig.get().rottenUndead ? ROTTEN : MEAT;
+	}
+
+	/** Endermen and endermites: things of the End, with its own flesh and blood. */
+	public static boolean ender(EntityType<?> type) {
+		return type == EntityTypes.ENDERMAN || type == EntityTypes.ENDERMITE;
 	}
 
 	/** The undead that are rotting meat (husks are dried out instead, and skeletons are bone). */
@@ -88,6 +99,16 @@ public enum Flesh {
 				case MAGGOTS -> 0xF0EBD8;
 				// Plucked poultry: pale, a little yellow, pink where the blood shows through.
 				case SKIN -> 0xF2CDB6;
+			};
+			case ENDER -> switch (tissue) {
+				case BRUISE -> 0x1C0A2A;
+				case FAT -> 0x8A5AC0;
+				case SPLIT -> 0xE040FF;
+				case MUSCLE -> 0x4A1468;
+				case BONE -> 0xE8E4B0;
+				case PUS -> 0xC8C060;
+				case MAGGOTS -> 0xF0EBD8;
+				case SKIN -> 0x161616;
 			};
 			case PORK -> switch (tissue) {
 				case BRUISE -> 0x7A3A55;

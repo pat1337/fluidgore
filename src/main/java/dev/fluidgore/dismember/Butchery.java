@@ -343,6 +343,7 @@ public final class Butchery {
 		ItemParticleOption meat = new ItemParticleOption(ParticleTypes.ITEM, switch (flesh) {
 			case POULTRY -> Items.CHICKEN;
 			case PORK -> Items.PORKCHOP;
+			case ENDER -> Items.ENDER_PEARL;
 			case ROTTEN -> Items.ROTTEN_FLESH;
 			default -> Items.BEEF;
 		});

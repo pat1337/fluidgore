@@ -59,6 +59,8 @@ public final class GorePart {
 	public boolean shattered;
 	/** Ticks since the part last splatted on impact, to avoid a splat every tick while sliding. */
 	public int lastSplat = -100;
+	/** For an enderman's pieces: ticks until the piece next blinks somewhere else. */
+	public int blinkIn;
 
 	public GorePart(ModelPart model, Identifier texture, Vector3f localCenter, Vector3f halfExtents, float scale, int bloodRgb, int lifetime) {
 		this.model = model;
@@ -68,6 +70,11 @@ public final class GorePart {
 		this.scale = scale;
 		this.bloodRgb = bloodRgb;
 		this.lifetime = lifetime;
+	}
+
+	/** A piece of an enderman: it keeps teleporting after it is cut off. */
+	public boolean ender() {
+		return bloodRgb == dev.fluidgore.config.BloodColor.ENDER.rgb;
 	}
 
 	/** Made of bone: breaks instead of splattering. */
