@@ -49,13 +49,23 @@ public final class Wounds {
 	private record Aim(Model<?> model, ModelHit.Result hit, float bodyYaw, int tick) {
 	}
 
+	/** A bone breaks once this much damage, relative to the body's health, has landed on it. */
+	public static final float FRACTURE = 0.55F;
+	/** And is smashed beyond saving (the head caved in, the limb torn off, the ribs stove right in) past this. */
+	public static final float DESTROY = 1.6F;
+	/** What a blow did to the bone under it. */
+	public static final int INTACT = 0;
+	public static final int BROKE = 1;
+	public static final int SMASHED = 2;
+
 	/**
 	 * One blow resolved against the model.
 	 *
-	 * @param cut   true if a cutting blow went through a wound that could not get any deeper: the part comes off
-	 * @param aimed true if the spot is where the player really aimed; false if it was guessed for another attacker
+	 * @param cut      true if a cutting blow went through a wound that could not get any deeper: the part comes off
+	 * @param aimed    true if the spot is where the player really aimed; false if it was guessed for another attacker
+	 * @param fracture what the blow did to the bone: {@link #INTACT}, {@link #BROKE} it just now, or {@link #SMASHED} it
 	 */
-	public record Strike(ModelHit.Result hit, float severity, boolean cut, boolean aimed) {
+	public record Strike(ModelHit.Result hit, float severity, boolean cut, boolean aimed, int fracture) {
 	}
 
 	private final Int2ObjectOpenHashMap<WoundSet> sets = new Int2ObjectOpenHashMap<>();
@@ -128,7 +138,7 @@ public final class Wounds {
 		Vec3 dir = target.subtract(eye);
 		double length = dir.length();
 		Strike guessed = length < 1.0E-4 ? null : strike(victim, eye, dir.scale(1.0 / length), length + 2.0, weapon, damage);
-		return guessed == null ? null : new Strike(guessed.hit(), guessed.severity(), guessed.cut(), false);
+		return guessed == null ? null : new Strike(guessed.hit(), guessed.severity(), guessed.cut(), false, guessed.fracture());
 	}
 
 	/**
@@ -175,7 +185,7 @@ public final class Wounds {
 			}
 		}
 
-		return deepest == null ? null : new Strike(deepest.hit(), deepest.severity(), false, false);
+		return deepest == null ? null : new Strike(deepest.hit(), deepest.severity(), false, false, deepest.fracture());
 	}
 
 	/** Casts the blow against the model as posed now and opens or deepens the wound it lands on. */
@@ -208,9 +218,40 @@ public final class Wounds {
 		float cap = Math.min(weapon.cap, level.woundDepth);
 		Vec3 offset = hit.point().subtract(victim.position());
 		WoundSet.Change change = set.add(hit, weapon, amount, cap, offset, bodyYaw, RANDOM);
-		boolean cut = weapon.cuts() && hit.bodyPart() != null && change.before() >= cap - 1.0E-3F
-				&& RANDOM.nextFloat() < Math.min(1.0F, level.partChance * 2.0F);
-		return new Strike(hit, change.after(), cut, true);
+		// Through a limb already cut as deep as it goes, it may come off; through the carcass, it splits (see Butchery).
+		boolean through = weapon.cuts() && change.before() >= cap - 1.0E-3F;
+		boolean cut = through && (hit.bodyPart() == null || RANDOM.nextFloat() < Math.min(1.0F, level.partChance * 2.0F));
+		return new Strike(hit, change.after(), cut, true, bone(set, hit, weapon, relative * level.woundRate, offset, bodyYaw));
+	}
+
+	/**
+	 * Adds a blow's crushing force to the bone under it (bodies of bone break the same way). Past {@link #FRACTURE} the
+	 * bone breaks and shows through, crushed or stove in; past {@link #DESTROY} it is smashed. Returns which happened now.
+	 */
+	private static int bone(WoundSet set, ModelHit.Result hit, Weapon weapon, float force, Vec3 offset, float bodyYaw) {
+		if (weapon.crush <= 0.0F || !GoreConfig.get().fractures) {
+			return INTACT;
+		}
+
+		int index = hit.bodyPart() == null ? WoundSet.TORSO : hit.bodyPart().ordinal();
+		int bit = 1 << index;
+		float before = set.bone[index];
+		float after = before + force * weapon.crush;
+		set.bone[index] = after;
+		if (before < DESTROY && after >= DESTROY && (set.smashed & bit) == 0) {
+			set.smashed |= bit;
+			set.broken |= bit;
+			set.fracture(hit, 4.0F, offset, bodyYaw, RANDOM);
+			return SMASHED;
+		}
+
+		if (before < FRACTURE && after >= FRACTURE && (set.broken & bit) == 0) {
+			set.broken |= bit;
+			set.fracture(hit, 2.8F, offset, bodyYaw, RANDOM);
+			return BROKE;
+		}
+
+		return INTACT;
 	}
 
 	/**
@@ -315,6 +356,50 @@ public final class Wounds {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Plucks a handful of feathers out of the spot of {@code entity}'s body the player's ray lands on, leaving bare skin.
+	 * Returns where, or null if the ray missed the body.
+	 */
+	public @Nullable Vec3 pluck(LivingEntity entity, Vec3 eye, Vec3 dir, double reach) {
+		ModelParts.Posed posed = ModelParts.pose(entity);
+		ModelHit.Result hit = posed != null ? ModelHit.cast(entity, posed, eye, dir, reach) : null;
+		if (hit == null) {
+			return null;
+		}
+
+		WoundSet set = sets.get(entity.getId());
+		if (set == null || set.model != posed.model()) {
+			set = new WoundSet(posed.model(), Flesh.of(entity), EntityFilter.bloodType(entity).rgb);
+			sets.put(entity.getId(), set);
+		}
+
+		set.pluck(hit, 2.6F, RANDOM);
+		return hit.point();
+	}
+
+	/**
+	 * Raw cut faces for a piece hacked out of a body: meat round a knob of bone on each listed face of {@code cube}
+	 * (each face is {axis, sign}).
+	 */
+	public static WoundSet cutFaces(ModelPart piece, ModelPart.Cube cube, Flesh flesh, int blood, int[][] faces) {
+		WoundSet set = new WoundSet(piece, flesh, blood);
+		float[] min = {cube.minX, cube.minY, cube.minZ};
+		float[] max = {cube.maxX, cube.maxY, cube.maxZ};
+		for (int[] face : faces) {
+			int axis = face[0];
+			int b = (axis + 1) % 3;
+			int c = (axis + 2) % 3;
+			org.joml.Vector3f local = new org.joml.Vector3f();
+			local.setComponent(axis, face[1] > 0 ? max[axis] : min[axis]);
+			local.setComponent(b, (min[b] + max[b]) * 0.5F);
+			local.setComponent(c, (min[c] + max[c]) * 0.5F);
+			float size = Math.min(max[b] - min[b], max[c] - min[c]) * 0.5F;
+			set.stump(new ModelHit.Result(piece, cube, axis, face[1], local, null, Vec3.ZERO, Vec3.ZERO, 0.0), size, RANDOM);
+		}
+
+		return set;
 	}
 
 	/**

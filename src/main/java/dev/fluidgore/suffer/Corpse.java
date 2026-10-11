@@ -149,7 +149,7 @@ public final class Corpse {
 	}
 
 	/** Keeps the body on screen for at least {@code ticks} more. */
-	void keepFor(int ticks) {
+	public void keepFor(int ticks) {
 		extraTicks = Math.max(extraTicks, groundTicks() - throeTicks - stillTicks + ticks);
 	}
 

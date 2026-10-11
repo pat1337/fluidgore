@@ -45,7 +45,15 @@ public abstract class LivingEntityRendererMixin {
 		state.setData(Dismemberment.MISSING_PARTS, mask == 0 ? null : mask);
 		state.setData(SufferPose.KEY, GoreSystems.suffering().pose(entity.getId()));
 		state.setData(Wounds.KEY, GoreSystems.dismemberment().wounds().get(entity.getId()));
-		state.setData(Burns.KEY, GoreSystems.dismemberment().burns().tint(entity.getId()));
+		// Charring and plucking both tint the body; together they multiply.
+		Integer burnt = GoreSystems.dismemberment().burns().tint(entity.getId());
+		Integer plucked = GoreSystems.dismemberment().butchery().tint(entity.getId());
+		Integer tint = burnt;
+		if (plucked != null) {
+			tint = burnt == null ? plucked : Integer.valueOf(Burns.apply(0xFF000000 | burnt, plucked) & 0xFFFFFF);
+		}
+
+		state.setData(Burns.KEY, tint);
 		state.setData(ModelParts.ENTITY_ID, entity.getId());
 
 		Corpse corpse = GoreSystems.suffering().corpse(entity.getId());

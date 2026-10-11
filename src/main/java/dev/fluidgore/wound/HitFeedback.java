@@ -28,6 +28,20 @@ public final class HitFeedback {
 	}
 
 	/** Feedback for {@code strike} on {@code entity}, a blow travelling along {@code dir} (unit vector). */
+	/**
+	 * A bone just broke under a blow: a deep crack, louder and lower in a big body, and splinters of bone out of it.
+	 * Smashed, it is a crunch and a spray of bone.
+	 */
+	public static void fracture(ClientLevel level, LivingEntity entity, Wounds.Strike strike) {
+		Vec3 at = strike.hit().point();
+		boolean smashed = strike.fracture() == Wounds.SMASHED;
+		float size = Math.max(0.3F, Math.min(2.5F, entity.getBbWidth() * entity.getBbHeight()));
+		float pitch = (smashed ? 0.6F : 0.8F) / (float) Math.sqrt(size) + RANDOM.nextFloat() * 0.1F;
+		level.playLocalSound(at.x, at.y, at.z, SoundEvents.BONE_BLOCK_BREAK, SoundSource.NEUTRAL, smashed ? 1.0F : 0.9F, pitch, false);
+		level.playLocalSound(at.x, at.y, at.z, SoundEvents.BONE_BLOCK_HIT, SoundSource.NEUTRAL, 0.8F, pitch * 0.8F, false);
+		BoneEmitter.burst(level, at, strike.hit().normal(), smashed ? 10 : 4, smashed ? 12 : 5, smashed ? 0.18 : 0.1);
+	}
+
 	public static void hit(ClientLevel level, BloodWorld blood, LivingEntity entity, Wounds.Strike strike, Weapon weapon, Vec3 dir) {
 		Flesh flesh = Flesh.of(entity);
 		int rgb = EntityFilter.bloodType(entity).rgb;

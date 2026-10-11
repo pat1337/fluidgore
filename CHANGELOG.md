@@ -2,6 +2,28 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.5.0]
+
+Butchery, broken bones and the horse revamp (including the unreleased 2.4.0 work).
+
+### Added
+- Broken Bones setting: blunt blows accumulate on skulls, ribs and limbs; fractures deform the pose, expose broken bone and throw shards. Further blows smash heads or tear limbs off.
+- Horse revamp: head and neck sever together (also donkeys and mules), longer paddling, stronger early cries, heavier blood flow, a heavy landing and longer corpse persistence. Horse blood measure increased from 1.7 to 2.6.
+- Horse carcasses split with the tail falling separately; horse demo and regression coverage for horses, donkeys, mules and fractures.
+- Plucking: right-click a dead chicken with an empty hand (hold it to keep going). A handful of feathers comes out
+  where you aim and drifts down; the skin there is bare, pale and goose-pimpled with the pits the feathers came out
+  of. The more you pluck, the more the whole bird turns to bare skin. Pieces cut off a plucked bird are plucked too.
+- Jointing: the head, both wings and both legs come off with a blade, as before, but the body now stays while you
+  work: every pluck and cut keeps it on the ground for another 30 seconds.
+- Splitting: cut through the carcass to the bone, then three more chops through the backbone, and it splits: whatever is still attached comes
+  off, the innards spill, and the trunk falls apart into two pieces with raw meat and bone on the cut faces.
+- Dicing: a blade on any loose piece (a split carcass, a leg, a wing) cuts it in two across its longest side, raw on
+  the new face, until the pieces are too small to cut. Works on any animal, not just chickens.
+- Butchery setting (on by default), `butcher` demo and game test.
+
+### Changed
+- Fixed indentation in code a few earlier patches had left one tab short.
+
 ## [2.3.0]
 
 ### Added

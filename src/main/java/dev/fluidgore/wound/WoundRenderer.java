@@ -39,12 +39,20 @@ public final class WoundRenderer {
 	private static final Layer PUS = new Layer(9, 0.3F, 0.9F, Flesh.Tissue.PUS);
 	private static final Layer MAGGOTS = new Layer(10, 0.5F, 0.85F, Flesh.Tissue.MAGGOTS);
 	private static final Layer[] ROUND_ROTTEN = rotten(ROUND);
+	/** Bare skin where the feathers were plucked. */
+	private static final Layer[] PLUCKED = {new Layer(11, 0.0F, 1.0F, Flesh.Tissue.SKIN)};
+	/** A broken bone: a spreading bruise, the skin split over it, crushed bone. */
+	private static final Layer[] CRUSHED = {
+			new Layer(0, 0.0F, 1.4F, Flesh.Tissue.BRUISE), new Layer(1, 0.0F, 1.0F, Flesh.Tissue.SPLIT), new Layer(12, 0.0F, 0.9F, Flesh.Tissue.BONE)};
+	/** Ribs stove in: a wide bruise, the skin split, broken rib ends in a dark hollow. */
+	private static final Layer[] STOVE_IN = {
+			new Layer(0, 0.0F, 1.5F, Flesh.Tissue.BRUISE), new Layer(1, 0.0F, 1.1F, Flesh.Tissue.SPLIT), new Layer(13, 0.0F, 1.0F, Flesh.Tissue.BONE)};
 	private static final Layer[] SLASH_ROTTEN = rotten(SLASH);
 	/** Outward lift per layer, in model pixels, so the layers stack instead of fighting. */
 	private static final float LIFT = 0.02F;
-	/** wounds.png is 8 tiles across and 11 down. */
+	/** wounds.png is 8 tiles across and 14 down. */
 	private static final float TILE_U = 1.0F / 8.0F;
-	private static final float TILE_V = 1.0F / 11.0F;
+	private static final float TILE_V = 1.0F / 14.0F;
 
 	private static final Vector3f POS = new Vector3f();
 	private static final Vector3f NORMAL = new Vector3f();
@@ -53,17 +61,17 @@ public final class WoundRenderer {
 	private WoundRenderer() {
 	}
 
-/** The layers with the rot slotted in before the bone. */
-private static Layer[] rotten(Layer[] layers) {
-	Layer[] out = new Layer[layers.length + 2];
-	System.arraycopy(layers, 0, out, 0, layers.length - 1);
-	out[layers.length - 1] = PUS;
-	out[layers.length] = MAGGOTS;
-	out[layers.length + 1] = layers[layers.length - 1];
-	return out;
-}
+	/** The layers with the rot slotted in before the bone. */
+	private static Layer[] rotten(Layer[] layers) {
+		Layer[] out = new Layer[layers.length + 2];
+		System.arraycopy(layers, 0, out, 0, layers.length - 1);
+		out[layers.length - 1] = PUS;
+		out[layers.length] = MAGGOTS;
+		out[layers.length + 1] = layers[layers.length - 1];
+		return out;
+	}
 
-public static RenderType renderType() {
+	public static RenderType renderType() {
 		return RenderTypes.entityCutoutZOffset(TEXTURE);
 	}
 
@@ -114,7 +122,12 @@ public static RenderType renderType() {
 		float severity = set.severity[i];
 		pose.transformNormal(NORMAL.set(0.0F).setComponent(a, set.sign[i]), NORMAL);
 		boolean slash = set.morph[i] == WoundSet.SLASH;
-		Layer[] layers = set.flesh.rots() ? slash ? SLASH_ROTTEN : ROUND_ROTTEN : slash ? SLASH : ROUND;
+		Layer[] layers = switch (set.morph[i]) {
+			case WoundSet.PLUCK -> PLUCKED;
+			case WoundSet.CRUSH -> CRUSHED;
+			case WoundSet.RIBS -> STOVE_IN;
+			default -> set.flesh.rots() ? slash ? SLASH_ROTTEN : ROUND_ROTTEN : slash ? SLASH : ROUND;
+		};
 		for (int n = 0; n < layers.length; n++) {
 			Layer layer = layers[n];
 			if (layer.opens() > 0.0F && severity <= layer.opens()) {

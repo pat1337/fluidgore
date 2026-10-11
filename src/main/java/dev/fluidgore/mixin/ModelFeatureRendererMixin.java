@@ -68,7 +68,8 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 		Integer mask = state.getData(Dismemberment.MISSING_PARTS);
 		SufferPose pose = state.getData(SufferPose.KEY);
 		BodyPose body = state.getData(BodyPose.KEY);
-		if ((mask == null || mask == 0) && pose == null && body == null) {
+		WoundSet wounds = state.getData(Wounds.KEY);
+		if ((mask == null || mask == 0) && pose == null && body == null && (wounds == null || wounds.brokenMask() == 0)) {
 			return;
 		}
 
@@ -92,6 +93,10 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 		if (body != null) {
 			// The head and each limb are free-swinging springs.
 			ModelParts.applyJoints(parts, body.joints(), this::fluidgore$save);
+		}
+
+		if (wounds != null && wounds.brokenMask() != 0 && wounds.drawsOn(model)) {
+			ModelParts.applyFractures(model, parts, wounds, this::fluidgore$save);
 		}
 	}
 
@@ -175,7 +180,7 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 	@Unique
 	private void fluidgore$save(ModelPart part) {
 		fluidgore$moved.add(part);
-		fluidgore$savedRotations.add(new float[]{part.xRot, part.yRot, part.zRot});
+		fluidgore$savedRotations.add(new float[]{part.xRot, part.yRot, part.zRot, part.xScale, part.yScale, part.zScale});
 	}
 
 	@Unique
@@ -185,12 +190,16 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 		}
 
 		fluidgore$hidden.clear();
-		for (int i = 0; i < fluidgore$moved.size(); i++) {
+		// Newest first, so a part saved twice ends up as it was before either change.
+		for (int i = fluidgore$moved.size() - 1; i >= 0; i--) {
 			ModelPart part = fluidgore$moved.get(i);
 			float[] saved = fluidgore$savedRotations.get(i);
 			part.xRot = saved[0];
 			part.yRot = saved[1];
 			part.zRot = saved[2];
+			part.xScale = saved[3];
+			part.yScale = saved[4];
+			part.zScale = saved[5];
 		}
 
 		fluidgore$moved.clear();

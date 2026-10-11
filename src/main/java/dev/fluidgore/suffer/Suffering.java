@@ -32,6 +32,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -254,7 +255,9 @@ public final class Suffering {
 		// On High and Extreme a body that was beaten or burnt to death lies there a good while: the evidence of what was
 		// done to it. A small body is left lying longer too.
 		float evidence = kind == Corpse.Kind.BEATEN || burnt ? EVIDENCE_LINGER : 1.0F;
-		int linger = Math.round(GoreConfig.get().corpseLingerSeconds * 20 * (entity.isBaby() ? 1.5F : 1.0F) * GoreConfig.get().goreLevel.linger
+		// A small body, and a horse, are left lying longer.
+		float size = entity.isBaby() || entity.getType() == EntityTypes.HORSE ? 1.5F : 1.0F;
+		int linger = Math.round(GoreConfig.get().corpseLingerSeconds * 20 * size * GoreConfig.get().goreLevel.linger
 				* (GoreConfig.get().goreLevel.linger > 1.0F ? evidence : 1.0F));
 		Corpse corpse = new Corpse(entity, kind, state.voice, deaths.collapse(kind), linger, random.nextFloat() * 100.0F);
 		corpse.pops = pops;
@@ -274,6 +277,11 @@ public final class Suffering {
 		}
 
 		float cry = Deaths.cry(kind);
+		if (Deaths.horse(corpse) && cry >= 0.0F) {
+			// A horse screams.
+			cry = Math.max(cry, 0.5F);
+		}
+
 		if (cry >= 0.0F) {
 			screams.death(follow(entity), state.voice, intensity, cry);
 		}
@@ -634,8 +642,8 @@ public final class Suffering {
 		Vec3 middle = centre(c);
 		float heavy = 1.0F / c.body.heft;
 		float volume = Math.min(1.0F, 0.4F + speed * 4.0F);
-		if (c.random.nextInt(4) == 0) {
-			// The hard crunch of a fall, now only one fall in four.
+		if (c.random.nextInt(4) == 0 || Deaths.horse(c)) {
+			// The hard crunch of a fall, one fall in four; every time for half a ton of horse.
 			level.playLocalSound(middle.x, middle.y, middle.z, SoundEvents.GENERIC_BIG_FALL, SoundSource.NEUTRAL, volume * 0.8F,
 					0.75F + 0.25F / heavy + c.random.nextFloat() * 0.1F, false);
 		} else {

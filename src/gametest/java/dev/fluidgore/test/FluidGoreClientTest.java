@@ -47,10 +47,14 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		});
 		try (TestSingleplayerContext singleplayer = context.worldBuilder().create()) {
 			singleplayer.getConnection().waitForChunksRender();
+			horsesAndFractures(context, singleplayer.getServer());
+			butchery(context, singleplayer.getServer());
 			suffering(context, singleplayer.getServer());
 			hackModel(context, singleplayer.getServer());
 			sharedFate(context, singleplayer.getServer());
 			rot(context, singleplayer.getServer());
+
+
 			babies(context, singleplayer.getServer());
 			grief(context, singleplayer.getServer());
 			weapons(context, singleplayer.getServer());
@@ -197,6 +201,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 	 * run); then punch, pick up and throw a severed part.
 	 */
 	private static void suffering(ClientGameTestContext context, TestServerContext server) {
+		context.runOnClient(mc -> { GoreSystems.suffering().clear(); GoreSystems.dismemberment().clear(); GoreSystems.blood().clear(); });
 		server.runCommand("time set noon");
 		server.runCommand("weather clear");
 		server.runCommand("gamerule show_death_messages false");
@@ -763,6 +768,187 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		return out.toString();
 	}
 
+	/**
+	 * A chicken processed from start to finish: plucked bare, jointed (head, both wings and both legs off), the carcass
+	 * split, and the pieces cut down to dice.
+	 */
+	private static void horsesAndFractures(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("tp @a 90.5 -60 0.5 0 25");
+		context.runOnClient(mc -> { GoreSystems.suffering().clear(); GoreSystems.dismemberment().clear(); });
+		for (String type : new String[]{"horse", "donkey", "mule"}) {
+			server.runCommand("summon minecraft:" + type + " 90.5 -60 3.5 {NoAI:1b,Tags:[\"fg_horse_test\"],Rotation:[90f,0f]}");
+			context.waitTicks(15);
+			int id = context.computeOnClient(mc -> {
+				for (Entity e : mc.level.entitiesForRendering()) if (e instanceof net.minecraft.world.entity.LivingEntity && net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).getPath().equals(type)) return e.getId();
+				return -1;
+			});
+			check(id >= 0, "missing test " + type);
+			context.runOnClient(mc -> {
+				var entity = (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(id);
+				var model = ModelParts.pose(entity).model();
+				check(ModelParts.index(model)[BodyPart.HEAD.ordinal()] == model.root().createPartLookup().apply("head_parts"), "horse neck is not part of the head: " + type);
+			});
+			context.runOnClient(mc -> GoreSystems.suffering().forceNextDeath(dev.fluidgore.suffer.Corpse.Kind.BEATEN, false));
+			server.runCommand("damage @e[tag=fg_horse_test,limit=1] 100 minecraft:generic");
+			context.waitTicks(30);
+			context.runOnClient(mc -> {
+				var corpse = GoreSystems.suffering().corpse(id);
+				check(corpse != null, "missing horse corpse: " + type);
+				var entity = corpse.entity;
+				var wounds = GoreSystems.dismemberment().wounds();
+				wounds.forget(id);
+				for (BodyPart part : new BodyPart[]{BodyPart.HEAD, BodyPart.RIGHT_LEG}) {
+					boolean broke = false;
+					boolean smashed = false;
+					for (int i = 0; i < 60 && !smashed; i++) {
+						var target = ModelHit.centre(entity, ModelParts.pose(entity), part);
+						var outward = new net.minecraft.world.phys.Vec3(Math.cos(i * 2.4), (i % 3 - 1) * 0.7, Math.sin(i * 2.4)).normalize();
+						var eye = target.add(outward.scale(1.5));
+						var hit = wounds.strike(entity, eye, target.subtract(eye).normalize(), 8, Weapon.BLUNT, 4);
+						if (hit != null && hit.hit().bodyPart() == part) {
+							broke |= hit.fracture() == dev.fluidgore.wound.Wounds.BROKE;
+							smashed |= hit.fracture() == dev.fluidgore.wound.Wounds.SMASHED;
+						}
+					}
+					check(broke && smashed && wounds.get(id).broken(part), "bone did not break then smash: " + type + " " + part);
+				}
+			});
+			context.takeScreenshot("fractures_" + type);
+			context.runOnClient(mc -> {
+				var corpse = GoreSystems.suffering().corpse(id);
+				GoreSystems.dismemberment().butchery().split(GoreSystems.blood(), mc.level, corpse, ModelParts.torso(ModelParts.pose(corpse.entity).model()), new net.minecraft.world.phys.Vec3(0, -1, 0));
+				check(GoreSystems.dismemberment().vaporized(id), "horse carcass did not split: " + type);
+				check(GoreSystems.dismemberment().parts().parts().stream().filter(p -> !p.shattered && p.wounds != null).count() >= 2, "horse split left no halves: " + type);
+			});
+			context.waitTicks(10);
+			context.takeScreenshot("split_" + type);
+			context.runOnClient(mc -> { GoreSystems.suffering().clear(); GoreSystems.dismemberment().clear(); });
+		}
+		System.out.println("[FluidGoreTest] horses and fractures passed");
+	}
+	private static void butchery(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("tp @a 80.5 -60 0.5 0 35");
+		server.runCommand("summon minecraft:chicken 80.5 -60 2.5 {NoAI:1b,Rotation:[90f,0f]}");
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+		context.waitTicks(15);
+		int id = context.computeOnClient(mc -> {
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e instanceof net.minecraft.world.entity.animal.chicken.Chicken) {
+					return e.getId();
+				}
+			}
+
+			return -1;
+		});
+		check(id >= 0, "butchery test chicken not found");
+		context.runOnClient(mc -> GoreSystems.suffering().forceNextDeath(dev.fluidgore.suffer.Corpse.Kind.CONCUSSION, false));
+		server.runCommand("damage @e[type=minecraft:chicken,limit=1] 100 minecraft:generic");
+		context.waitTicks(30);
+
+		// Plucking: handfuls from all over the bird, from above and both sides.
+		int plucked = context.computeOnClient(mc -> {
+			var corpse = GoreSystems.suffering().corpse(id);
+			if (corpse == null) {
+				return -1;
+			}
+
+			int done = 0;
+			var centre = dev.fluidgore.suffer.CorpseStrike.centre(corpse);
+			for (int i = 0; i < 40 && GoreSystems.dismemberment().butchery().plucked(id) < 1.0F; i++) {
+				double angle = i * 0.8;
+				var eye = centre.add(Math.cos(angle) * 0.9, 0.7 + (i % 3) * 0.2, Math.sin(angle) * 0.9);
+				var aim = centre.add((i % 4 - 1.5) * 0.06, (i % 2) * 0.05, ((i / 4) % 4 - 1.5) * 0.06);
+				if (GoreSystems.dismemberment().butchery().pluck(mc.level, corpse, eye, aim.subtract(eye).normalize())) {
+					done++;
+				}
+			}
+
+			return done;
+		});
+		String skin = context.computeOnClient(mc -> GoreSystems.dismemberment().butchery().plucked(id) + " patches="
+				+ GoreSystems.dismemberment().wounds().get(id).count(dev.fluidgore.wound.WoundSet.PLUCK) + " tint=" + GoreSystems.dismemberment().butchery().tint(id));
+		System.out.println("[FluidGoreTest] plucked chicken: " + plucked + " handfuls, " + skin);
+		check(plucked >= 12, "too few handfuls of feathers came out: " + plucked);
+		check(skin.startsWith("1.0"), "the chicken is not plucked bare: " + skin);
+		server.runCommand("tp @a 80.5 -60 1.3 0 50");
+		context.waitTicks(3);
+		context.takeScreenshot("butcher_01_plucked");
+
+		// Jointing: head, wings and legs off with a cleaver, a swing at a time as a player would.
+		for (BodyPart part : BodyPart.values()) {
+			for (int i = 0; i < 20 && context.computeOnClient(mc -> (GoreSystems.dismemberment().missingMask(id) & part.bit()) == 0); i++) {
+				context.runOnClient(mc -> chop(mc, GoreSystems.suffering().corpse(id), part));
+				context.waitTicks(6);
+			}
+		}
+
+		int mask = context.computeOnClient(mc -> GoreSystems.dismemberment().missingMask(id));
+		double drift = context.computeOnClient(mc -> GoreSystems.suffering().corpse(id).position().distanceTo(new net.minecraft.world.phys.Vec3(80.5, -60.0, 2.5)));
+		System.out.println("[FluidGoreTest] jointed chicken: missing mask " + mask + ", body moved " + String.format(java.util.Locale.ROOT, "%.2f", drift));
+		check(mask == 31, "not every part came off the chicken: mask " + mask);
+		check(drift < 2.5, "butchering batted the body away: it moved " + drift);
+		check(!context.computeOnClient(mc -> GoreSystems.dismemberment().vaporized(id)), "the carcass split while its limbs were still being taken off");
+		context.waitTicks(10);
+		context.takeScreenshot("butcher_02_jointed");
+
+		// Splitting: the cleaver through the carcass to the bone, then once more.
+		// Counted by identity: the loose-piece cap drops the oldest pieces as new ones come.
+		java.util.Set<Object> before = context.computeOnClient(mc -> {
+			java.util.Set<Object> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+			seen.addAll(GoreSystems.dismemberment().parts().parts());
+			return seen;
+		});
+		for (int i = 0; i < 12 && !context.computeOnClient(mc -> GoreSystems.dismemberment().vaporized(id)); i++) {
+			context.runOnClient(mc -> {
+				var corpse = GoreSystems.suffering().corpse(id);
+				var posed = ModelParts.pose(corpse.entity);
+				var centre = ModelHit.centre(corpse.entity, posed, ModelParts.torso(posed.model()));
+				var eye = centre.add(0.0, 1.2, 0.0);
+				dev.fluidgore.suffer.CorpseStrike.strike(mc.level, GoreSystems.blood(), corpse, eye, centre.subtract(eye).normalize(), Weapon.CHOP, 9.0F);
+				if (GoreSystems.dismemberment().vaporized(id)) {
+					System.out.println("[FluidGoreTest] at split: body " + corpse.position() + " newest " + GoreSystems.dismemberment().parts().parts().reversed().stream().limit(4)
+							.map(part -> String.format(java.util.Locale.ROOT, "[%.2f %.2f %.2f life=%d shattered=%s wounds=%s]", part.x, part.y, part.z, part.lifetime, part.shattered,
+									part.wounds == null ? "-" : part.wounds.count())).toList());
+				}
+			});
+			context.waitTicks(6);
+		}
+
+		boolean split = context.computeOnClient(mc -> GoreSystems.dismemberment().vaporized(id));
+		int halves = context.computeOnClient(mc -> (int) GoreSystems.dismemberment().parts().parts().stream().filter(part -> !before.contains(part) && part.wounds != null
+				&& part.wounds.count() > 0).count());
+		System.out.println("[FluidGoreTest] carcass split: " + split + ", new pieces " + halves);
+		check(split, "the carcass never split");
+		check(halves >= 2, "the split carcass did not fall into two pieces: " + halves);
+		context.waitTicks(20);
+
+		// Dicing: cut the newest pieces again and again.
+		int cuts = context.computeOnClient(mc -> {
+			int n = 0;
+			for (int round = 0; round < 6; round++) {
+				var parts = GoreSystems.dismemberment().parts().parts();
+				var piece = parts.getLast();
+				if (GoreSystems.dismemberment().butchery().cut(GoreSystems.blood(), mc.level, piece, new net.minecraft.world.phys.Vec3(0.0, -1.0, 0.0))) {
+					n++;
+				}
+			}
+
+			return n;
+		});
+		System.out.println("[FluidGoreTest] diced: " + cuts + " cuts, pieces now " + context.computeOnClient(mc -> GoreSystems.dismemberment().parts().parts().size()));
+		check(cuts >= 3, "the pieces could not be cut down: " + cuts + " cuts");
+		context.waitTicks(25);
+		server.runCommand("tp @a 80.5 -60 0.8 0 55");
+		context.waitTicks(3);
+		context.takeScreenshot("butcher_03_diced");
+	}
+
 	/** The head, or for babies without one (a chick is a single block) the first part the model has. */
 	private static BodyPart severable(net.minecraft.world.entity.LivingEntity entity) {
 		var parts = ModelParts.index(ModelParts.pose(entity).model());
@@ -782,9 +968,16 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			return;
 		}
 
-		var outward = target.subtract(dev.fluidgore.suffer.CorpseStrike.centre(corpse)).add(0.0, 0.3, 0.0).normalize();
-		var eye = target.add(outward.scale(1.5));
-		dev.fluidgore.suffer.CorpseStrike.strike(mc.level, GoreSystems.blood(), corpse, eye, target.subtract(eye).normalize(), Weapon.CHOP, 9.0F);
+		for (int i = 0; i < 26; i++) {
+			var outward = new net.minecraft.world.phys.Vec3(Math.cos(i * 2.4), (i % 3 - 1) * 0.7, Math.sin(i * 2.4)).normalize();
+			var eye = target.add(outward.scale(1.5));
+			var dir = target.subtract(eye).normalize();
+			var hit = ModelHit.cast(corpse.entity, ModelParts.pose(corpse.entity), eye, dir, 8);
+			if (hit != null && hit.bodyPart() == part) {
+				dev.fluidgore.suffer.CorpseStrike.strike(mc.level, GoreSystems.blood(), corpse, eye, dir, Weapon.CHOP, 9.0F);
+				return;
+			}
+		}
 	}
 
 	/**

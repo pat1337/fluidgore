@@ -22,9 +22,9 @@ public enum Flesh {
 	 */
 	ROTTEN;
 
-	/** The tissues a wound shows, from the skin down, plus the rot that lives in it. */
+	/** The tissues a wound shows, from the skin down, plus the rot that lives in it, and bare skin where feathers were plucked. */
 	public enum Tissue {
-		BRUISE, FAT, SPLIT, MUSCLE, BONE, PUS, MAGGOTS
+		BRUISE, FAT, SPLIT, MUSCLE, BONE, PUS, MAGGOTS, SKIN
 	}
 
 	private static final int POISON_OOZE = 0x6E8A3A;
@@ -68,12 +68,14 @@ public enum Flesh {
 				case BONE -> 0xE6DDC8;
 				case PUS -> 0xC8C060;
 				case MAGGOTS -> 0xF0EBD8;
+				// Plucked poultry: pale, a little yellow, pink where the blood shows through.
+				case SKIN -> 0xF2CDB6;
 			};
 			case BONE -> switch (tissue) {
 				case BRUISE -> 0x9A968C;
 				case FAT, MUSCLE -> 0xB8B09A;
 				case SPLIT -> 0x4A463F;
-				case BONE, PUS, MAGGOTS -> 0xD8D2C0;
+				case BONE, PUS, MAGGOTS, SKIN -> 0xD8D2C0;
 			};
 			case DRIED -> switch (tissue) {
 				case BRUISE -> 0x5E5A3A;
@@ -83,6 +85,7 @@ public enum Flesh {
 				case BONE -> 0xD8CFB0;
 				case PUS -> 0x9AA040;
 				case MAGGOTS -> 0xE8E0C8;
+				case SKIN -> 0xB8A27A;
 			};
 			case ROTTEN -> switch (tissue) {
 				case BRUISE -> 0x3B3D25;
@@ -92,6 +95,7 @@ public enum Flesh {
 				case BONE -> 0xBFAE7A;
 				case PUS -> 0x9FA63A;
 				case MAGGOTS -> 0xEDE6CF;
+				case SKIN -> 0x8C9470;
 			};
 		};
 	}

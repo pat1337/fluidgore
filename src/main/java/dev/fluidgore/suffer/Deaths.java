@@ -11,6 +11,7 @@ import java.util.function.Supplier;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
@@ -63,6 +64,11 @@ public final class Deaths {
 	Deaths(ScreamManager screams, RandomSource random) {
 		this.screams = screams;
 		this.random = random;
+	}
+
+	/** A horse: the biggest, hardest death (see {@link #plan}) and the most blood. */
+	static boolean horse(Corpse c) {
+		return c.entity.getType() == EntityTypes.HORSE;
 	}
 
 	/** Chance that a death ends with the body bursting apart, 0..1. */
@@ -254,6 +260,20 @@ public final class Deaths {
 
 		// A frantic animal kicks harder; a stoic one lies quieter.
 		c.kickPeak = Mth.clamp(c.kickPeak * (0.85F + 0.3F * frantic), 0.0F, 1.0F);
+		if (horse(c)) {
+			// A horse goes hardest of all: the most violent paddling of any animal, longer, and a conscious one screams.
+			c.kickPeak = Math.min(1.0F, c.kickPeak * 1.3F + 0.1F);
+			c.kickRate += 0.15F;
+			c.clonicEnd += (c.clonicEnd - c.clonicStart) / 4;
+			if (c.voiceEnd > 0) {
+				c.voiceEnd += 10;
+			}
+
+			if (gasps > 0) {
+				gasps++;
+			}
+		}
+
 		c.gasps = new int[gasps];
 		int at = gaspFrom;
 		float gap = 9.0F + r.nextInt(6);
@@ -299,7 +319,7 @@ public final class Deaths {
 		Supplier<Vec3> wound = c.kind == Corpse.Kind.DECAPITATION ? () -> Suffering.neck(c) : () -> bleedPoint(c);
 		int life = c.collapseAt + c.heartEnd;
 		BloodWorld blood = GoreSystems.blood();
-		blood.spurts().start(wound, out, color, life, c.kind == Corpse.Kind.DECAPITATION ? 1.0F : 0.8F);
+		blood.spurts().start(wound, out, color, life, (c.kind == Corpse.Kind.DECAPITATION ? 1.0F : 0.8F) * (horse(c) ? 1.25F : 1.0F));
 		blood.spurts().ooze(wound, c::position, c.entity.getBbWidth() * 0.5, color, life + 20, 0.7F);
 	}
 
@@ -429,7 +449,7 @@ public final class Deaths {
 			case TRAUMA, BEATEN -> 1.0F;
 			case CHEST -> 0.5F;
 			default -> 0.6F;
-		};
+		} * (horse(c) ? 1.5F : 1.0F);
 		Vec3 from = bleedPoint(c);
 		BloodWorld blood = GoreSystems.blood();
 		BloodEmitter.burst(blood, level, from, color, (0.03F * strength + 0.008F) * flow, Math.round((3 + 5 * strength) * flow));

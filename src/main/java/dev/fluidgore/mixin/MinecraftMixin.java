@@ -35,7 +35,8 @@ public abstract class MinecraftMixin {
 	@Inject(method = "startUseItem", at = @At("HEAD"), cancellable = true)
 	private void fluidgore$grabPart(CallbackInfo ci) {
 		Minecraft self = (Minecraft) (Object) this;
-		if (GoreSystems.dismemberment().interaction().onUse(self) || Cleaning.onUse(self, GoreSystems.blood())) {
+		if (GoreSystems.dismemberment().interaction().onUse(self) || GoreSystems.dismemberment().butchery().onUse(self)
+				|| Cleaning.onUse(self, GoreSystems.blood())) {
 			ci.cancel();
 		}
 	}

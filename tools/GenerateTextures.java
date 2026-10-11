@@ -411,7 +411,7 @@ public final class GenerateTextures {
 
 
 	/**
-	 * wounds.png: an 8x11 grid of 16px pixel-art tiles, greyscale with hard alpha; the game tints each by the body's
+	 * wounds.png: an 8x14 grid of 16px pixel-art tiles, greyscale with hard alpha; the game tints each by the body's
 	 * flesh and blood. Eight variants per row.
 	 * <ul>
 	 * <li>Rows 0-3, round wounds (lacerations from fists, clubs, teeth, points): bruise, gash, open meat, bone.</li>
@@ -419,10 +419,14 @@ public final class GenerateTextures {
 	 *     fat under the skin, the dark split, muscle in the depth, a line of bone. Column {@code c} runs at
 	 *     {@code (c % 4) * 45} degrees, so the game can lay a slash along the swing.</li>
 	 * <li>Rows 9-10, rot (zombies): beads of pus, and maggots.</li>
+	 * <li>Row 11, plucked skin: bare, goose-pimpled bird skin dotted with the pits the feathers came out of, its edge
+	 *     ragged where feathers are left.</li>
+	 * <li>Row 12, crushed bone: a caved-in skull or a snapped limb, splinters of bone at odd angles in dark blood.</li>
+	 * <li>Row 13, stove-in ribs: broken rib ends, pale bars snapped and pushed in, over a dark hollow.</li>
 	 * </ul>
 	 */
 	private static BufferedImage wounds() {
-		BufferedImage image = new BufferedImage(128, 176, BufferedImage.TYPE_INT_ARGB);
+		BufferedImage image = new BufferedImage(128, 224, BufferedImage.TYPE_INT_ARGB);
 		for (int v = 0; v < 8; v++) {
 			for (int layer = 0; layer < 4; layer++) {
 				woundTile(image, layer, v, new Random(11000 + layer * 1000 + v));
@@ -434,6 +438,9 @@ public final class GenerateTextures {
 
 			rotTile(image, 0, v, new Random(31000 + v));
 			rotTile(image, 1, v, new Random(32000 + v));
+			skinTile(image, v, new Random(33000 + v));
+			crushTile(image, v, new Random(34000 + v));
+			ribsTile(image, v, new Random(35000 + v));
 		}
 
 		return image;
@@ -569,6 +576,99 @@ public final class GenerateTextures {
 					}
 				}
 
+				image.setRGB(ox + x, oy + y, inside ? argb(1.0, light) : 0);
+			}
+		}
+	}
+
+	/** Crushed bone: a dark, wet hollow with splinters of bone in it at every angle. */
+	private static void crushTile(BufferedImage image, int variant, Random random) {
+		int ox = variant * 16;
+		int oy = 12 * 16;
+		for (int y = 0; y < 16; y++) {
+			for (int x = 0; x < 16; x++) {
+				double dx = (x + 0.5 - 8.0) / 8.0;
+				double dy = (y + 0.5 - 8.0) / 8.0;
+				double r = Math.sqrt(dx * dx + dy * dy);
+				if (r < 0.7 || r < 0.85 && random.nextDouble() < 0.5) {
+					image.setRGB(ox + x, oy + y, argb(1.0, 0.18 + random.nextDouble() * 0.12));
+				}
+			}
+		}
+
+		int shards = 5 + random.nextInt(4);
+		for (int k = 0; k < shards; k++) {
+			double angle = random.nextDouble() * Math.PI;
+			double cx = 8 + (random.nextDouble() - 0.5) * 8.0;
+			double cy = 8 + (random.nextDouble() - 0.5) * 8.0;
+			int length = 2 + random.nextInt(4);
+			for (int s = -length / 2; s <= length / 2; s++) {
+				int x = (int) Math.round(cx + Math.cos(angle) * s);
+				int y = (int) Math.round(cy + Math.sin(angle) * s);
+				if (x >= 0 && x < 16 && y >= 0 && y < 16) {
+					image.setRGB(ox + x, oy + y, argb(1.0, s == length / 2 ? 0.7 : 0.88 + random.nextDouble() * 0.12));
+				}
+			}
+		}
+	}
+
+	/** Stove-in ribs: a dark hollow crossed by pale rib bars, each snapped and the ends pushed in. */
+	private static void ribsTile(BufferedImage image, int variant, Random random) {
+		int ox = variant * 16;
+		int oy = 13 * 16;
+		for (int y = 0; y < 16; y++) {
+			for (int x = 0; x < 16; x++) {
+				double dx = (x + 0.5 - 8.0) / 8.0;
+				double dy = (y + 0.5 - 8.0) / 8.0;
+				double r = Math.sqrt(dx * dx * 0.8 + dy * dy);
+				if (r < 0.78 || r < 0.92 && random.nextDouble() < 0.45) {
+					image.setRGB(ox + x, oy + y, argb(1.0, 0.15 + random.nextDouble() * 0.1));
+				}
+			}
+		}
+
+		// Three or four ribs across it, each broken somewhere along its length, the inner end sunk out of line.
+		int ribs = 3 + random.nextInt(2);
+		for (int k = 0; k < ribs; k++) {
+			int y = 3 + k * (10 / ribs) + random.nextInt(2);
+			int brk = 5 + random.nextInt(6);
+			for (int x = 2; x < 14; x++) {
+				if (x == brk) {
+					continue;
+				}
+
+				int yy = x > brk ? y + 1 : y;
+				if (yy < 16) {
+					image.setRGB(ox + x, oy + yy, argb(1.0, x == brk - 1 || x == brk + 1 ? 0.72 : 0.9 + random.nextDouble() * 0.1));
+				}
+			}
+		}
+	}
+
+	/** A patch of plucked skin: a lumpy blob, ragged at the rim, with feather pits in loose rows. */
+	private static void skinTile(BufferedImage image, int variant, Random random) {
+		int ox = variant * 16;
+		int oy = 11 * 16;
+		double[] lumps = new double[7];
+		for (int i = 0; i < lumps.length; i++) {
+			lumps[i] = 0.82 + random.nextDouble() * 0.3;
+		}
+
+		int shift = random.nextInt(3);
+		for (int y = 0; y < 16; y++) {
+			for (int x = 0; x < 16; x++) {
+				double dx = (x + 0.5 - 8.0) / 8.0;
+				double dy = (y + 0.5 - 8.0) / 8.0;
+				double theta = Math.atan2(dy, dx) / (Math.PI * 2.0) * lumps.length;
+				int li = Math.floorMod((int) Math.floor(theta), lumps.length);
+				double lump = lerp(theta - Math.floor(theta), lumps[li], lumps[(li + 1) % lumps.length]);
+				double r = Math.sqrt(dx * dx + dy * dy) / lump;
+				double noise = random.nextDouble();
+				// Feathers left standing at the edge: the rim breaks up.
+				boolean inside = r < 0.8 || r < 0.98 && noise < 0.4;
+				// Feather tracts: pits in staggered rows, each with a pale raised ring.
+				boolean pit = (x + shift + (y / 3 % 2) * 2) % 4 == 0 && y % 3 == 1;
+				double light = pit ? 0.62 : 0.86 + noise * 0.12;
 				image.setRGB(ox + x, oy + y, inside ? argb(1.0, light) : 0);
 			}
 		}

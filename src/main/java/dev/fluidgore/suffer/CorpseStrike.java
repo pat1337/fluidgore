@@ -28,6 +28,7 @@ import net.minecraft.world.item.component.SwingAnimation;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Hitting a body that is already down or still going through its death throes. The server no longer knows about
@@ -52,6 +53,26 @@ public final class CorpseStrike {
 			return false;
 		}
 
+		Corpse best = aimed(mc, player);
+		if (best == null) {
+			return false;
+		}
+
+		Vec3 eye = player.getEyePosition();
+
+		player.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
+		if (level.getGameTime() - lastStrike >= COOLDOWN) {
+			lastStrike = (int) level.getGameTime();
+			strike(level, blood, best, eye, player.getViewVector(1.0F), Weapon.of(player.getMainHandItem()),
+					(float) player.getAttributeValue(Attributes.ATTACK_DAMAGE));
+		}
+
+		return true;
+	}
+
+	/** The body under the crosshair within reach, nearer than any block, or null. */
+	public static @Nullable Corpse aimed(Minecraft mc, LocalPlayer player) {
+		Collection<Corpse> corpses = GoreSystems.suffering().corpses();
 		Vec3 eye = player.getEyePosition();
 		Vec3 end = eye.add(player.getViewVector(1.0F).scale(REACH));
 		// Blocks in the way hide a body. The dying entity itself may still be what the crosshair is on; that is fine.
@@ -63,6 +84,10 @@ public final class CorpseStrike {
 
 		Corpse best = null;
 		for (Corpse corpse : corpses) {
+			if (GoreSystems.dismemberment().vaporized(corpse.entity.getId())) {
+				continue;
+			}
+
 			Optional<Vec3> clip = box(corpse).clip(eye, end);
 			if (clip.isPresent() && clip.get().distanceToSqr(eye) < limit) {
 				limit = clip.get().distanceToSqr(eye);
@@ -70,18 +95,7 @@ public final class CorpseStrike {
 			}
 		}
 
-		if (best == null) {
-			return false;
-		}
-
-		player.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
-		if (level.getGameTime() - lastStrike >= COOLDOWN) {
-			lastStrike = (int) level.getGameTime();
-			strike(level, blood, best, eye, player.getViewVector(1.0F), Weapon.of(player.getMainHandItem()),
-					(float) player.getAttributeValue(Attributes.ATTACK_DAMAGE));
-		}
-
-		return true;
+		return best;
 	}
 
 	/**
@@ -100,21 +114,30 @@ public final class CorpseStrike {
 				SoundSource.PLAYERS, 0.8F, 0.8F, false);
 		if (wound != null) {
 			HitFeedback.hit(level, blood, entity, wound, weapon, look);
+			if (wound.fracture() != Wounds.INTACT) {
+				HitFeedback.fracture(level, entity, wound);
+				BodyPart broke = wound.hit().bodyPart();
+				if (wound.fracture() == Wounds.SMASHED && broke != null) {
+					GoreSystems.dismemberment().smash(blood, level, entity, broke, () -> new Vec3(body.x, body.y, body.z), body.yaw, body.roll, null);
+				}
+			}
 		} else {
 			BloodEmitter.burst(blood, level, point, rgb, blade ? 0.07F : 0.025F, blade ? 14 : 5);
 			BloodEmitter.slash(level, point, blade ? 0.9F : 0.5F);
 		}
 
 		// The body takes the blow like a struck mob takes knockback: flashes red, skids along the swing and hops, harder
-		// the harder the hit, and rolls if hit off-centre. Each blow keeps it around a little longer.
-		double push = (blade ? 0.25 : 0.32) * (0.8 + Math.min(damage, 10.0F) * 0.05) * body.heft;
-		body.vx += look.x * push;
-		body.vz += look.z * push;
-		body.vy += (body.onGround ? 0.18 : 0.08) * body.heft;
+		// the harder the hit, and rolls if hit off-centre. Each blow keeps it around a little longer. A blade cuts rather
+		// than bats, so a carcass being butchered is worked where it lies, and barely moves once it has stopped moving.
+		float knock = !blade ? 1.0F : corpse.lifeless() ? 0.05F : 0.12F;
+		double push = (blade ? 0.25 : 0.32) * (0.8 + Math.min(damage, 10.0F) * 0.05) * body.heft * knock;
+		body.vx = Mth.clamp(body.vx + look.x * push, -0.8, 0.8);
+		body.vz = Mth.clamp(body.vz + look.z * push, -0.8, 0.8);
+		body.vy = Math.min(0.5, body.vy + (body.onGround ? 0.18 : 0.08) * body.heft * knock);
 		body.onGround = false;
 		float yawRad = body.yaw * Mth.DEG_TO_RAD;
 		double lateral = look.x * Mth.cos(yawRad) + look.z * Mth.sin(yawRad);
-		body.rollV += (float) Math.max(-0.18, Math.min(0.18, lateral * 0.2));
+		body.rollV += (float) Math.max(-0.18, Math.min(0.18, lateral * 0.2)) * knock;
 		corpse.flash = 6;
 		corpse.keepFor(60);
 		GoreSystems.suffering().struck(level, corpse, look);
@@ -130,6 +153,9 @@ public final class CorpseStrike {
 		if (wound != null) {
 			if (struck != null && wound.cut()) {
 				GoreSystems.dismemberment().severPart(blood, level, entity, struck, () -> new Vec3(body.x, body.y, body.z), body.yaw, body.roll, away);
+			} else if (struck == null && wound.cut() && blade && GoreConfig.get().butchery) {
+				// Through the carcass, already cut to the bone: a few chops through the backbone and it splits.
+				GoreSystems.dismemberment().butchery().chopThrough(blood, level, corpse, wound.hit().part(), look);
 			}
 		} else if (blade && RANDOM.nextFloat() < 0.4F * GoreConfig.get().goreLevel.partChance + 0.15F) {
 			// Wounds are off for this body, so the spot is unknown: a random part.

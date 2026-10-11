@@ -84,7 +84,13 @@ Mod Menu 21.0.0 (compile-only, soft dependency).
     in `Dismemberment`; `DamageTracker` grades blasts by vanilla's impact formula with the radius recorded by
     `ClientPacketListenerMixin` (`SHRED_IMPACT`, `TEAR_IMPACT`).
   - `ModelParts` clones and measures model parts.
-  - `PartInteraction` lets you punch, grab, throw, kick and stomp parts.
+  - `PartInteraction` lets you punch, grab, throw, kick and stomp parts; with a blade it calls `Butchery.cut`.
+  - `Butchery` (2.4): plucking dead chickens (`onUse`, `Wounds.pluck` -> `WoundSet.PLUCK` skin patches, row 11 of
+    wounds.png, and a whole-body tint by plucked fraction combined into `Burns.KEY`), splitting a carcass
+    (`Dismemberment.carcass` lifts the trunk off as a `GorePart`, severs what is left, marks the body vaporized) and
+    dicing (`cut` halves a single-cube part across its longest side, new `ModelPart.Cube` with the texture origin read
+    back from the cube's UVs, `Wounds.cutFaces` for the raw face). Torso cuts: `Wounds.Strike.cut` is true for a
+    torso blow through a wound already at its cap. Corpse-only, so local to the player who does it.
   - `BodyPart` maps parts to model-part names.
 - `suffer/`:
   - `Suffering` handles per-animal fear and pain, herd panic, corpses and severed-head moans.
@@ -127,8 +133,8 @@ Mod Menu 21.0.0 (compile-only, soft dependency).
 colour. Tiles 0-9 are smooth (splats 0-3, puddle 4, pool 5, droplet 6, footprint 7, streak 8, small splat 9) and
 10-15 are pixel-art "redstone" (splats 10-13, puddle 14, droplet 15). **The atlas is full.** Adding a tile means
 growing the grid (e.g. 8x4) and updating `BloodTextures.GRID` math and the generator. `wounds.png` is separate: an
-8x11 grid of 16px greyscale tiles, eight variants per row: rows 0-3 round (bruise, gash, meat, bone), 4-8 slash (margin,
-fat, split, muscle, bone; column % 4 = angle), 9 pus, 10 maggots. All PNGs come from
+8x12 grid of 16px greyscale tiles, eight variants per row: rows 0-3 round (bruise, gash, meat, bone), 4-8 slash (margin,
+fat, split, muscle, bone; column % 4 = angle), 9 pus, 10 maggots, 11 plucked skin. All PNGs come from
 `tools/GenerateTextures.java` (deterministic seeds). Never hand-edit the PNG.
 
 ## Looking up APIs
@@ -196,3 +202,8 @@ severable parts; severed heads can't blink.
   `woundHostiles` on by default (`configVersion` 4). Game test: `rot`. Demo: `rot`.
 - **2.3.0**: 1.7.10-style inventory and chest sorter (`inventorySorting`, see `ui/`). Game test: `sorting` (checks the
   server's copy of the chest). No demo: it is not gore and needs no scene.
+- **2.5.0**: butchery (`dismember/Butchery`): plucking, jointing, splitting, dicing. Game test: `butchery`. Demo:
+  `butcher`. Re-indented blocks earlier text-block patches left one tab short (Java text blocks strip common
+  indentation when the closing `"""` shares a line with content: close them on their own line at column 0).
+
+- **2.5.0 horse/bone additions**: horse head includes head_parts, trunk attachments detach separately for splitting; horse death/blood tuning; Wounds bone thresholds and WoundSet fracture masks with render-time pose deformation. Regression: horsesAndFractures. Demo: horse. Includes unreleased butchery.

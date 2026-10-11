@@ -4,12 +4,15 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import dev.fluidgore.mixin.ModelPartAccessor;
 import dev.fluidgore.suffer.BodyPose;
 import dev.fluidgore.suffer.Ragdoll;
+import dev.fluidgore.wound.WoundSet;
+import dev.fluidgore.wound.Wounds;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.WeakHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -36,6 +39,7 @@ public final class ModelParts {
 	private static final Int2ObjectOpenHashMap<EntityModel<?>> DRAWN = new Int2ObjectOpenHashMap<>();
 	/** Arm (or front leg) and leg slots in the order ragdoll joints use them. */
 	public static final BodyPart[] LIMBS = {BodyPart.RIGHT_ARM, BodyPart.LEFT_ARM, BodyPart.RIGHT_LEG, BodyPart.LEFT_LEG};
+	private static final Map<Model<?>, Optional<ModelPart>> TORSO = new WeakHashMap<>();
 
 	private ModelParts() {
 	}
@@ -56,6 +60,11 @@ public final class ModelParts {
 
 			return parts;
 		});
+	}
+
+	/** The trunk of a model (its "body" part), or null if it has none. */
+	public static @Nullable ModelPart torso(Model<?> model) {
+		return TORSO.computeIfAbsent(model, m -> Optional.ofNullable(m.root().createPartLookup().apply("body"))).orElse(null);
 	}
 
 	/**
@@ -85,6 +94,38 @@ public final class ModelParts {
 				match(child, twin, map);
 			}
 		});
+	}
+
+	/**
+	 * Broken bones show in the pose: a snapped leg hangs crooked, bent where it should not bend, and swings that way
+	 * as it walks; a broken skull lolls; stove-in ribs leave the chest narrower, and smashed ones caved right in.
+	 */
+	public static void applyFractures(Model<?> model, ModelPart[] parts, WoundSet wounds, @Nullable Consumer<ModelPart> save) {
+		BodyPart[] limbs = ModelParts.LIMBS;
+		for (int i = 0; i < limbs.length; i++) {
+			ModelPart limb = parts[limbs[i].ordinal()];
+			if (limb != null && wounds.broken(limbs[i])) {
+				if (save != null) save.accept(limb);
+				float side = i % 2 == 0 ? 1.0F : -1.0F;
+				limb.xRot += 0.55F * side;
+				limb.zRot += 0.45F * side;
+			}
+		}
+
+		ModelPart head = parts[BodyPart.HEAD.ordinal()];
+		if (head != null && wounds.broken(BodyPart.HEAD)) {
+			if (save != null) save.accept(head);
+			head.xRot += 0.3F;
+			head.zRot += 0.4F;
+		}
+
+		ModelPart torso = ModelParts.torso(model);
+		if (torso != null && wounds.ribsBroken()) {
+			if (save != null) save.accept(torso);
+			boolean smashed = wounds.ribsSmashed();
+			torso.xScale *= smashed ? 0.82F : 0.9F;
+			torso.yScale *= smashed ? 0.93F : 1.0F;
+		}
 	}
 
 	private static ModelPart copyTree(ModelPart source) {
@@ -134,6 +175,11 @@ public final class ModelParts {
 		BodyPose body = state.getData(BodyPose.KEY);
 		if (body != null) {
 			applyJoints(index(model), body.joints(), null);
+		}
+
+		WoundSet wounds = state.getData(Wounds.KEY);
+		if (wounds != null && wounds.brokenMask() != 0 && wounds.drawsOn(model)) {
+			applyFractures(model, index(model), wounds, null);
 		}
 
 		return new Posed(model, state, livingRenderer);

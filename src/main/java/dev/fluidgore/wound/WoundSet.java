@@ -21,6 +21,14 @@ public final class WoundSet {
 	public static final int LAYERS = 4;
 	public static final byte ROUND = 0;
 	public static final byte SLASH = 1;
+	/** Not a wound: a patch of skin where the feathers have been plucked out. */
+	public static final byte PLUCK = 2;
+	/** A broken bone under the skin: the skull or a limb caved in, shards of bone in it. */
+	public static final byte CRUSH = 3;
+	/** The ribcage stove in: broken rib ends in a dark hollow. */
+	public static final byte RIBS = 4;
+	/** Where the trunk's bone damage is kept, after the severable parts. */
+	public static final int TORSO = BodyPart.values().length;
 	/** Widest a wound can be hacked open, in model pixels. */
 	private static final float MAX_RADIUS = 4.5F;
 
@@ -41,7 +49,7 @@ public final class WoundSet {
 	final byte[] sign = new byte[MAX];
 	/** Texture column 0-7. For a slash, {@code variant % 4} is its angle on the face in steps of 45 degrees. */
 	final byte[] variant = new byte[MAX];
-	/** {@link #ROUND} or {@link #SLASH}. */
+	/** {@link #ROUND}, {@link #SLASH}, {@link #PLUCK}, {@link #CRUSH} or {@link #RIBS}. */
 	final byte[] morph = new byte[MAX];
 	/** Position on the face along the two in-plane axes (axis + 1, axis + 2), in model pixels. */
 	final float[] u = new float[MAX];
@@ -59,6 +67,14 @@ public final class WoundSet {
 	 * bleeds from the mouth and nose instead of from wounds.
 	 */
 	float trauma;
+	/**
+	 * Damage done to the bone of each severable part and of the trunk ({@link #TORSO}), added up blow by blow: past
+	 * {@link Wounds#FRACTURE} it breaks, past {@link Wounds#DESTROY} it is smashed.
+	 */
+	final float[] bone = new float[TORSO + 1];
+	/** Bits (1 << part index, {@link #TORSO} for the trunk) of bones that are broken, and of those smashed beyond that. */
+	int broken;
+	int smashed;
 
 	WoundSet(Model<?> model, Flesh flesh, int blood) {
 		this.model = model;
@@ -124,6 +140,84 @@ public final class WoundSet {
 		oz[i] = (float) offset.z;
 		yaw[i] = bodyYaw;
 		return new Change(i, 0.0F, severity[i]);
+	}
+
+	/**
+	 * Feathers plucked out at {@code hit}: a patch of bare skin there, or a wider one if there is already a patch close
+	 * by. Patches are never deepened by blows (see {@link #find}). Returns true if a new patch was made.
+	 */
+	boolean pluck(ModelHit.Result hit, float size, RandomSource random) {
+		int b = (hit.axis() + 1) % 3;
+		int c = (hit.axis() + 2) % 3;
+		float hu = hit.local().get(b);
+		float hv = hit.local().get(c);
+		for (int i = 0; i < count; i++) {
+			if (morph[i] == PLUCK && part[i] == hit.part() && cube[i] == hit.cube() && axis[i] == hit.axis() && sign[i] == hit.sign()) {
+				float du = u[i] - hu;
+				float dv = v[i] - hv;
+				if (du * du + dv * dv < radius[i] * radius[i] * 0.5F) {
+					radius[i] = Math.min(MAX_RADIUS * 1.6F, radius[i] + size * 0.3F);
+					return false;
+				}
+			}
+		}
+
+		int i = count < MAX ? count++ : shallowest();
+		part[i] = hit.part();
+		cube[i] = hit.cube();
+		bodyPart[i] = hit.bodyPart();
+		axis[i] = (byte) hit.axis();
+		sign[i] = (byte) hit.sign();
+		morph[i] = PLUCK;
+		variant[i] = (byte) random.nextInt(8);
+		u[i] = hu;
+		v[i] = hv;
+		radius[i] = size * (0.85F + random.nextFloat() * 0.3F);
+		severity[i] = 0.0F;
+		ox[i] = oy[i] = oz[i] = Float.NaN;
+		return true;
+	}
+
+	/** A broken bone shows through at {@code hit}: crushed bone, or stove-in ribs on the trunk. */
+	void fracture(ModelHit.Result hit, float size, Vec3 offset, float bodyYaw, RandomSource random) {
+		int i = count < MAX ? count++ : shallowest();
+		int b = (hit.axis() + 1) % 3;
+		int c = (hit.axis() + 2) % 3;
+		part[i] = hit.part();
+		cube[i] = hit.cube();
+		bodyPart[i] = hit.bodyPart();
+		axis[i] = (byte) hit.axis();
+		sign[i] = (byte) hit.sign();
+		morph[i] = hit.bodyPart() == null ? RIBS : CRUSH;
+		variant[i] = (byte) random.nextInt(8);
+		u[i] = hit.local().get(b);
+		v[i] = hit.local().get(c);
+		radius[i] = Math.min(MAX_RADIUS, size);
+		severity[i] = 1.0F;
+		ox[i] = (float) offset.x;
+		oy[i] = (float) offset.y;
+		oz[i] = (float) offset.z;
+		yaw[i] = bodyYaw;
+	}
+
+	/** True if the bone of {@code part} is broken (or smashed). */
+	public boolean broken(BodyPart part) {
+		return (broken & 1 << part.ordinal()) != 0;
+	}
+
+	/** True if the ribs are stove in. */
+	public boolean ribsBroken() {
+		return (broken & 1 << TORSO) != 0;
+	}
+
+	/** True if the ribs are smashed in beyond being broken. */
+	public boolean ribsSmashed() {
+		return (smashed & 1 << TORSO) != 0;
+	}
+
+	/** Bits of broken bones, see {@link #broken}. */
+	public int brokenMask() {
+		return broken;
 	}
 
 	/** A stump: bone in raw meat where a part was cut off. */
@@ -242,27 +336,27 @@ public final class WoundSet {
 		count = kept;
 	}
 
-/**
- * Which way a slash runs on a face whose normal is model axis {@code axis}. A swing is mostly level, so on the side
- * of a standing body the cut runs across it, often a little diagonal, now and then straight down. Texture u runs
- * along model axis {@code axis + 1} and v along {@code axis + 2}; angle 0 is along u, 2 (90 degrees) along v.
- */
-private static int slashVariant(int axis, RandomSource random) {
-	int level = switch (axis) {
-		case 0 -> 2; // face along X: u is Y (up), v is Z, level means along v
-		case 2 -> 0; // face along Z: u is X, v is Y (up), level means along u
-		default -> random.nextInt(4); // a top or bottom face: any way
-	};
-	float roll = random.nextFloat();
-	int angle = axis == 1 || roll < 0.45F ? level : roll < 0.9F ? (level + (random.nextBoolean() ? 1 : 3)) % 4 : (level + 2) % 4;
-	return angle + 4 * random.nextInt(2);
-}
+	/**
+	 * Which way a slash runs on a face whose normal is model axis {@code axis}. A swing is mostly level, so on the side
+	 * of a standing body the cut runs across it, often a little diagonal, now and then straight down. Texture u runs
+	 * along model axis {@code axis + 1} and v along {@code axis + 2}; angle 0 is along u, 2 (90 degrees) along v.
+	 */
+	private static int slashVariant(int axis, RandomSource random) {
+		int level = switch (axis) {
+			case 0 -> 2; // face along X: u is Y (up), v is Z, level means along v
+			case 2 -> 0; // face along Z: u is X, v is Y (up), level means along u
+			default -> random.nextInt(4); // a top or bottom face: any way
+		};
+		float roll = random.nextFloat();
+		int angle = axis == 1 || roll < 0.45F ? level : roll < 0.9F ? (level + (random.nextBoolean() ? 1 : 3)) % 4 : (level + 2) % 4;
+		return angle + 4 * random.nextInt(2);
+	}
 
-private int find(ModelHit.Result hit, float hu, float hv, Weapon weapon) {
+	private int find(ModelHit.Result hit, float hu, float hv, Weapon weapon) {
 		int best = -1;
 		float bestDist = Float.MAX_VALUE;
 		for (int i = 0; i < count; i++) {
-			if (part[i] != hit.part() || cube[i] != hit.cube() || axis[i] != hit.axis() || sign[i] != hit.sign()) {
+			if (morph[i] == PLUCK || part[i] != hit.part() || cube[i] != hit.cube() || axis[i] != hit.axis() || sign[i] != hit.sign()) {
 				continue;
 			}
 

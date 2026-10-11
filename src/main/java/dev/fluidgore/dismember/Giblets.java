@@ -231,23 +231,23 @@ public final class Giblets {
 		return i;
 	}
 
-/** Chars pieces {@code from} up to the newest by {@code amount} (0..1): the scraps of a body that burnt. */
-public void searFrom(int from, float amount) {
-	for (int i = Math.max(0, from); i < count; i++) {
-		color[i] = sear(color[i], amount);
+	/** Chars pieces {@code from} up to the newest by {@code amount} (0..1): the scraps of a body that burnt. */
+	public void searFrom(int from, float amount) {
+		for (int i = Math.max(0, from); i < count; i++) {
+			color[i] = sear(color[i], amount);
+		}
 	}
-}
 
-/** Darkens a colour towards charred brown-black by {@code amount} (0..1). */
-private static int sear(int rgb, float amount) {
-	float k = 0.8F * amount;
-	int r = Math.round((rgb >> 16 & 0xFF) * (1.0F - k) + 0x24 * k);
-	int g = Math.round((rgb >> 8 & 0xFF) * (1.0F - k) + 0x18 * k);
-	int b = Math.round((rgb & 0xFF) * (1.0F - k) + 0x12 * k);
-	return r << 16 | g << 8 | b;
-}
+	/** Darkens a colour towards charred brown-black by {@code amount} (0..1). */
+	private static int sear(int rgb, float amount) {
+		float k = 0.8F * amount;
+		int r = Math.round((rgb >> 16 & 0xFF) * (1.0F - k) + 0x24 * k);
+		int g = Math.round((rgb >> 8 & 0xFF) * (1.0F - k) + 0x18 * k);
+		int b = Math.round((rgb & 0xFF) * (1.0F - k) + 0x12 * k);
+		return r << 16 | g << 8 | b;
+	}
 
-private static int tint(Tissue t, Flesh flesh) {
+	private static int tint(Tissue t, Flesh flesh) {
 		int base = t == Tissue.ORGAN && RANDOM.nextBoolean() ? 0xD48A8E : t.rgb;
 		if (flesh == Flesh.DRIED && t == Tissue.MUSCLE) {
 			base = 0x6B5A3C;
@@ -392,66 +392,66 @@ private static int tint(Tissue t, Flesh flesh) {
 		}
 	}
 
-/**
- * Piece {@code i} slapped into a wall moving along {@code axis}. A wet piece leaves a smear on the wall, and one
- * that hit hard enough sticks there for a while before it peels off. Returns true if it stuck.
- */
-private boolean hitWall(ClientLevel level, BloodWorld world, int i, Direction.Axis axis) {
-	Tissue t = tissue[i];
-	double along = axis == Direction.Axis.X ? vx[i] : vz[i];
-	double speed = Math.abs(along);
-	if (t.wet <= 0.0F || speed < 0.12) {
-		return false;
+	/**
+	 * Piece {@code i} slapped into a wall moving along {@code axis}. A wet piece leaves a smear on the wall, and one
+	 * that hit hard enough sticks there for a while before it peels off. Returns true if it stuck.
+	 */
+	private boolean hitWall(ClientLevel level, BloodWorld world, int i, Direction.Axis axis) {
+		Tissue t = tissue[i];
+		double along = axis == Direction.Axis.X ? vx[i] : vz[i];
+		double speed = Math.abs(along);
+		if (t.wet <= 0.0F || speed < 0.12) {
+			return false;
+		}
+
+		BlockPos block = axis == Direction.Axis.X ? BlockPos.containing(x[i] + vx[i], y[i], z[i]) : BlockPos.containing(x[i], y[i], z[i] + vz[i]);
+		// The face that was hit looks back at the piece.
+		Direction face = axis == Direction.Axis.X ? (along > 0.0 ? Direction.WEST : Direction.EAST) : (along > 0.0 ? Direction.NORTH : Direction.SOUTH);
+		if (GoreConfig.get().wallSplatter) {
+			double a = axis == Direction.Axis.X ? z[i] : x[i];
+			float half = Math.min(0.4F, 0.06F + hx[i] * 3.0F + (float) speed * 0.2F);
+			world.decals().addWall(level, block, face, a, y[i], half, BloodTextures.splat(RANDOM), RANDOM.nextInt(8),
+					world.vary(blood[i], 0.15F), world.decalLifetime());
+		}
+
+		if (speed < 0.3 || RANDOM.nextFloat() > 0.5F) {
+			return false;
+		}
+
+		// Flattened against the wall, right on its surface.
+		double plane = axis == Direction.Axis.X ? (along > 0.0 ? block.getX() : block.getX() + 1.0) : (along > 0.0 ? block.getZ() : block.getZ() + 1.0);
+		double offset = (along > 0.0 ? -1.0 : 1.0) * hy[i];
+		if (axis == Direction.Axis.X) {
+			x[i] = plane + offset;
+			ry[i] = Mth.HALF_PI;
+		} else {
+			z[i] = plane + offset;
+			ry[i] = 0.0F;
+		}
+
+		rx[i] = Mth.HALF_PI;
+		prx[i] = rx[i];
+		pry[i] = ry[i];
+		vx[i] = vy[i] = vz[i] = 0.0;
+		resting[i] = true;
+		stuck[i] = 30 + RANDOM.nextInt(400);
+		thud(level, i, t, speed);
+		return true;
 	}
 
-	BlockPos block = axis == Direction.Axis.X ? BlockPos.containing(x[i] + vx[i], y[i], z[i]) : BlockPos.containing(x[i], y[i], z[i] + vz[i]);
-	// The face that was hit looks back at the piece.
-	Direction face = axis == Direction.Axis.X ? (along > 0.0 ? Direction.WEST : Direction.EAST) : (along > 0.0 ? Direction.NORTH : Direction.SOUTH);
-	if (GoreConfig.get().wallSplatter) {
-		double a = axis == Direction.Axis.X ? z[i] : x[i];
-		float half = Math.min(0.4F, 0.06F + hx[i] * 3.0F + (float) speed * 0.2F);
-		world.decals().addWall(level, block, face, a, y[i], half, BloodTextures.splat(RANDOM), RANDOM.nextInt(8),
-				world.vary(blood[i], 0.15F), world.decalLifetime());
+	/** A piece of meat or bone slapping down, while this tick's budget of landing sounds lasts. */
+	private void thud(ClientLevel level, int i, Tissue t, double impact) {
+		if (sounds <= 0 || !GoreConfig.get().goreSounds || RANDOM.nextInt(4) != 0) {
+			return;
+		}
+
+		sounds--;
+		SoundEvent sound = t == Tissue.BONE ? SoundEvents.BONE_BLOCK_FALL : RANDOM.nextBoolean() ? SoundEvents.SLIME_SQUISH_SMALL : SoundEvents.HONEY_BLOCK_FALL;
+		float volume = (float) Mth.clamp(impact * 1.5, 0.15, 0.7);
+		level.playLocalSound(x[i], y[i], z[i], sound, SoundSource.NEUTRAL, volume, 0.8F + RANDOM.nextFloat() * 0.5F, false);
 	}
 
-	if (speed < 0.3 || RANDOM.nextFloat() > 0.5F) {
-		return false;
-	}
-
-	// Flattened against the wall, right on its surface.
-	double plane = axis == Direction.Axis.X ? (along > 0.0 ? block.getX() : block.getX() + 1.0) : (along > 0.0 ? block.getZ() : block.getZ() + 1.0);
-	double offset = (along > 0.0 ? -1.0 : 1.0) * hy[i];
-	if (axis == Direction.Axis.X) {
-		x[i] = plane + offset;
-		ry[i] = Mth.HALF_PI;
-	} else {
-		z[i] = plane + offset;
-		ry[i] = 0.0F;
-	}
-
-	rx[i] = Mth.HALF_PI;
-	prx[i] = rx[i];
-	pry[i] = ry[i];
-	vx[i] = vy[i] = vz[i] = 0.0;
-	resting[i] = true;
-	stuck[i] = 30 + RANDOM.nextInt(400);
-	thud(level, i, t, speed);
-	return true;
-}
-
-/** A piece of meat or bone slapping down, while this tick's budget of landing sounds lasts. */
-private void thud(ClientLevel level, int i, Tissue t, double impact) {
-	if (sounds <= 0 || !GoreConfig.get().goreSounds || RANDOM.nextInt(4) != 0) {
-		return;
-	}
-
-	sounds--;
-	SoundEvent sound = t == Tissue.BONE ? SoundEvents.BONE_BLOCK_FALL : RANDOM.nextBoolean() ? SoundEvents.SLIME_SQUISH_SMALL : SoundEvents.HONEY_BLOCK_FALL;
-	float volume = (float) Mth.clamp(impact * 1.5, 0.15, 0.7);
-	level.playLocalSound(x[i], y[i], z[i], sound, SoundSource.NEUTRAL, volume, 0.8F + RANDOM.nextFloat() * 0.5F, false);
-}
-
-/** A resting piece still lies on a floor, or a stuck one still has its wall. */
+	/** A resting piece still lies on a floor, or a stuck one still has its wall. */
 	private boolean supported(ClientLevel level, int i) {
 		if (stuck[i] == 0) {
 			return solid(level, x[i], y[i] - hy[i] - 0.02, z[i]);
@@ -462,7 +462,7 @@ private void thud(ClientLevel level, int i, Tissue t, double impact) {
 				|| solid(level, x[i], y[i], z[i] - reach);
 	}
 
-/** True if the point is inside a block's collision box (shape bounds: exact for full blocks and slabs). */
+	/** True if the point is inside a block's collision box (shape bounds: exact for full blocks and slabs). */
 	private static boolean solid(ClientLevel level, double wx, double wy, double wz) {
 		BlockPos pos = BlockPos.containing(wx, wy, wz);
 		BlockState state = level.getBlockState(pos);

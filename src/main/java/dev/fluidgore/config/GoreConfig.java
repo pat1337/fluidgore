@@ -55,7 +55,7 @@ public final class GoreConfig {
 	/** Seconds a detached body part stays before fading. Scaled by the gore level. */
 	public int partLifetimeSeconds = 60;
 	/** Cap on detached parts in the world. */
-	public int maxDetachedParts = 32;
+	public int maxDetachedParts = 64;
 	/**
 	 * A blast that kills from close by tears the body into pieces of muscle, fat, bone, hide, gut and organs instead
 	 * of leaving it to die. Medium gore level and up; never players.
@@ -122,6 +122,10 @@ public final class GoreConfig {
 	public boolean rottenUndead = true;
 	/** Sort buttons on chests and the inventory, and middle-click to sort (plain inventory clicks, works on any server). */
 	public boolean inventorySorting = true;
+	/** Plucking dead birds, splitting carcasses and dicing the pieces with a blade. */
+	public boolean butchery = true;
+	/** Blunt blows add up on the bone they land on until it breaks: skulls cave in, ribs stove in, limbs snap and come off. */
+	public boolean fractures = true;
 	/** Wounds on other players. Everyone with the mod sees the same wounds (see trigger/Fate). */
 	public boolean woundPlayers = true;
 	/** Severed parts can be punched, kicked, picked up, thrown and stomped. */

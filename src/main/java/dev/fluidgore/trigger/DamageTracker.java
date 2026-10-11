@@ -225,6 +225,15 @@ public final class DamageTracker {
 				}
 			}
 
+			if (wound != null && wound.fracture() != Wounds.INTACT) {
+				HitFeedback.fracture(level, victim, wound);
+				BodyPart broke = wound.hit().bodyPart();
+				// Smashed: the head caves in, the limb is torn off. Players keep their parts until they die.
+				if (wound.fracture() == Wounds.SMASHED && broke != null && (lethal || !(victim instanceof Player))) {
+					dismemberment.smash(blood, level, victim, broke, victim::position, Float.NaN, 0.0F, away);
+				}
+			}
+
 			if (wound != null && wound.aimed()) {
 				// The player aimed this blow: only the part that was struck can come off.
 				BodyPart struck = wound.hit().bodyPart();

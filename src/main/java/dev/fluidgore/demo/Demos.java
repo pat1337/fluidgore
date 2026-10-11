@@ -2,6 +2,7 @@ package dev.fluidgore.demo;
 
 import dev.fluidgore.GoreSystems;
 import dev.fluidgore.dismember.BodyPart;
+import dev.fluidgore.dismember.GorePart;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.suffer.Corpse;
 import dev.fluidgore.suffer.CorpseStrike;
@@ -22,6 +23,8 @@ import org.jspecify.annotations.Nullable;
  */
 public final class Demos {
 	public static final List<Demo> ALL = List.of(
+			new Demo("horse", "2.5.0", "Horse death, broken bones and a split carcass", false, Demos::horse),
+			new Demo("butcher", "2.5.0", "A chicken plucked bare, jointed, its carcass split and diced", false, Demos::butcher),
 			new Demo("rot", "2.2.0", "A zombie hacked open: slashes along the swing into rotting flesh, pus and maggots", false, Demos::rot),
 			new Demo("deaths", "2.1.0", "Eight cows, eight causes of death: each drops at once, then rigid, paddling, gasps, still", false, Demos::deaths),
 			new Demo("burnt", "1.8.0", "A chicken and a pig burnt alive: they char black, smoke and leave scorch marks", false, Demos::burnt),
@@ -55,6 +58,30 @@ public final class Demos {
 	 * A row of cows, each killed with one blow and made to die of a different cause. Every one drops at once; what
 	 * follows on the ground is what the cause brings. Then one that bursts at the end.
 	 */
+	private static void horse(Script s, Stage st) {
+		s.summon(st, "horse", "fgd_horse", 0, 0, 4, 90.0F, "");
+		s.pause(20).hold("minecraft:air").say("Horse: a heavy fall and longer paddling");
+		s.client(mc -> GoreSystems.suffering().forceNextDeath(Corpse.Kind.BEATEN, false));
+		s.hit("fgd_horse", 100).pause(35);
+		s.say("Blunt blows break the skull and legs; a cleaver splits the trunk");
+		for (int i = 0; i < 8; i++) {
+			s.client(mc -> {
+				for (Corpse c : GoreSystems.suffering().corpses()) {
+					if (c.entity.getType() != EntityTypes.HORSE) continue;
+					Vec3 target = ModelHit.centre(c.entity, ModelParts.pose(c.entity), BodyPart.HEAD);
+					if (target == null) continue;
+					Vec3 eye = target.add(0, 1.5, 0);
+					CorpseStrike.strike(mc.level, GoreSystems.blood(), c, eye, target.subtract(eye).normalize(), Weapon.BLUNT, 4);
+				}
+			}).pause(6);
+		}
+		s.hold("minecraft:iron_axe").client(mc -> {
+			for (Corpse c : GoreSystems.suffering().corpses()) {
+				if (c.entity.getType() == EntityTypes.HORSE) GoreSystems.dismemberment().butchery().split(GoreSystems.blood(), mc.level, c,
+						ModelParts.torso(ModelParts.pose(c.entity).model()), new Vec3(0, -1, 0));
+			}
+		}).pause(100);
+	}
 	private static void deaths(Script s, Stage st) {
 		Corpse.Kind[] kinds = Corpse.Kind.values();
 		String[] names = {
@@ -89,37 +116,137 @@ public final class Demos {
 		s.hit("fgd_cow" + kinds.length, 100.0F).say("And the rare one (one in twenty): when it finally goes, it bursts").pause(300);
 	}
 
-/**
- * A zombie (in a helmet, so the daylight leaves it be) slashed with a sword and chopped with an axe: long cuts along
- * the swing, through marbled skin and waxy fat into grey-green muscle, pus and maggots. A cow beside it for
- * comparison: the same sword, fresh red meat.
- */
-private static void rot(Script s, Stage st) {
-	s.summon(st, "zombie", "fgd_zombie", -1.2, 0, 3, 180.0F, "equipment:{head:{id:\"minecraft:leather_helmet\"}}");
-	s.summon(st, "cow", "fgd_cow", 1.6, 0, 3.5, 90.0F, "");
-	s.pause(20).hold("minecraft:iron_sword").say("A sword on a zombie: long cuts along the swing, into rotting flesh");
-	for (int i = 0; i < 4; i++) {
-		s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.ZOMBIE, -1.2, 0, 3), null));
-		s.hit("fgd_zombie", 3.0F).pause(16);
+	/** A chicken processed like on a farm: killed, plucked bare, jointed with a cleaver, the carcass split and diced. */
+	private static void butcher(Script s, Stage st) {
+		s.summon(st, "chicken", "fgd_chicken", 0, 0, 2.5, 90.0F, "");
+		s.pause(20).hold("minecraft:air").say("A chicken, killed with one blow");
+		s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.CHICKEN, 0, 0, 2.5), null));
+		s.hit("fgd_chicken", 100.0F).pause(40);
+		s.say("Plucked: right-click it with an empty hand, a handful at a time");
+		for (int i = 0; i < 14; i++) {
+			int n = i;
+			s.client(mc -> {
+				Corpse corpse = nearest(mc);
+				if (corpse != null) {
+					Vec3 centre = CorpseStrike.centre(corpse);
+					Vec3 eye = centre.add(Math.cos(n * 0.8) * 0.9, 0.8, Math.sin(n * 0.8) * 0.9);
+					GoreSystems.dismemberment().butchery().pluck(mc.level, corpse, eye, centre.subtract(eye).normalize());
+				}
+			}).pause(6);
+		}
+
+		s.say("Bare, goose-pimpled skin, the feather pits showing").pause(40);
+		s.hold("minecraft:iron_axe").say("Jointed: head, wings and legs off at the joints");
+		for (BodyPart part : BodyPart.values()) {
+			for (int i = 0; i < 3; i++) {
+				s.client(mc -> chopAt(mc, part)).pause(8);
+			}
+		}
+
+		s.say("The carcass split down the middle");
+		for (int i = 0; i < 4; i++) {
+			s.client(Demos::chopCarcass).pause(10);
+		}
+
+		s.say("And diced: a blade on any piece cuts it in two");
+		for (int i = 0; i < 8; i++) {
+			s.client(Demos::dice).pause(10);
+		}
+
+		s.pause(200);
 	}
 
-	s.say("Marbled skin, grey waxy fat, black ooze, putrid muscle, pus, maggots").pause(60);
-	s.hold("minecraft:iron_axe").say("An axe chops wider and deeper, down to stained bone");
-	for (int i = 0; i < 2; i++) {
-		s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.ZOMBIE, -1.2, 0, 3), null));
-		s.hit("fgd_zombie", 3.0F).pause(18);
+	/** The body nearest the player, or null. */
+	private static @Nullable Corpse nearest(Minecraft mc) {
+		Corpse nearest = null;
+		double bestSq = 12.0 * 12.0;
+		for (Corpse corpse : GoreSystems.suffering().corpses()) {
+			double d = corpse.position().distanceToSqr(mc.player.position());
+			if (d < bestSq && !GoreSystems.dismemberment().vaporized(corpse.entity.getId())) {
+				nearest = corpse;
+				bestSq = d;
+			}
+		}
+
+		return nearest;
 	}
 
-	s.hold("minecraft:iron_sword").say("The same sword on a cow: fresh red meat and yellow fat");
-	for (int i = 0; i < 3; i++) {
-		s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.COW, 1.6, 0, 3.5), null));
-		s.hit("fgd_cow", 2.0F).pause(16);
+	/** A cleaver blow on one part of the nearest body, from outside it. */
+	private static void chopAt(Minecraft mc, BodyPart part) {
+		Corpse corpse = nearest(mc);
+		if (corpse == null || (GoreSystems.dismemberment().missingMask(corpse.entity.getId()) & part.bit()) != 0) {
+			return;
+		}
+
+		ModelParts.Posed posed = ModelParts.pose(corpse.entity);
+		Vec3 target = posed == null ? null : ModelHit.centre(corpse.entity, posed, part);
+		if (target != null) {
+			Vec3 eye = target.add(target.subtract(CorpseStrike.centre(corpse)).add(0.0, 0.3, 0.0).normalize().scale(1.5));
+			lookAt(mc, target);
+			CorpseStrike.strike(mc.level, GoreSystems.blood(), corpse, eye, target.subtract(eye).normalize(), Weapon.CHOP, 9.0F);
+		}
 	}
 
-	s.pause(200);
-}
+	/** A cleaver blow down through the middle of the nearest body. */
+	private static void chopCarcass(Minecraft mc) {
+		Corpse corpse = nearest(mc);
+		if (corpse != null) {
+			var posed = ModelParts.pose(corpse.entity);
+			Vec3 centre = ModelHit.centre(corpse.entity, posed, ModelParts.torso(posed.model()));
+			if (centre == null) return;
+			Vec3 eye = centre.add(0.0, 1.2, 0.0);
+			lookAt(mc, centre);
+			CorpseStrike.strike(mc.level, GoreSystems.blood(), corpse, eye, centre.subtract(eye).normalize(), Weapon.CHOP, 9.0F);
+		}
+	}
 
-/** Set alight where they stand: they char as they burn, writhe, and lie charred and smoking. */
+	/** Cuts the biggest loose piece near the player in two. */
+	private static void dice(Minecraft mc) {
+		GorePart biggest = null;
+		for (GorePart part : GoreSystems.dismemberment().parts().parts()) {
+			if (!part.shattered && part.wounds != null && mc.player.distanceToSqr(part.x, part.y, part.z) < 100.0
+					&& (biggest == null || part.halfExtents.lengthSquared() > biggest.halfExtents.lengthSquared())) {
+				biggest = part;
+			}
+		}
+
+		if (biggest != null) {
+			lookAt(mc, new Vec3(biggest.x, biggest.y, biggest.z));
+			GoreSystems.dismemberment().butchery().cut(GoreSystems.blood(), mc.level, biggest, mc.player.getViewVector(1.0F));
+		}
+	}
+
+	/**
+	 * A zombie (in a helmet, so the daylight leaves it be) slashed with a sword and chopped with an axe: long cuts along
+	 * the swing, through marbled skin and waxy fat into grey-green muscle, pus and maggots. A cow beside it for
+	 * comparison: the same sword, fresh red meat.
+	 */
+	private static void rot(Script s, Stage st) {
+		s.summon(st, "zombie", "fgd_zombie", -1.2, 0, 3, 180.0F, "equipment:{head:{id:\"minecraft:leather_helmet\"}}");
+		s.summon(st, "cow", "fgd_cow", 1.6, 0, 3.5, 90.0F, "");
+		s.pause(20).hold("minecraft:iron_sword").say("A sword on a zombie: long cuts along the swing, into rotting flesh");
+		for (int i = 0; i < 4; i++) {
+			s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.ZOMBIE, -1.2, 0, 3), null));
+			s.hit("fgd_zombie", 3.0F).pause(16);
+		}
+
+		s.say("Marbled skin, grey waxy fat, black ooze, putrid muscle, pus, maggots").pause(60);
+		s.hold("minecraft:iron_axe").say("An axe chops wider and deeper, down to stained bone");
+		for (int i = 0; i < 2; i++) {
+			s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.ZOMBIE, -1.2, 0, 3), null));
+			s.hit("fgd_zombie", 3.0F).pause(18);
+		}
+
+		s.hold("minecraft:iron_sword").say("The same sword on a cow: fresh red meat and yellow fat");
+		for (int i = 0; i < 3; i++) {
+			s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.COW, 1.6, 0, 3.5), null));
+			s.hit("fgd_cow", 2.0F).pause(16);
+		}
+
+		s.pause(200);
+	}
+
+	/** Set alight where they stand: they char as they burn, writhe, and lie charred and smoking. */
 	private static void burnt(Script s, Stage st) {
 		s.summon(st, "chicken", "fgd_chicken", -1, 0, 3, 90.0F, "");
 		s.summon(st, "pig", "fgd_pig", 1.5, 0, 3.5, 90.0F, "");

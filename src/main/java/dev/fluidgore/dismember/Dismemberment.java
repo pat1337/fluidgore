@@ -1,7 +1,10 @@
 package dev.fluidgore.dismember;
 
+import java.util.HashMap;
+import dev.fluidgore.mixin.ModelPartAccessor;
 import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.blood.BloodWorld;
+import dev.fluidgore.blood.BoneEmitter;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.config.GoreLevel;
 import dev.fluidgore.suffer.Voice;
@@ -49,6 +52,7 @@ public final class Dismemberment {
 	private final Wounds wounds = new Wounds();
 	private final Giblets giblets = new Giblets();
 	private final Burns burns = new Burns();
+	private final Butchery butchery = new Butchery();
 	/** Bodies torn to pieces by a blast: not drawn at all any more. */
 	private final IntOpenHashSet vaporized = new IntOpenHashSet();
 	private int tick;
@@ -59,6 +63,10 @@ public final class Dismemberment {
 
 	public Wounds wounds() {
 		return wounds;
+	}
+
+	public Butchery butchery() {
+		return butchery;
 	}
 
 	public Burns burns() {
@@ -160,6 +168,108 @@ public final class Dismemberment {
 		if (config.goreSounds) {
 			BloodEmitter.burstSound(level, centre, 0.6F);
 		}
+	}
+
+	/**
+	 * Lifts the carcass of {@code entity} off as a loose piece: the trunk ({@code torso}, its body part) with whatever
+	 * limbs and head were still on it coming off first, a spill of innards, and the body itself gone. Returns the piece
+	 * (not yet added), or null if the model cannot be posed.
+	 */
+	public @Nullable GorePart carcass(BloodWorld blood, ClientLevel level, LivingEntity entity, ModelPart torso, Supplier<Vec3> origin, float yaw,
+			float roll) {
+		ModelParts.Posed posed = ModelParts.pose(entity);
+		if (posed == null) {
+			return null;
+		}
+
+		for (BodyPart bodyPart : remaining(entity)) {
+			Vec3 away = new Vec3(RANDOM.nextGaussian(), 0.0, RANDOM.nextGaussian());
+			sever(blood, level, entity, bodyPart, away.lengthSqr() > 1.0E-6 ? away.normalize() : null, origin, yaw, roll, 0.5);
+		}
+
+		// The trunk alone, so it can be cut; whatever hangs off it (a horse's tail) drops off on its own.
+		ModelPart trunk = new ModelPart(new ArrayList<>(((ModelPartAccessor) (Object) torso).fluidgore$getCubes()), new HashMap<>());
+		GorePart part = loose(level, entity, posed, torso, trunk, origin, yaw, roll);
+		if (part == null) {
+			return null;
+		}
+
+		for (ModelPart child : ((ModelPartAccessor) (Object) torso).fluidgore$getChildren().values()) {
+			GorePart hanging = loose(level, entity, posed, child, ModelParts.copy(child), origin, yaw, roll);
+			if (hanging != null) {
+				hanging.vy = 0.1;
+				hanging.tint = butchery.tint(entity.getId()) != null ? butchery.tint(entity.getId()) : hanging.tint;
+				parts.add(hanging);
+			}
+		}
+
+		part.bleedLeft = 0.1F * GoreConfig.get().goreLevel.puddles;
+		vaporized.add(entity.getId());
+		giblets.spill(level, blood, entity, new Vec3(part.x, part.y, part.z), 0.0F);
+		BloodEmitter.burst(blood, level, new Vec3(part.x, part.y, part.z), EntityFilter.bloodColor(entity), 0.06F, 12);
+		return part;
+	}
+
+	/**
+	 * A loose piece drawn with {@code model}, placed exactly where {@code source} (a part of the posed model) is on the
+	 * body: the same mapping from model space to the world that {@link #sever} uses. Not yet added.
+	 */
+	private @Nullable GorePart loose(ClientLevel level, LivingEntity entity, ModelParts.Posed posed, ModelPart source, ModelPart model,
+			Supplier<Vec3> origin, float yaw, float roll) {
+		EntityModel root = posed.model();
+		LivingEntityRenderState state = posed.state();
+		float[] b = ModelParts.bounds(model);
+		Vector3f localCenter = new Vector3f((b[0] + b[3]) * 0.5F, (b[1] + b[4]) * 0.5F, (b[2] + b[5]) * 0.5F);
+		Vector3f modelCenter = ModelParts.toModelSpace(root.root(), source, localCenter);
+		if (modelCenter == null) {
+			return null;
+		}
+
+		Quaternionf bodyRotation = new Quaternionf().rotationY((float) Math.toRadians(180.0F - yaw));
+		Vector3f offset = new Vector3f(-modelCenter.x, MODEL_Y_OFFSET - modelCenter.y, modelCenter.z).mul(state.scale);
+		float scale = state.scale * ModelParts.chainScale(root.root(), source);
+		if (roll != 0.0F) {
+			offset.rotateZ(roll);
+			offset.y += entity.getBbWidth() * 0.5F * Math.abs((float) Math.sin(roll));
+		}
+
+		bodyRotation.transform(offset);
+		Vector3f half = new Vector3f((b[3] - b[0]) * 0.5F, (b[4] - b[1]) * 0.5F, (b[5] - b[2]) * 0.5F).mul(scale);
+		Identifier texture = ((LivingEntityRenderer) posed.renderer()).getTextureLocation(state);
+		int lifetime = Math.max(400, Math.round(GoreConfig.get().partLifetimeSeconds * 20 * GoreConfig.get().goreLevel.duration));
+		GorePart part = new GorePart(model, texture, localCenter, half, scale, EntityFilter.bloodColor(entity), lifetime);
+		Vec3 base = origin.get();
+		part.x = part.prevX = base.x + offset.x;
+		part.y = part.prevY = base.y + offset.y;
+		part.z = part.prevZ = base.z + offset.z;
+		Quaternionf partRotation = new Quaternionf(bodyRotation).rotateZ(roll);
+		part.rotation.set(partRotation);
+		part.prevRotation.set(partRotation);
+		part.spinAxis.set(1.0F, 0.0F, 0.0F);
+		part.light = net.minecraft.util.LightCoordsUtil.getLightCoords(level, entity.blockPosition());
+		return part;
+	}
+
+	/**
+	 * A bone smashed beyond saving: a limb is torn off where it broke; the head is caved in and bursts, bone and
+	 * brains, with nothing left to fly.
+	 */
+	public void smash(BloodWorld blood, ClientLevel level, LivingEntity entity, BodyPart part, Supplier<Vec3> origin, float yaw, float roll,
+			@Nullable Vec3 away) {
+		if ((missingMask(entity.getId()) & part.bit()) != 0) {
+			return;
+		}
+
+		GorePart piece = sever(blood, level, entity, part, away, origin, yaw, roll, part == BodyPart.HEAD ? 0.3 : 1.0);
+		if (piece == null || part != BodyPart.HEAD) {
+			return;
+		}
+
+		Vec3 at = new Vec3(piece.x, piece.y, piece.z);
+		piece.shattered = true;
+		BoneEmitter.shatter(level, at, 1.0F);
+		giblets.chips(level, entity, at, new Vec3(0.0, 1.0, 0.0), 10, 1.0F);
+		BloodEmitter.burst(blood, level, at, EntityFilter.bloodColor(entity), 0.08F, 16);
 	}
 
 	public GorePartManager parts() {
@@ -271,6 +381,10 @@ public final class Dismemberment {
 
 		GorePart part = new GorePart(piece, texture, localCenter, half, scale, rgb, lifetime);
 		part.wounds = pieceWounds;
+		Integer plucked = butchery.tint(entity.getId());
+		if (plucked != null) {
+			part.tint = plucked;
+		}
 		Vec3 base = origin.get();
 		part.x = part.prevX = base.x + offset.x;
 		part.y = part.prevY = base.y + offset.y;
@@ -308,6 +422,7 @@ public final class Dismemberment {
 
 	/** Physics for severed parts and bleeding stumps on entities that are still walking around. */
 	public void tick(ClientLevel level, BloodWorld blood) {
+		butchery.tick();
 		tick++;
 		interaction.tick(level, blood);
 		parts.tick(level, blood);
@@ -339,6 +454,7 @@ public final class Dismemberment {
 		vaporized.remove(entityId);
 		wounds.forget(entityId);
 		burns.forget(entityId);
+		butchery.forget(entityId);
 	}
 
 	public void onEntityUnload(int entityId) {
@@ -346,6 +462,7 @@ public final class Dismemberment {
 		vaporized.remove(entityId);
 		wounds.forget(entityId);
 		burns.forget(entityId);
+		butchery.forget(entityId);
 	}
 
 	public void clear() {
@@ -355,6 +472,7 @@ public final class Dismemberment {
 		giblets.clear();
 		vaporized.clear();
 		burns.clear();
+		butchery.clear();
 		parts.clear();
 	}
 }

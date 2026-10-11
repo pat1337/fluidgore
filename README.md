@@ -99,6 +99,12 @@ Droplets fly with gravity and splat on floors and walls. Puddles flow to lower g
 and drip off ledges. Arterial spurts pump in pulses. Blood dries and darkens, rain washes it away, footprints track
 through it, and a sponge or brush scrubs it off.
 
+### Butchery
+Process a carcass the way it is done on a farm: right-click a dead chicken with an empty hand to pluck it, a
+handful of feathers at a time, down to bare, goose-pimpled skin. Take the head, wings and legs off at the joints
+with a blade. Cut through the carcass to the bone and it splits in two, and a blade on any loose piece cuts it in
+two again, raw on the cut face, until it is diced. The body stays on the ground as long as you keep working on it.
+
 ### Inventory sorting
 A small extra, the way 1.7.10 did it: a tiny sort button in the top right of every chest, barrel, ender chest and
 shulker box and one next to your inventory, or middle-click over either part. Stacks are merged and ordered by item
@@ -154,6 +160,7 @@ Tested alongside Sodium, Iris (without a shader pack), Lithium, FerriteCore, Ent
 | Blast Gore | On | Explosions shred, tear open and throw bodies by how close they were (see Explosions). |
 | Wounds | On | The hit-zone and wound system described above. |
 | Wounds on Monsters | On | Wounds on hostile mobs too. |
+| Butchery | On | Pluck dead chickens (right-click, empty hand), split carcasses and dice pieces with a blade. |
 | Inventory Sorting | On | Sort buttons on chests and your inventory, and middle-click to sort. |
 | Rotten Undead | On | Zombies and their kin are rotting meat, with rotten wounds and dark, thick rotten blood. |
 | Wounds on Players | On | Wounds on other players. Everyone with the mod sees the same ones. |
@@ -225,3 +232,6 @@ screenshots to `build/run/clientGameTest/screenshots`. Textures are generated, n
 ## License
 
 [MIT](LICENSE)
+
+### Horse and bone revamp (2.5.0)
+Blunt blows break skulls, ribs and limbs, with visible fractures and bone shards; repeated blows smash heads or tear limbs off. Toggle Broken Bones in settings. Horses have heavier, longer deaths and more blood. Their neck and head sever together, including on donkeys and mules; splitting a horse carcass drops the tail separately. Try /gore demo horse.

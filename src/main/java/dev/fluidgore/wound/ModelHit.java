@@ -148,7 +148,11 @@ public final class ModelHit {
 
 	/** World-space centre of a severable part as posed now, or null if the model has none. For tests and aiming. */
 	public static @Nullable Vec3 centre(LivingEntity entity, ModelParts.Posed posed, BodyPart target) {
-		ModelPart wanted = ModelParts.index(posed.model())[target.ordinal()];
+		return centre(entity, posed, ModelParts.index(posed.model())[target.ordinal()]);
+	}
+
+	/** World-space centre of a named model part, including the torso. */
+	public static @Nullable Vec3 centre(LivingEntity entity, ModelParts.Posed posed, @Nullable ModelPart wanted) {
 		if (wanted == null) {
 			return null;
 		}

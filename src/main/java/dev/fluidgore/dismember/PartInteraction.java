@@ -3,8 +3,10 @@ package dev.fluidgore.dismember;
 import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.blood.BoneEmitter;
+import dev.fluidgore.GoreSystems;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.suffer.CorpseStrike;
+import dev.fluidgore.wound.Weapon;
 import java.util.List;
 import java.util.Optional;
 import net.minecraft.client.Minecraft;
@@ -71,6 +73,13 @@ public final class PartInteraction {
 		}
 
 		Vec3 look = player.getViewVector(1.0F);
+		if (GoreConfig.get().butchery && Weapon.of(player.getMainHandItem()).cuts()
+				&& GoreSystems.dismemberment().butchery().cut(GoreSystems.blood(), level, target, look)) {
+			// A blade on a loose piece cuts it in two.
+			player.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
+			return true;
+		}
+
 		if (target.bone() && ++target.hits >= 2) {
 			// Second blow: the bone breaks apart.
 			BoneEmitter.shatter(level, new Vec3(target.x, target.y, target.z), 1.0F);
