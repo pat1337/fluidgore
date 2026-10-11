@@ -13,6 +13,8 @@ import net.minecraft.world.entity.LivingEntity;
  */
 public enum Flesh {
 	MEAT,
+	/** Poultry: raw chicken, pale pink meat with yellow fat and a little blood in it. */
+	POULTRY,
 	BONE,
 	DRIED,
 	/**
@@ -35,6 +37,10 @@ public enum Flesh {
 		}
 
 		EntityType<?> type = entity.getType();
+		if (type == EntityTypes.CHICKEN) {
+			return POULTRY;
+		}
+
 		if (type == EntityTypes.HUSK || type == EntityTypes.CAMEL_HUSK) {
 			return DRIED;
 		}
@@ -69,6 +75,16 @@ public enum Flesh {
 				case PUS -> 0xC8C060;
 				case MAGGOTS -> 0xF0EBD8;
 				// Plucked poultry: pale, a little yellow, pink where the blood shows through.
+				case SKIN -> 0xF2CDB6;
+			};
+			case POULTRY -> switch (tissue) {
+				case BRUISE -> 0x8A4A6A;
+				case FAT -> 0xF4E2A8;
+				case SPLIT -> 0xD8606E;
+				case MUSCLE -> 0xF4A2AC;
+				case BONE -> 0xEADFCB;
+				case PUS -> 0xC8C060;
+				case MAGGOTS -> 0xF0EBD8;
 				case SKIN -> 0xF2CDB6;
 			};
 			case BONE -> switch (tissue) {

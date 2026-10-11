@@ -823,6 +823,25 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			});
 			context.waitTicks(10);
 			context.takeScreenshot("split_" + type);
+			// Dicing like a chicken: every piece, the head of several blocks included, can be cut down.
+			context.runOnClient(mc -> {
+				int cuts = 0;
+				for (int round = 0; round < 3; round++) {
+					for (var p : new java.util.ArrayList<>(GoreSystems.dismemberment().parts().parts())) {
+						if (!p.shattered && GoreSystems.dismemberment().butchery().cut(GoreSystems.blood(), mc.level, p, new net.minecraft.world.phys.Vec3(0, -1, 0))) {
+							cuts++;
+						}
+					}
+				}
+
+				long whole = GoreSystems.dismemberment().parts().parts().stream().filter(p -> !p.shattered && !p.bone()
+						&& (((dev.fluidgore.mixin.ModelPartAccessor) (Object) p.model).fluidgore$getCubes().size() != 1
+						|| !((dev.fluidgore.mixin.ModelPartAccessor) (Object) p.model).fluidgore$getChildren().isEmpty())).count();
+				System.out.println("[FluidGoreTest] diced " + type + ": " + cuts + " cuts, uncut compound pieces " + whole);
+				check(cuts >= 6 && whole == 0, "horse pieces could not be diced: " + type + " cuts=" + cuts + " compound=" + whole);
+			});
+			context.waitTicks(15);
+			context.takeScreenshot("diced_" + type);
 			context.runOnClient(mc -> { GoreSystems.suffering().clear(); GoreSystems.dismemberment().clear(); });
 		}
 		System.out.println("[FluidGoreTest] horses and fractures passed");
@@ -943,6 +962,10 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		});
 		System.out.println("[FluidGoreTest] diced: " + cuts + " cuts, pieces now " + context.computeOnClient(mc -> GoreSystems.dismemberment().parts().parts().size()));
 		check(cuts >= 3, "the pieces could not be cut down: " + cuts + " cuts");
+		check(context.computeOnClient(mc -> {
+			var last = GoreSystems.dismemberment().parts().parts().getLast();
+			return last.wounds != null && last.wounds.flesh() == dev.fluidgore.wound.Flesh.POULTRY && last.rawFaces != 0;
+		}), "diced chicken is not raw pink poultry");
 		context.waitTicks(25);
 		server.runCommand("tp @a 80.5 -60 0.8 0 55");
 		context.waitTicks(3);

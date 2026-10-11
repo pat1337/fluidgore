@@ -56,7 +56,9 @@ public final class Butchery {
 	/** Plucks that leave a bird completely bare. */
 	private static final int PLUCKS_TO_BARE = 12;
 	/** Smallest side, in model pixels, that can still be cut in two. */
-	private static final float MIN_CUT = 2.0F;
+	private static final float MIN_CUT = 1.2F;
+	/** Pieces at least this thick, in model pixels, still have bone in their cut faces. */
+	private static final float BONE_IN = 5.0F;
 	/** How long a body worked on stays, at least, after each pluck or cut. */
 	private static final int KEEP_TICKS = 600;
 	private static final int PLUCK_COOLDOWN = 3;
@@ -181,6 +183,12 @@ public final class Butchery {
 			carcass.tint = tint;
 		}
 
+		// No wounds yet, but the pieces it is cut into must know what meat they are (pink for a chicken).
+		List<ModelPart.Cube> trunk = ((ModelPartAccessor) (Object) carcass.model).fluidgore$getCubes();
+		if (carcass.wounds == null && !trunk.isEmpty()) {
+			carcass.wounds = Wounds.cutFaces(carcass.model, trunk.getFirst(), Flesh.of(entity), carcass.bloodRgb, 0, 1.0F);
+		}
+
 		dismemberment.parts().add(carcass);
 		if (!cut(blood, level, carcass, look)) {
 			carcass.vy += 0.15;
@@ -190,13 +198,19 @@ public final class Butchery {
 	}
 
 	/**
-	 * Cuts a loose piece in two across its longest side. Each half gets raw meat on its cut face, they fall apart, and
-	 * the old piece is gone. Returns false if the piece cannot be cut (bone, more than one block of model, or too small).
+	 * A blade on a loose piece. A piece made of several blocks of model (a horse's head with its neck, muzzle and mane, a
+	 * chicken's head with its beak) is hacked apart into those blocks first; a single block is cut in two across its
+	 * longest side, raw meat on the new faces (and on any it was already cut on), until the pieces are too small to
+	 * cut. Returns false if the piece cannot be cut (bone, or too small).
 	 */
 	public boolean cut(BloodWorld blood, ClientLevel level, GorePart part, Vec3 look) {
-		List<ModelPart.Cube> cubes = ((ModelPartAccessor) (Object) part.model).fluidgore$getCubes();
-		if (part.bone() || part.shattered || cubes.size() != 1 || !((ModelPartAccessor) (Object) part.model).fluidgore$getChildren().isEmpty()) {
+		if (part.bone() || part.shattered) {
 			return false;
+		}
+
+		List<ModelPart.Cube> cubes = ((ModelPartAccessor) (Object) part.model).fluidgore$getCubes();
+		if (cubes.size() != 1 || !((ModelPartAccessor) (Object) part.model).fluidgore$getChildren().isEmpty()) {
+			return hackApart(blood, level, part, look);
 		}
 
 		ModelPart.Cube cube = cubes.getFirst();
@@ -215,8 +229,6 @@ public final class Butchery {
 		}
 
 		float at = min[axis] + length * (0.4F + 0.2F * RANDOM.nextFloat());
-		float[] texture = textureOf(cube);
-		Flesh flesh = part.wounds != null ? part.wounds.flesh() : Flesh.MEAT;
 		Quaternionf rotation = new Quaternionf(part.rotation);
 		for (int side = 0; side < 2; side++) {
 			float[] lo = min.clone();
@@ -227,48 +239,117 @@ public final class Butchery {
 				lo[axis] = at;
 			}
 
-			ModelPart.Cube half = new ModelPart.Cube(Math.round(texture[0]), Math.round(texture[1]), lo[0], lo[1], lo[2], hi[0] - lo[0], hi[1] - lo[1],
-					hi[2] - lo[2], 0.0F, 0.0F, 0.0F, false, texture[2], texture[3], EnumSet.allOf(Direction.class));
-			ModelPart model = new ModelPart(new ArrayList<>(List.of(half)), new HashMap<>());
-			Vector3f centre = new Vector3f((lo[0] + hi[0]) / 32.0F, (lo[1] + hi[1]) / 32.0F, (lo[2] + hi[2]) / 32.0F);
-			Vector3f extents = new Vector3f((hi[0] - lo[0]) / 32.0F, (hi[1] - lo[1]) / 32.0F, (hi[2] - lo[2]) / 32.0F).mul(part.scale);
-			GorePart piece = new GorePart(model, part.texture, centre, extents, part.scale, part.bloodRgb, Math.max(part.lifetime - part.age, 400));
-			piece.tint = part.tint;
-			piece.light = part.light;
-			piece.wounds = Wounds.cutFaces(model, half, flesh, part.bloodRgb, new int[][]{{axis, side == 0 ? 1 : -1}});
-			// Where the half's centre is in the world: the old pivot, moved by the shift from the old centre to the new,
-			// through the same flip, scale and rotation the renderer applies.
-			Vector3f shift = new Vector3f(centre).sub(part.localCenter).mul(-part.scale, -part.scale, part.scale);
-			rotation.transform(shift);
-			piece.x = piece.prevX = part.x + shift.x;
-			piece.y = piece.prevY = part.y + shift.y;
-			piece.z = piece.prevZ = part.z + shift.z;
-			piece.rotation.set(rotation);
-			piece.prevRotation.set(rotation);
-			Vector3f apart = new Vector3f(shift).normalize();
-			if (!apart.isFinite()) {
-				apart.set(RANDOM.nextFloat() - 0.5F, 0.0F, RANDOM.nextFloat() - 0.5F);
-			}
-
-			piece.vx = part.vx + apart.x * 0.08 + look.x * 0.05;
-			piece.vy = Math.max(part.vy, 0.0) + 0.12 + RANDOM.nextDouble() * 0.06;
-			piece.vz = part.vz + apart.z * 0.08 + look.z * 0.05;
-			piece.spinAxis.set(RANDOM.nextFloat() - 0.5F, RANDOM.nextFloat() - 0.5F, RANDOM.nextFloat() - 0.5F).normalize();
-			if (!piece.spinAxis.isFinite()) {
-				piece.spinAxis.set(1.0F, 0.0F, 0.0F);
-			}
-
-			piece.spinSpeed = 0.15F + RANDOM.nextFloat() * 0.2F;
-			piece.bleedLeft = 0.04F * GoreConfig.get().goreLevel.puddles;
-			GoreSystems.dismemberment().parts().add(piece);
+			// The new face, where the knife went through, is raw; so is every face the piece was already cut on.
+			int raw = part.rawFaces | 1 << axis * 2 + (side == 0 ? 1 : 0);
+			piece(part, cube, lo, hi, raw, rotation, look, 1.0F);
 		}
 
 		part.shattered = true;
+		juice(blood, level, part, 6);
+		return true;
+	}
+
+	/**
+	 * Hacks a piece of several blocks apart: each block of it (children placed where they hang, their own tilt left
+	 * out) becomes a loose piece of its own where it was. Returns false if there was nothing to take apart.
+	 */
+	private boolean hackApart(BloodWorld blood, ClientLevel level, GorePart part, Vec3 look) {
+		List<float[]> blocks = new ArrayList<>();
+		List<ModelPart.Cube> sources = new ArrayList<>();
+		collect(part.model, 0.0F, 0.0F, 0.0F, blocks, sources);
+		if (blocks.size() < 2) {
+			return false;
+		}
+
+		Quaternionf rotation = new Quaternionf(part.rotation);
+		for (int i = 0; i < blocks.size(); i++) {
+			float[] b = blocks.get(i);
+			// Where each block was joined to the rest is not known, so it comes apart with its skin on; the knife opens it.
+			piece(part, sources.get(i), new float[]{b[0], b[1], b[2]}, new float[]{b[3], b[4], b[5]}, 0, rotation, look, 0.6F);
+		}
+
+		part.shattered = true;
+		juice(blood, level, part, 10);
+		level.playLocalSound(part.x, part.y, part.z, SoundEvents.BONE_BLOCK_BREAK, SoundSource.NEUTRAL, 0.7F, 0.9F + RANDOM.nextFloat() * 0.2F, false);
+		return true;
+	}
+
+	/** Every cube under {@code model} as {minX, minY, minZ, maxX, maxY, maxZ} in the piece's own pixels, with its source cube. */
+	private static void collect(ModelPart model, float ox, float oy, float oz, List<float[]> blocks, List<ModelPart.Cube> sources) {
+		for (ModelPart.Cube cube : ((ModelPartAccessor) (Object) model).fluidgore$getCubes()) {
+			blocks.add(new float[]{cube.minX + ox, cube.minY + oy, cube.minZ + oz, cube.maxX + ox, cube.maxY + oy, cube.maxZ + oz});
+			sources.add(cube);
+		}
+
+		for (ModelPart child : ((ModelPartAccessor) (Object) model).fluidgore$getChildren().values()) {
+			collect(child, ox + child.x, oy + child.y, oz + child.z, blocks, sources);
+		}
+	}
+
+	/**
+	 * A new loose piece cut from {@code part}: the box {@code lo}..{@code hi} (the piece's own pixels) skinned like
+	 * {@code skin}, raw on the faces in {@code raw}, placed where that box was on the old piece and falling away from its
+	 * middle. {@code fling} scales how hard it moves apart. Added to the dismemberment's parts.
+	 */
+	private void piece(GorePart part, ModelPart.Cube skin, float[] lo, float[] hi, int raw, Quaternionf rotation, Vec3 look, float fling) {
+		float[] texture = textureOf(skin);
+		ModelPart.Cube block = new ModelPart.Cube(Math.round(texture[0]), Math.round(texture[1]), lo[0], lo[1], lo[2], hi[0] - lo[0], hi[1] - lo[1],
+				hi[2] - lo[2], 0.0F, 0.0F, 0.0F, false, texture[2], texture[3], EnumSet.allOf(Direction.class));
+		ModelPart model = new ModelPart(new ArrayList<>(List.of(block)), new HashMap<>());
+		Vector3f centre = new Vector3f((lo[0] + hi[0]) / 32.0F, (lo[1] + hi[1]) / 32.0F, (lo[2] + hi[2]) / 32.0F);
+		Vector3f extents = new Vector3f((hi[0] - lo[0]) / 32.0F, (hi[1] - lo[1]) / 32.0F, (hi[2] - lo[2]) / 32.0F).mul(part.scale);
+		GorePart piece = new GorePart(model, part.texture, centre, extents, part.scale, part.bloodRgb, Math.max(part.lifetime - part.age, 400));
+		Flesh flesh = part.wounds != null ? part.wounds.flesh() : Flesh.MEAT;
+		piece.tint = part.tint;
+		piece.light = part.light;
+		piece.rawFaces = raw;
+		// Diced meat is meat through and through; only a big piece still has bone in its cut faces. Kept even with no
+		// raw face yet, so the piece remembers what it is made of.
+		float smallest = Math.min(hi[0] - lo[0], Math.min(hi[1] - lo[1], hi[2] - lo[2]));
+		piece.wounds = Wounds.cutFaces(model, block, flesh, part.bloodRgb, raw, smallest >= BONE_IN ? 1.0F : 0.7F);
+		// Where the piece's centre is in the world: the old pivot, moved by the shift from the old centre to the new,
+		// through the same flip, scale and rotation the renderer applies.
+		Vector3f shift = new Vector3f(centre).sub(part.localCenter).mul(-part.scale, -part.scale, part.scale);
+		rotation.transform(shift);
+		piece.x = piece.prevX = part.x + shift.x;
+		piece.y = piece.prevY = part.y + shift.y;
+		piece.z = piece.prevZ = part.z + shift.z;
+		piece.rotation.set(rotation);
+		piece.prevRotation.set(rotation);
+		Vector3f apart = new Vector3f(shift).normalize();
+		if (!apart.isFinite()) {
+			apart.set(RANDOM.nextFloat() - 0.5F, 0.0F, RANDOM.nextFloat() - 0.5F);
+		}
+
+		// Diced on the spot, as on a block: the pieces fall apart and stay about where they were cut.
+		piece.vx = part.vx + (apart.x * 0.04 + look.x * 0.02) * fling;
+		piece.vy = Math.max(part.vy, 0.0) + (0.05 + RANDOM.nextDouble() * 0.04) * fling;
+		piece.vz = part.vz + (apart.z * 0.04 + look.z * 0.02) * fling;
+		piece.spinAxis.set(RANDOM.nextFloat() - 0.5F, RANDOM.nextFloat() - 0.5F, RANDOM.nextFloat() - 0.5F).normalize();
+		if (!piece.spinAxis.isFinite()) {
+			piece.spinAxis.set(1.0F, 0.0F, 0.0F);
+		}
+
+		piece.spinSpeed = (0.08F + RANDOM.nextFloat() * 0.12F) * fling;
+		piece.bleedLeft = 0.04F * GoreConfig.get().goreLevel.puddles;
+		GoreSystems.dismemberment().parts().add(piece);
+	}
+
+	/** The wet of a cut: blood, scraps of raw meat flicked off the knife, and the squelch of it. */
+	private void juice(BloodWorld blood, ClientLevel level, GorePart part, int scraps) {
 		Vec3 where = new Vec3(part.x, part.y, part.z);
 		BloodEmitter.burst(blood, level, where, part.bloodRgb, 0.03F, 6);
-		level.playLocalSound(where.x, where.y, where.z, SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 0.7F, 1.1F, false);
-		level.playLocalSound(where.x, where.y, where.z, SoundEvents.SLIME_SQUISH_SMALL, SoundSource.NEUTRAL, 0.6F, 0.8F + RANDOM.nextFloat() * 0.2F, false);
-		return true;
+		Flesh flesh = part.wounds != null ? part.wounds.flesh() : Flesh.MEAT;
+		ItemParticleOption meat = new ItemParticleOption(ParticleTypes.ITEM,
+				flesh == Flesh.POULTRY ? Items.CHICKEN : flesh == Flesh.ROTTEN ? Items.ROTTEN_FLESH : Items.BEEF);
+		for (int i = 0; i < scraps; i++) {
+			level.addParticle(meat, where.x, where.y, where.z, (RANDOM.nextDouble() - 0.5) * 0.15, 0.05 + RANDOM.nextDouble() * 0.12,
+					(RANDOM.nextDouble() - 0.5) * 0.15);
+		}
+
+		level.playLocalSound(where.x, where.y, where.z, SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 0.6F, 1.2F, false);
+		level.playLocalSound(where.x, where.y, where.z, SoundEvents.SLIME_SQUISH_SMALL, SoundSource.NEUTRAL, 0.8F, 0.7F + RANDOM.nextFloat() * 0.3F, false);
+		level.playLocalSound(where.x, where.y, where.z, SoundEvents.HONEY_BLOCK_BREAK, SoundSource.NEUTRAL, 0.5F, 1.1F + RANDOM.nextFloat() * 0.3F, false);
 	}
 
 	/**

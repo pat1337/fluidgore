@@ -51,6 +51,8 @@ public final class GorePart {
 	public boolean held;
 	/** Wounds carried by the piece: those cut into it before it came off, and the raw face where it was joined. */
 	public @Nullable WoundSet wounds;
+	/** Faces of a diced piece that are raw cut meat: bit {@code axis * 2}, plus one for the positive side. */
+	public int rawFaces;
 	/** Blows taken by a bone part; it breaks apart on the second. */
 	public int hits;
 	/** Broke apart this tick; removed by the manager. */

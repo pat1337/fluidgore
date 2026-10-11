@@ -38,6 +38,8 @@ import org.jspecify.annotations.Nullable;
 public final class CorpseStrike {
 	private static final double REACH = 4.5;
 	private static final int COOLDOWN = 6;
+	/** A blade on a dead body cuts at least this share of its health deep, see {@link #strike}. */
+	private static final float BUTCHER_SHARE = 0.6F;
 	private static final RandomSource RANDOM = Fate.stream("corpseStrike");
 
 	private static int lastStrike = -100;
@@ -107,7 +109,10 @@ public final class CorpseStrike {
 		LivingEntity entity = corpse.entity;
 		Ragdoll body = corpse.body;
 		boolean blade = weapon.cuts();
-		Wounds.Strike wound = GoreSystems.dismemberment().wounds().strike(entity, eye, look, REACH + 2.0, weapon, damage);
+		// Butchering: a blade opens a dead body at the same pace whatever its size, so a horse is jointed and split in a
+		// few chops, like a chicken, instead of dozens.
+		float cutting = blade && GoreConfig.get().butchery ? Math.max(damage, entity.getMaxHealth() * BUTCHER_SHARE) : damage;
+		Wounds.Strike wound = GoreSystems.dismemberment().wounds().strike(entity, eye, look, REACH + 2.0, weapon, cutting);
 		Vec3 point = wound != null ? wound.hit().point() : box(corpse).clip(eye, eye.add(look.scale(REACH + 2.0))).orElse(centre(corpse));
 		int rgb = EntityFilter.bloodColor(entity);
 		level.playLocalSound(point.x, point.y, point.z, blade ? SoundEvents.PLAYER_ATTACK_SWEEP : SoundEvents.PLAYER_ATTACK_WEAK,

@@ -207,3 +207,4 @@ severable parts; severed heads can't blink.
   indentation when the closing `"""` shares a line with content: close them on their own line at column 0).
 
 - **2.5.0 horse/bone additions**: horse head includes head_parts, trunk attachments detach separately for splitting; horse death/blood tuning; Wounds bone thresholds and WoundSet fracture masks with render-time pose deformation. Regression: horsesAndFractures. Demo: horse. Includes unreleased butchery.
+- **2.6.0**: butchery for big animals: `Butchery.hackApart` splits multi-cube pieces into single-cube ones (child offsets baked, child rotation dropped), `GorePart.rawFaces` bitmask carried through every cut (`Wounds.cutFaces(..., rawFaces, depth)`), `Flesh.POULTRY` (chicken: pink), `CorpseStrike.BUTCHER_SHARE` (a blade on a corpse cuts at least 60% of max health deep). Game test: `horsesAndFractures` dices horse/donkey/mule. Demo: `dice`.

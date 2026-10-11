@@ -380,23 +380,29 @@ public final class Wounds {
 	}
 
 	/**
-	 * Raw cut faces for a piece hacked out of a body: meat round a knob of bone on each listed face of {@code cube}
-	 * (each face is {axis, sign}).
+	 * Raw cut faces for a piece hacked out of a body, on each face of {@code cube} set in {@code rawFaces} (bit
+	 * {@code axis * 2}, plus one for the positive side): raw meat across the whole face, {@code depth} deep (1 shows a
+	 * knob of bone in it, less is meat through and through).
 	 */
-	public static WoundSet cutFaces(ModelPart piece, ModelPart.Cube cube, Flesh flesh, int blood, int[][] faces) {
+	public static WoundSet cutFaces(ModelPart piece, ModelPart.Cube cube, Flesh flesh, int blood, int rawFaces, float depth) {
 		WoundSet set = new WoundSet(piece, flesh, blood);
 		float[] min = {cube.minX, cube.minY, cube.minZ};
 		float[] max = {cube.maxX, cube.maxY, cube.maxZ};
-		for (int[] face : faces) {
-			int axis = face[0];
+		for (int bit = 0; bit < 6; bit++) {
+			if ((rawFaces & 1 << bit) == 0) {
+				continue;
+			}
+
+			int axis = bit / 2;
+			int sign = (bit & 1) != 0 ? 1 : -1;
 			int b = (axis + 1) % 3;
 			int c = (axis + 2) % 3;
 			org.joml.Vector3f local = new org.joml.Vector3f();
-			local.setComponent(axis, face[1] > 0 ? max[axis] : min[axis]);
+			local.setComponent(axis, sign > 0 ? max[axis] : min[axis]);
 			local.setComponent(b, (min[b] + max[b]) * 0.5F);
 			local.setComponent(c, (min[c] + max[c]) * 0.5F);
-			float size = Math.min(max[b] - min[b], max[c] - min[c]) * 0.5F;
-			set.stump(new ModelHit.Result(piece, cube, axis, face[1], local, null, Vec3.ZERO, Vec3.ZERO, 0.0), size, RANDOM);
+			float size = Math.max(max[b] - min[b], max[c] - min[c]) * 0.75F;
+			set.stump(new ModelHit.Result(piece, cube, axis, sign, local, null, Vec3.ZERO, Vec3.ZERO, 0.0), size, depth, RANDOM);
 		}
 
 		return set;

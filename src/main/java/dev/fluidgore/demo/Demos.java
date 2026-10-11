@@ -8,6 +8,7 @@ import dev.fluidgore.suffer.Corpse;
 import dev.fluidgore.suffer.CorpseStrike;
 import dev.fluidgore.wound.ModelHit;
 import dev.fluidgore.wound.Weapon;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 import net.minecraft.client.Minecraft;
@@ -23,6 +24,7 @@ import org.jspecify.annotations.Nullable;
  */
 public final class Demos {
 	public static final List<Demo> ALL = List.of(
+			new Demo("dice", "2.6.0", "A horse and a donkey butchered like chickens: split in a few chops, then diced down to raw chunks", false, Demos::dice),
 			new Demo("horse", "2.5.0", "Horse death, broken bones and a split carcass", false, Demos::horse),
 			new Demo("butcher", "2.5.0", "A chicken plucked bare, jointed, its carcass split and diced", false, Demos::butcher),
 			new Demo("rot", "2.2.0", "A zombie hacked open: slashes along the swing into rotting flesh, pus and maggots", false, Demos::rot),
@@ -82,6 +84,39 @@ public final class Demos {
 			}
 		}).pause(100);
 	}
+	/** A horse and a donkey worked like chickens with a cleaver: opened and split in a few chops, every piece diced down. */
+	private static void dice(Script s, Stage st) {
+		s.summon(st, "horse", "fgd_dice_horse", -2, 0, 4, 90.0F, "");
+		s.summon(st, "donkey", "fgd_dice_donkey", 2, 0, 4, 90.0F, "");
+		s.pause(20).hold("minecraft:iron_axe").say("A horse and a donkey, butchered like chickens");
+		s.hit("fgd_dice_horse", 100).hit("fgd_dice_donkey", 100).pause(80);
+		s.say("A few chops through the trunk and it splits, however big the animal");
+		for (int i = 0; i < 8; i++) {
+			s.client(mc -> {
+				for (Corpse c : GoreSystems.suffering().corpses()) {
+					if (GoreSystems.dismemberment().vaporized(c.entity.getId())) continue;
+					ModelParts.Posed posed = ModelParts.pose(c.entity);
+					if (posed == null) continue;
+					Vec3 target = ModelHit.centre(c.entity, posed, ModelParts.torso(posed.model()));
+					if (target == null) continue;
+					Vec3 eye = target.add(0, 1.2, 0);
+					CorpseStrike.strike(mc.level, GoreSystems.blood(), c, eye, target.subtract(eye).normalize(), Weapon.CHOP, 9.0F);
+				}
+			}).pause(8);
+		}
+
+		s.pause(20).say("Then every piece, heads and all, is diced down to raw chunks");
+		for (int i = 0; i < 4; i++) {
+			s.client(mc -> {
+				for (GorePart p : new ArrayList<>(GoreSystems.dismemberment().parts().parts())) {
+					if (!p.shattered) GoreSystems.dismemberment().butchery().cut(GoreSystems.blood(), mc.level, p, mc.player.getViewVector(1.0F));
+				}
+			}).pause(20);
+		}
+
+		s.pause(100);
+	}
+
 	private static void deaths(Script s, Stage st) {
 		Corpse.Kind[] kinds = Corpse.Kind.values();
 		String[] names = {

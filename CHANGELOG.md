@@ -2,6 +2,21 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.6.0]
+
+Horses, donkeys and mules butchered like chickens; meatier, pinker dicing.
+
+### Added
+- Pieces made of several blocks of model (horse, donkey and mule heads, a chicken's head with its beak, donkey chests) are
+  hacked apart into their blocks with the first chop, and every block can then be diced.
+- Chickens are raw poultry: pale pink meat and yellow fat in their wounds, cut faces and giblets.
+- Demo: `dice`.
+
+### Changed
+- A blade opens a dead body at the same pace whatever its size, so a horse is jointed and split in a few chops like a chicken.
+- Dicing goes finer, the pieces stay about where they are cut, and every face a piece was ever cut on stays raw meat
+  (small pieces are meat through, big ones show bone). Each cut flicks off scraps of raw meat with a wet squelch.
+
 ## [2.5.0]
 
 Butchery, broken bones and the horse revamp (including the unreleased 2.4.0 work).

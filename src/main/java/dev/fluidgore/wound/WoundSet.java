@@ -222,6 +222,11 @@ public final class WoundSet {
 
 	/** A stump: bone in raw meat where a part was cut off. */
 	void stump(ModelHit.Result at, float size, RandomSource random) {
+		stump(at, size, 1.0F, random);
+	}
+
+	/** A raw cut face {@code depth} deep: 1 shows the bone, less only the meat. */
+	void stump(ModelHit.Result at, float size, float depth, RandomSource random) {
 		int i = count < MAX ? count++ : shallowest();
 		int b = (at.axis() + 1) % 3;
 		int c = (at.axis() + 2) % 3;
@@ -235,7 +240,7 @@ public final class WoundSet {
 		u[i] = at.local().get(b);
 		v[i] = at.local().get(c);
 		radius[i] = Mth.clamp(size, 1.5F, MAX_RADIUS);
-		severity[i] = 1.0F;
+		severity[i] = depth;
 		// Stumps bleed through the dismemberment's own stump drip.
 		ox[i] = oy[i] = oz[i] = Float.NaN;
 	}

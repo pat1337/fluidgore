@@ -90,7 +90,7 @@ public final class HitFeedback {
 					play(level, at, SoundEvents.HONEY_BLOCK_BREAK, 0.6F, 0.8F);
 				}
 			}
-			case MEAT -> {
+			case MEAT, POULTRY -> {
 				switch (weapon) {
 					// A heavy, dead thud: meat over bone, no splash.
 					case BLUNT -> {
