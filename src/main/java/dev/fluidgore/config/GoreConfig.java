@@ -55,7 +55,7 @@ public final class GoreConfig {
 	/** Seconds a detached body part stays before fading. Scaled by the gore level. */
 	public int partLifetimeSeconds = 60;
 	/** Cap on detached parts in the world. */
-	public int maxDetachedParts = 64;
+	public int maxDetachedParts = 160;
 	/**
 	 * A blast that kills from close by tears the body into pieces of muscle, fat, bone, hide, gut and organs instead
 	 * of leaving it to die. Medium gore level and up; never players.
@@ -124,6 +124,8 @@ public final class GoreConfig {
 	public boolean inventorySorting = true;
 	/** Plucking dead birds, splitting carcasses and dicing the pieces with a blade. */
 	public boolean butchery = true;
+	/** Sheep's wool soaks up blood: stains round wounds, the coat reddening as it bleeds, the herd round it spattered. */
+	public boolean bloodyWool = true;
 	/** Blunt blows add up on the bone they land on until it breaks: skulls cave in, ribs stove in, limbs snap and come off. */
 	public boolean fractures = true;
 	/** Wounds on other players. Everyone with the mod sees the same wounds (see trigger/Fate). */
@@ -216,7 +218,7 @@ public final class GoreConfig {
 	}
 
 	/** Repairs values that a hand-edited file may have broken (missing enums, negative caps, null lists). */
-	private static final int CONFIG_VERSION = 4;
+	private static final int CONFIG_VERSION = 5;
 
 	private void sanitize() {
 		if (configVersion < 2) {
@@ -232,6 +234,11 @@ public final class GoreConfig {
 		if (configVersion < 4) {
 			// 2.2: monsters got their own wounds (rotting zombies, anatomical slashes), so they are shown by default.
 			woundHostiles = true;
+		}
+
+		if (configVersion < 5) {
+			// 2.7: dicing a carcass makes many small pieces; 64 lost the first animal's before the second was done.
+			if (maxDetachedParts == 64) maxDetachedParts = 160;
 		}
 
 		configVersion = CONFIG_VERSION;

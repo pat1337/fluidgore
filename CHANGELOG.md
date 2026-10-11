@@ -2,6 +2,24 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.7.0]
+
+Pork, steak and a bloodied herd.
+
+### Added
+- Pigs are pork: pale pink lean, thick white fat. Cows and mooshrooms are beef: bright red steak marbled with creamy fat.
+- Cut faces of diced pieces are now pixel-art cross-sections of meat edge to edge, as on a butcher's block: the grain of the
+  muscle, veins of fat (marbling), a rim of fat along one edge, wet smears of blood, and bone in big pieces. Chicken is
+  plain pink meat.
+- Bloody Wool setting (on): a sheep's wool soaks up its blood, with a dark stain over every wound and the whole fleece
+  reddening as it bleeds and as it lies dying in its blood. Sheep standing close by get spattered pink. Rain and water wash it out.
+- Scraps of pork chop, beef or chicken fly off each cut.
+- Demo: `meats`.
+
+### Changed
+- Loose pieces limit raised from 64 to 160 (slider up to 256) so a diced animal's pieces are not lost while the next is cut;
+  configs still on the old default are moved up.
+
 ## [2.6.0]
 
 Horses, donkeys and mules butchered like chickens; meatier, pinker dicing.

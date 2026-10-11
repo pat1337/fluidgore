@@ -15,6 +15,10 @@ public enum Flesh {
 	MEAT,
 	/** Poultry: raw chicken, pale pink meat with yellow fat and a little blood in it. */
 	POULTRY,
+	/** Pork: pale pink lean under a thick slab of white back fat, the rind pink-grey. */
+	PORK,
+	/** Beef: deep red steak, marbled with creamy fat. */
+	BEEF,
 	BONE,
 	DRIED,
 	/**
@@ -39,6 +43,14 @@ public enum Flesh {
 		EntityType<?> type = entity.getType();
 		if (type == EntityTypes.CHICKEN) {
 			return POULTRY;
+		}
+
+		if (type == EntityTypes.PIG) {
+			return PORK;
+		}
+
+		if (type == EntityTypes.COW || type == EntityTypes.MOOSHROOM) {
+			return BEEF;
 		}
 
 		if (type == EntityTypes.HUSK || type == EntityTypes.CAMEL_HUSK) {
@@ -76,6 +88,26 @@ public enum Flesh {
 				case MAGGOTS -> 0xF0EBD8;
 				// Plucked poultry: pale, a little yellow, pink where the blood shows through.
 				case SKIN -> 0xF2CDB6;
+			};
+			case PORK -> switch (tissue) {
+				case BRUISE -> 0x7A3A55;
+				case FAT -> 0xF8F0E6;
+				case SPLIT -> 0xB8404E;
+				case MUSCLE -> 0xE8999A;
+				case BONE -> 0xEFE6D2;
+				case PUS -> 0xC8C060;
+				case MAGGOTS -> 0xF0EBD8;
+				case SKIN -> 0xF0B8A8;
+			};
+			case BEEF -> switch (tissue) {
+				case BRUISE -> 0x4A2030;
+				case FAT -> 0xF6EAD0;
+				case SPLIT -> 0x7E141C;
+				case MUSCLE -> 0xC83440;
+				case BONE -> 0xE6DDC8;
+				case PUS -> 0xC8C060;
+				case MAGGOTS -> 0xF0EBD8;
+				case SKIN -> 0xE8C0A8;
 			};
 			case POULTRY -> switch (tissue) {
 				case BRUISE -> 0x8A4A6A;

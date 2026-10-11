@@ -49,6 +49,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			singleplayer.getConnection().waitForChunksRender();
 			horsesAndFractures(context, singleplayer.getServer());
 			butchery(context, singleplayer.getServer());
+			meatsAndWool(context, singleplayer.getServer());
 			suffering(context, singleplayer.getServer());
 			hackModel(context, singleplayer.getServer());
 			sharedFate(context, singleplayer.getServer());
@@ -604,7 +605,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 	/**
 	 * Rotting zombies and anatomical slashes: sword blows aimed at a zombie's body must open slashes (long cuts along the
 	 * swing) in rotten flesh, deep enough for maggots; punches must leave round wounds; its blood must be rotten; and a
-	 * cow must still be ordinary meat.
+	 * cow must still be fresh beef, not rotten.
 	 */
 	private static void rot(ClientGameTestContext context, TestServerContext server) {
 		server.runCommand("kill @e[type=!minecraft:player]");
@@ -681,7 +682,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 
 			return "none";
 		});
-		check("MEAT".equals(cow), "a cow is not ordinary meat: " + cow);
+		check("BEEF".equals(cow), "a cow is not fresh beef: " + cow);
 	}
 
 	/**
@@ -846,6 +847,113 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		}
 		System.out.println("[FluidGoreTest] horses and fractures passed");
 	}
+	/** Pork and beef diced into their own cuts of meat; a sheep cut up in its herd bloodies its own wool and theirs. */
+	private static void meatsAndWool(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("tp @a 112.0 -60 -1.0 0 40");
+		server.runCommand("summon minecraft:pig 110.5 -60 2.5 {NoAI:1b,Rotation:[90f,0f]}");
+		server.runCommand("summon minecraft:cow 113.5 -60 2.5 {NoAI:1b,Rotation:[90f,0f]}");
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+		context.waitTicks(15);
+		context.runOnClient(mc -> GoreSystems.suffering().forceNextDeath(dev.fluidgore.suffer.Corpse.Kind.CONCUSSION, false));
+		server.runCommand("damage @e[type=minecraft:pig,limit=1] 100 minecraft:generic");
+		context.runOnClient(mc -> GoreSystems.suffering().forceNextDeath(dev.fluidgore.suffer.Corpse.Kind.CONCUSSION, false));
+		server.runCommand("damage @e[type=minecraft:cow,limit=1] 100 minecraft:generic");
+		context.waitTicks(40);
+		String meats = context.computeOnClient(mc -> {
+			for (var corpse : new java.util.ArrayList<>(GoreSystems.suffering().corpses())) {
+				var posed = ModelParts.pose(corpse.entity);
+				if (posed != null) {
+					GoreSystems.dismemberment().butchery().split(GoreSystems.blood(), mc.level, corpse, ModelParts.torso(posed.model()),
+							new net.minecraft.world.phys.Vec3(0, -1, 0));
+				}
+			}
+
+			for (int round = 0; round < 2; round++) {
+				for (var p : new java.util.ArrayList<>(GoreSystems.dismemberment().parts().parts())) {
+					if (!p.shattered) {
+						GoreSystems.dismemberment().butchery().cut(GoreSystems.blood(), mc.level, p, new net.minecraft.world.phys.Vec3(0, -1, 0));
+					}
+				}
+			}
+
+			long pork = 0;
+			long beef = 0;
+			for (var p : GoreSystems.dismemberment().parts().parts()) {
+				if (!p.shattered && p.rawFaces != 0 && p.wounds != null) {
+					pork += p.wounds.flesh() == dev.fluidgore.wound.Flesh.PORK ? 1 : 0;
+					beef += p.wounds.flesh() == dev.fluidgore.wound.Flesh.BEEF ? 1 : 0;
+				}
+			}
+
+			return pork + " " + beef;
+		});
+		System.out.println("[FluidGoreTest] diced pork and beef pieces: " + meats);
+		String[] counts = meats.split(" ");
+		check(Integer.parseInt(counts[0]) >= 4 && Integer.parseInt(counts[1]) >= 4, "pig and cow were not diced into pork and beef: " + meats);
+		context.waitTicks(25);
+		context.takeScreenshot("meats_diced");
+
+		// The herd: four sheep packed together; one is cut up among them.
+		server.runCommand("kill @e[type=!minecraft:player]");
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+		server.runCommand("tp @a 120.5 -60 -0.5 0 30");
+		for (double[] at : new double[][]{{119.5, 3.0}, {121.5, 3.0}, {120.5, 4.6}, {122.3, 4.4}}) {
+			server.runCommand("summon minecraft:sheep " + at[0] + " -60 " + at[1] + " {NoAI:1b,Rotation:[90f,0f]}");
+		}
+
+		context.waitTicks(15);
+		String wool = context.computeOnClient(mc -> {
+			java.util.List<net.minecraft.world.entity.animal.sheep.Sheep> herd = new java.util.ArrayList<>();
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e instanceof net.minecraft.world.entity.animal.sheep.Sheep sheep) {
+					herd.add(sheep);
+				}
+			}
+
+			herd.sort(java.util.Comparator.comparingDouble(s -> s.distanceToSqr(119.5, -60, 3.0)));
+			var victim = herd.getFirst();
+			var wounds = GoreSystems.dismemberment().wounds();
+			for (int i = 0; i < 6; i++) {
+				var posed = ModelParts.pose(victim);
+				var target = ModelHit.centre(victim, posed, ModelParts.torso(posed.model()));
+				var eye = target.add(Math.cos(i * 1.1) * 1.4, 0.8, Math.sin(i * 1.1) * 1.4 - 0.6);
+				var dir = target.subtract(eye).normalize();
+				var hit = wounds.strike(victim, eye, dir, 8, Weapon.BLADE, 6);
+				if (hit != null) {
+					dev.fluidgore.wound.HitFeedback.hit(mc.level, GoreSystems.blood(), victim, hit, Weapon.BLADE, dir);
+				}
+			}
+
+			float own = GoreSystems.dismemberment().wool().soak(victim.getId());
+			float others = 0.0F;
+			for (var sheep : herd.subList(1, herd.size())) {
+				others = Math.max(others, GoreSystems.dismemberment().wool().soak(sheep.getId()));
+			}
+
+			return own + " " + others;
+		});
+		System.out.println("[FluidGoreTest] bloody wool (victim, most spattered neighbour): " + wool);
+		String[] soak = wool.split(" ");
+		check(Float.parseFloat(soak[0]) > 0.4F && Float.parseFloat(soak[1]) > 0.02F, "wool did not soak up blood: " + wool);
+		context.waitTicks(10);
+		context.takeScreenshot("bloody_wool");
+		server.runCommand("kill @e[type=!minecraft:player]");
+		context.runOnClient(mc -> {
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+		System.out.println("[FluidGoreTest] meats and wool passed");
+	}
+
 	private static void butchery(ClientGameTestContext context, TestServerContext server) {
 		server.runCommand("kill @e[type=!minecraft:player]");
 		server.runCommand("tp @a 80.5 -60 0.5 0 35");

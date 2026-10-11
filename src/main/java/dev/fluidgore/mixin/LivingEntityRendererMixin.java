@@ -10,6 +10,7 @@ import dev.fluidgore.suffer.BodyPose;
 import dev.fluidgore.suffer.Corpse;
 import dev.fluidgore.suffer.Ragdoll;
 import dev.fluidgore.suffer.SufferPose;
+import dev.fluidgore.wound.BloodyWool;
 import dev.fluidgore.wound.Burns;
 import dev.fluidgore.wound.Wounds;
 import net.minecraft.client.model.EntityModel;
@@ -54,6 +55,7 @@ public abstract class LivingEntityRendererMixin {
 		}
 
 		state.setData(Burns.KEY, tint);
+		state.setData(BloodyWool.KEY, GoreSystems.dismemberment().wool().tint(entity.getId()));
 		state.setData(ModelParts.ENTITY_ID, entity.getId());
 
 		Corpse corpse = GoreSystems.suffering().corpse(entity.getId());

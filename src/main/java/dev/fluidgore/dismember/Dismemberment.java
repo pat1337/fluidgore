@@ -10,6 +10,7 @@ import dev.fluidgore.config.GoreLevel;
 import dev.fluidgore.suffer.Voice;
 import dev.fluidgore.trigger.EntityFilter;
 import dev.fluidgore.trigger.Fate;
+import dev.fluidgore.wound.BloodyWool;
 import dev.fluidgore.wound.Burns;
 import dev.fluidgore.wound.WoundSet;
 import dev.fluidgore.wound.Wounds;
@@ -52,6 +53,7 @@ public final class Dismemberment {
 	private final Wounds wounds = new Wounds();
 	private final Giblets giblets = new Giblets();
 	private final Burns burns = new Burns();
+	private final BloodyWool wool = new BloodyWool();
 	private final Butchery butchery = new Butchery();
 	/** Bodies torn to pieces by a blast: not drawn at all any more. */
 	private final IntOpenHashSet vaporized = new IntOpenHashSet();
@@ -71,6 +73,10 @@ public final class Dismemberment {
 
 	public Burns burns() {
 		return burns;
+	}
+
+	public BloodyWool wool() {
+		return wool;
 	}
 
 	public Giblets giblets() {
@@ -429,6 +435,7 @@ public final class Dismemberment {
 		wounds.tick(level, blood);
 		giblets.tick(level, blood);
 		burns.tick(level, blood);
+		wool.tick(level);
 		if (tick % 8 != 0 || missing.isEmpty()) {
 			return;
 		}
@@ -454,6 +461,7 @@ public final class Dismemberment {
 		vaporized.remove(entityId);
 		wounds.forget(entityId);
 		burns.forget(entityId);
+		wool.forget(entityId);
 		butchery.forget(entityId);
 	}
 
@@ -462,6 +470,7 @@ public final class Dismemberment {
 		vaporized.remove(entityId);
 		wounds.forget(entityId);
 		burns.forget(entityId);
+		wool.forget(entityId);
 		butchery.forget(entityId);
 	}
 
@@ -472,6 +481,7 @@ public final class Dismemberment {
 		giblets.clear();
 		vaporized.clear();
 		burns.clear();
+		wool.clear();
 		butchery.clear();
 		parts.clear();
 	}

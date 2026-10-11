@@ -7,6 +7,8 @@ import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.suffer.BodyPose;
 import dev.fluidgore.suffer.SufferPose;
+import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.wound.BloodyWool;
 import dev.fluidgore.wound.Burns;
 import dev.fluidgore.wound.WoundRenderer;
 import dev.fluidgore.wound.WoundSet;
@@ -14,6 +16,7 @@ import dev.fluidgore.wound.Wounds;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.model.Model;
+import net.minecraft.client.model.animal.sheep.SheepFurModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.client.renderer.feature.ModelFeatureRenderer;
@@ -112,6 +115,10 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 			WoundSet wounds = state.getData(Wounds.KEY);
 			if (wounds != null && wounds.count() > 0 && wounds.drawsOn(submit.model())) {
 				WoundRenderer.draw(wounds, poseStack, getVertexBuilder(WoundRenderer.renderType()), submit.lightCoords(), submit.overlayCoords());
+			} else if (wounds != null && wounds.count() > 0 && submit.model() instanceof SheepFurModel && GoreConfig.get().bloodyWool) {
+				// The fleece over the wounds is soaked with their blood.
+				WoundRenderer.drawStains(wounds, submit.model(), poseStack, getVertexBuilder(WoundRenderer.renderType()), submit.lightCoords(),
+						submit.overlayCoords());
 			}
 		}
 
@@ -126,6 +133,12 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 	)
 	private int fluidgore$char(int color, @Local(argsOnly = true) ModelFeatureRenderer.Submit<?> submit) {
 		if (submit.sheetedDecalPose() == null && submit.state() instanceof LivingEntityRenderState state) {
+			Integer soaked = submit.model() instanceof SheepFurModel ? state.getData(BloodyWool.KEY) : null;
+			if (soaked != null) {
+				// Blood in the wool: the whole fleece reddens with it.
+				color = Burns.apply(color, soaked);
+			}
+
 			Integer tint = state.getData(Burns.KEY);
 			if (tint != null) {
 				return Burns.apply(color, tint);

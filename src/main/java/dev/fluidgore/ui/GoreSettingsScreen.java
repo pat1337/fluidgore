@@ -70,7 +70,7 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 		this.list.addHeader(Component.translatable("fluidgore.header.dismemberment"));
 		this.list.addSmall(
 				scaledSlider("fluidgore.option.part_lifetime", 1, 120, 5, c.partLifetimeSeconds, "fluidgore.unit.seconds", v -> c.partLifetimeSeconds = v),
-				scaledSlider("fluidgore.option.max_parts", 1, 128, 1, c.maxDetachedParts, null, v -> c.maxDetachedParts = v),
+				scaledSlider("fluidgore.option.max_parts", 1, 256, 1, c.maxDetachedParts, null, v -> c.maxDetachedParts = v),
 				OptionInstance.createBoolean("fluidgore.option.play_with_parts", c.playWithParts, v -> c.playWithParts = v),
 				OptionInstance.createBoolean("fluidgore.option.blast_gore", c.blastGore, v -> c.blastGore = v),
 				OptionInstance.createBoolean("fluidgore.option.wounds", c.wounds, v -> c.wounds = v),
@@ -78,6 +78,7 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 				OptionInstance.createBoolean("fluidgore.option.rotten_undead", c.rottenUndead, v -> c.rottenUndead = v),
 				OptionInstance.createBoolean("fluidgore.option.inventory_sorting", c.inventorySorting, v -> c.inventorySorting = v),
 				OptionInstance.createBoolean("fluidgore.option.butchery", c.butchery, v -> c.butchery = v),
+				OptionInstance.createBoolean("fluidgore.option.bloody_wool", c.bloodyWool, v -> c.bloodyWool = v),
 				OptionInstance.createBoolean("fluidgore.option.fractures", c.fractures, v -> c.fractures = v),
 				OptionInstance.createBoolean("fluidgore.option.wound_players", c.woundPlayers, v -> c.woundPlayers = v)
 		);

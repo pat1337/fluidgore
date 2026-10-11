@@ -340,8 +340,12 @@ public final class Butchery {
 		Vec3 where = new Vec3(part.x, part.y, part.z);
 		BloodEmitter.burst(blood, level, where, part.bloodRgb, 0.03F, 6);
 		Flesh flesh = part.wounds != null ? part.wounds.flesh() : Flesh.MEAT;
-		ItemParticleOption meat = new ItemParticleOption(ParticleTypes.ITEM,
-				flesh == Flesh.POULTRY ? Items.CHICKEN : flesh == Flesh.ROTTEN ? Items.ROTTEN_FLESH : Items.BEEF);
+		ItemParticleOption meat = new ItemParticleOption(ParticleTypes.ITEM, switch (flesh) {
+			case POULTRY -> Items.CHICKEN;
+			case PORK -> Items.PORKCHOP;
+			case ROTTEN -> Items.ROTTEN_FLESH;
+			default -> Items.BEEF;
+		});
 		for (int i = 0; i < scraps; i++) {
 			level.addParticle(meat, where.x, where.y, where.z, (RANDOM.nextDouble() - 0.5) * 0.15, 0.05 + RANDOM.nextDouble() * 0.12,
 					(RANDOM.nextDouble() - 0.5) * 0.15);

@@ -62,6 +62,9 @@ public final class HitFeedback {
 			}
 		}
 
+		// Into the fleece, its own and its neighbours'.
+		GoreSystems.dismemberment().wool().hit(level, entity, at, depth);
+
 		// A pick or an axe knocks bits out of the wound once it is past the skin.
 		if (weapon.chips > 0 && depth >= 0.35F) {
 			int n = weapon.chips + RANDOM.nextInt(weapon.chips + 1);
@@ -90,7 +93,7 @@ public final class HitFeedback {
 					play(level, at, SoundEvents.HONEY_BLOCK_BREAK, 0.6F, 0.8F);
 				}
 			}
-			case MEAT, POULTRY -> {
+			case MEAT, POULTRY, PORK, BEEF -> {
 				switch (weapon) {
 					// A heavy, dead thud: meat over bone, no splash.
 					case BLUNT -> {

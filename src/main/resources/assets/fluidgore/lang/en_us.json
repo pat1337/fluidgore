@@ -70,6 +70,8 @@
 	"fluidgore.option.fractures.tooltip": "Blunt blows add up on the bone they hit until it breaks with a crack: the skull caves in, the ribs stove in, a leg snaps and hangs crooked. Keep going and the head is smashed and the limb torn off.",
 	"fluidgore.option.butchery": "Butchery",
 	"fluidgore.option.butchery.tooltip": "Right-click a dead chicken with an empty hand to pluck it. Cut through a carcass to the bone with a blade and it splits; a blade on any loose piece cuts it in two, down to dice.",
+	"fluidgore.option.bloody_wool": "Bloody Wool",
+	"fluidgore.option.bloody_wool.tooltip": "Sheep wool soaks up blood: stains around wounds, the whole fleece reddening as the sheep bleeds, and sheep standing close by spattered too. Rain and water wash it out.",
 	"fluidgore.option.rotten_undead": "Rotten Undead",
 	"fluidgore.option.rotten_undead.tooltip": "Zombies, drowned, zombified piglins, zoglins and zombie horses are rotting meat: wounds marbled black and green, waxy fat, putrid muscle, pus and maggots, and thick dark rotten blood.",
 	"fluidgore.option.wound_players": "Wounds on Players",

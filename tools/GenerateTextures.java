@@ -411,7 +411,7 @@ public final class GenerateTextures {
 
 
 	/**
-	 * wounds.png: an 8x14 grid of 16px pixel-art tiles, greyscale with hard alpha; the game tints each by the body's
+	 * wounds.png: an 8x18 grid of 16px pixel-art tiles, greyscale with hard alpha; the game tints each by the body's
 	 * flesh and blood. Eight variants per row.
 	 * <ul>
 	 * <li>Rows 0-3, round wounds (lacerations from fists, clubs, teeth, points): bruise, gash, open meat, bone.</li>
@@ -423,10 +423,13 @@ public final class GenerateTextures {
 	 *     ragged where feathers are left.</li>
 	 * <li>Row 12, crushed bone: a caved-in skull or a snapped limb, splinters of bone at odd angles in dark blood.</li>
 	 * <li>Row 13, stove-in ribs: broken rib ends, pale bars snapped and pushed in, over a dark hollow.</li>
+	 * <li>Rows 14-17, the cut face of a piece of meat, as on a butcher's block: the whole face of muscle with its grain,
+	 *     the marbling (veins and flecks of fat), a rim of fat along one edge (column % 4 says which), and wet smears of
+	 *     blood (also the blood soaked into a sheep's wool).</li>
 	 * </ul>
 	 */
 	private static BufferedImage wounds() {
-		BufferedImage image = new BufferedImage(128, 224, BufferedImage.TYPE_INT_ARGB);
+		BufferedImage image = new BufferedImage(128, 288, BufferedImage.TYPE_INT_ARGB);
 		for (int v = 0; v < 8; v++) {
 			for (int layer = 0; layer < 4; layer++) {
 				woundTile(image, layer, v, new Random(11000 + layer * 1000 + v));
@@ -441,6 +444,10 @@ public final class GenerateTextures {
 			skinTile(image, v, new Random(33000 + v));
 			crushTile(image, v, new Random(34000 + v));
 			ribsTile(image, v, new Random(35000 + v));
+			grainTile(image, v, new Random(36000 + v));
+			marbleTile(image, v, new Random(37000 + v));
+			rimTile(image, v, new Random(38000 + v));
+			stainTile(image, v, new Random(39000 + v));
 		}
 
 		return image;
@@ -641,6 +648,119 @@ public final class GenerateTextures {
 				if (yy < 16) {
 					image.setRGB(ox + x, oy + yy, argb(1.0, x == brk - 1 || x == brk + 1 ? 0.72 : 0.9 + random.nextDouble() * 0.1));
 				}
+			}
+		}
+	}
+
+	/**
+	 * The cut face of muscle, edge to edge: bundles of fibre in bands across the tile, each pixel a little lighter or
+	 * darker, the odd dark pore where a vessel was cut. Fully opaque.
+	 */
+	private static void grainTile(BufferedImage image, int variant, Random random) {
+		int ox = variant * 16;
+		int oy = 14 * 16;
+		double[] band = new double[16];
+		for (int i = 0; i < band.length; i++) {
+			band[i] = 0.78 + random.nextDouble() * 0.16;
+		}
+
+		double slope = (random.nextDouble() - 0.5) * 0.5;
+		for (int y = 0; y < 16; y++) {
+			for (int x = 0; x < 16; x++) {
+				int b = Math.floorMod((int) Math.floor(y + x * slope), 16);
+				double light = band[b] + (random.nextDouble() - 0.5) * 0.1;
+				if (random.nextDouble() < 0.025) {
+					light = 0.45;
+				}
+
+				image.setRGB(ox + x, oy + y, argb(1.0, light));
+			}
+		}
+	}
+
+	/** Marbling: thin wandering veins of fat through the meat and loose flecks of it. Only the fat is drawn. */
+	private static void marbleTile(BufferedImage image, int variant, Random random) {
+		int ox = variant * 16;
+		int oy = 15 * 16;
+		boolean[][] fat = new boolean[16][16];
+		int veins = 2 + random.nextInt(3);
+		for (int v = 0; v < veins; v++) {
+			double x = random.nextDouble() * 16.0;
+			double y = random.nextDouble() * 16.0;
+			double heading = random.nextDouble() * Math.PI * 2.0;
+			int steps = 8 + random.nextInt(14);
+			for (int s = 0; s < steps; s++) {
+				set(fat, (int) x, (int) y);
+				heading += (random.nextDouble() - 0.5) * 0.9;
+				x += Math.cos(heading);
+				y += Math.sin(heading);
+			}
+		}
+
+		for (int i = 0; i < 10; i++) {
+			set(fat, random.nextInt(16), random.nextInt(16));
+		}
+
+		for (int y = 0; y < 16; y++) {
+			for (int x = 0; x < 16; x++) {
+				image.setRGB(ox + x, oy + y, fat[y][x] ? argb(1.0, 0.85 + random.nextDouble() * 0.15) : 0);
+			}
+		}
+	}
+
+	/**
+	 * A rim of fat along one edge of the cut ({@code variant % 4}: top, right, bottom, left), ragged where it meets
+	 * the meat, with the darker line of skin on the outside.
+	 */
+	private static void rimTile(BufferedImage image, int variant, Random random) {
+		int ox = variant * 16;
+		int oy = 16 * 16;
+		int[] depth = new int[16];
+		int d = 3 + random.nextInt(2);
+		for (int i = 0; i < 16; i++) {
+			d = Math.max(2, Math.min(5, d + random.nextInt(3) - 1));
+			depth[i] = d;
+		}
+
+		for (int y = 0; y < 16; y++) {
+			for (int x = 0; x < 16; x++) {
+				// Distance in from the rim's edge, and position along it.
+				int in = switch (variant % 4) {
+					case 0 -> y;
+					case 1 -> 15 - x;
+					case 2 -> 15 - y;
+					default -> x;
+				};
+				int along = variant % 2 == 0 ? x : y;
+				int argb = in >= depth[along] ? 0 : in == 0 ? argb(1.0, 0.72) : argb(1.0, 0.9 + random.nextDouble() * 0.1);
+				image.setRGB(ox + x, oy + y, argb);
+			}
+		}
+	}
+
+	/** A wet smear of blood: an uneven blot with runs dripping down from it, darker where it pools. */
+	private static void stainTile(BufferedImage image, int variant, Random random) {
+		int ox = variant * 16;
+		int oy = 17 * 16;
+		boolean[][] wet = new boolean[16][16];
+		int blots = 3 + random.nextInt(3);
+		for (int i = 0; i < blots; i++) {
+			fillCircle(wet, 4 + random.nextDouble() * 8, 3 + random.nextDouble() * 7, 1.5 + random.nextDouble() * 2.5);
+		}
+
+		for (int i = 0; i < 3; i++) {
+			int x = 3 + random.nextInt(10);
+			int from = 6 + random.nextInt(4);
+			int to = Math.min(15, from + 3 + random.nextInt(6));
+			for (int y = from; y <= to; y++) {
+				set(wet, x, y);
+			}
+		}
+
+		for (int y = 0; y < 16; y++) {
+			for (int x = 0; x < 16; x++) {
+				double light = 0.7 + random.nextDouble() * 0.3 - (y > 10 ? 0.12 : 0.0);
+				image.setRGB(ox + x, oy + y, wet[y][x] && random.nextDouble() > 0.06 ? argb(1.0, light) : 0);
 			}
 		}
 	}

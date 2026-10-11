@@ -401,8 +401,7 @@ public final class Wounds {
 			local.setComponent(axis, sign > 0 ? max[axis] : min[axis]);
 			local.setComponent(b, (min[b] + max[b]) * 0.5F);
 			local.setComponent(c, (min[c] + max[c]) * 0.5F);
-			float size = Math.max(max[b] - min[b], max[c] - min[c]) * 0.75F;
-			set.stump(new ModelHit.Result(piece, cube, axis, sign, local, null, Vec3.ZERO, Vec3.ZERO, 0.0), size, depth, RANDOM);
+			set.cutFace(new ModelHit.Result(piece, cube, axis, sign, local, null, Vec3.ZERO, Vec3.ZERO, 0.0), depth, RANDOM);
 		}
 
 		return set;

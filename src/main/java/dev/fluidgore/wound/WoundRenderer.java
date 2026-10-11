@@ -3,6 +3,8 @@ package dev.fluidgore.wound;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.fluidgore.dismember.ModelParts;
+import dev.fluidgore.mixin.ModelPartAccessor;
+import net.minecraft.client.model.Model;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
@@ -48,11 +50,24 @@ public final class WoundRenderer {
 	private static final Layer[] STOVE_IN = {
 			new Layer(0, 0.0F, 1.5F, Flesh.Tissue.BRUISE), new Layer(1, 0.0F, 1.1F, Flesh.Tissue.SPLIT), new Layer(13, 0.0F, 1.0F, Flesh.Tissue.BONE)};
 	private static final Layer[] SLASH_ROTTEN = rotten(SLASH);
+	/**
+	 * The cut face of a piece of meat, edge to edge as on a butcher's block: the grain of the muscle, veins of fat through
+	 * it, a rim of fat along one edge, wet smears of blood, and the bone in a piece big enough to have it. Steak is
+	 * marbled; pork has its rind of fat; chicken is plain pink meat.
+	 */
+	private static final Layer GRAIN = new Layer(14, 0.0F, 1.0F, Flesh.Tissue.MUSCLE);
+	private static final Layer MARBLE = new Layer(15, 0.0F, 1.0F, Flesh.Tissue.FAT);
+	private static final Layer RIM = new Layer(16, 0.0F, 1.0F, Flesh.Tissue.FAT);
+	private static final Layer SMEAR = new Layer(17, 0.0F, 0.8F, Flesh.Tissue.SPLIT);
+	private static final Layer CUT_BONE = new Layer(3, 0.75F, 0.3F, Flesh.Tissue.BONE);
+	private static final Layer[] CUT_MEAT = {GRAIN, MARBLE, RIM, SMEAR, CUT_BONE};
+	private static final Layer[] CUT_POULTRY = {GRAIN, SMEAR, CUT_BONE};
+	private static final Layer[] CUT_ROTTEN = rotten(CUT_MEAT);
 	/** Outward lift per layer, in model pixels, so the layers stack instead of fighting. */
 	private static final float LIFT = 0.02F;
-	/** wounds.png is 8 tiles across and 14 down. */
+	/** wounds.png is 8 tiles across and 18 down. */
 	private static final float TILE_U = 1.0F / 8.0F;
-	private static final float TILE_V = 1.0F / 14.0F;
+	private static final float TILE_V = 1.0F / 18.0F;
 
 	private static final Vector3f POS = new Vector3f();
 	private static final Vector3f NORMAL = new Vector3f();
@@ -101,6 +116,81 @@ public final class WoundRenderer {
 		draw(set, stack, buffer, light, overlay);
 	}
 
+	/**
+	 * Blood soaked into a coat drawn over the body ({@code coat}, a sheep's wool): a wet stain on the fleece over every
+	 * wound that bleeds, wider than the wound as the wool wicks it, the deeper the wider. {@code poseStack} holds the
+	 * coat's root transform, as after renderToBuffer.
+	 */
+	public static void drawStains(WoundSet set, Model<?> coat, PoseStack poseStack, VertexConsumer buffer, int light, int overlay) {
+		ModelPart[] parts = ModelParts.index(coat);
+		ModelPart torso = ModelParts.torso(coat);
+		for (int i = 0; i < set.count; i++) {
+			if (set.severity[i] < 0.25F || set.morph[i] == WoundSet.PLUCK) {
+				continue;
+			}
+
+			ModelPart part = set.bodyPart[i] == null ? torso : parts[set.bodyPart[i].ordinal()];
+			if (part == null || ((ModelPartAccessor) (Object) part).fluidgore$getCubes().isEmpty()) {
+				continue;
+			}
+
+			ModelPart[] chain = ModelParts.chain(coat.root(), part);
+			if (chain.length == 0 || !visible(chain)) {
+				continue;
+			}
+
+			// The fleece stands off the body: its faces are where the wool's grown vertices are.
+			ModelPart.Cube cube = ((ModelPartAccessor) (Object) part).fluidgore$getCubes().getFirst();
+			float[] min = {Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE};
+			float[] max = {-Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE};
+			for (ModelPart.Polygon polygon : cube.polygons) {
+				for (ModelPart.Vertex vertex : polygon.vertices()) {
+					float[] p = {vertex.x(), vertex.y(), vertex.z()};
+					for (int k = 0; k < 3; k++) {
+						min[k] = Math.min(min[k], p[k]);
+						max[k] = Math.max(max[k], p[k]);
+					}
+				}
+			}
+
+			int a = set.axis[i];
+			int b = (a + 1) % 3;
+			int c = (a + 2) % 3;
+			float r = set.radius[i] * (1.4F + 1.2F * set.severity[i]);
+			float b0 = Math.max(min[b], set.u[i] - r);
+			float b1 = Math.min(max[b], set.u[i] + r);
+			float c0 = Math.max(min[c], set.v[i] - r);
+			float c1 = Math.min(max[c], set.v[i] + r);
+			if (b0 >= b1 || c0 >= c1) {
+				continue;
+			}
+
+			poseStack.pushPose();
+			for (ModelPart link : chain) {
+				link.translateAndRotate(poseStack);
+			}
+
+			PoseStack.Pose pose = poseStack.last();
+			pose.transformNormal(NORMAL.set(0.0F).setComponent(a, set.sign[i]), NORMAL);
+			float tu = set.variant[i] * TILE_U;
+			float tv = SMEAR.row() * TILE_V;
+			float span = 1.0F / (2.0F * r);
+			float u0 = tu + (b0 - (set.u[i] - r)) * span * TILE_U;
+			float u1 = tu + (b1 - (set.u[i] - r)) * span * TILE_U;
+			float v0 = tv + (c0 - (set.v[i] - r)) * span * TILE_V;
+			float v1 = tv + (c1 - (set.v[i] - r)) * span * TILE_V;
+			float depth = (set.sign[i] > 0 ? max[a] : min[a]) + set.sign[i] * LIFT;
+			// Blood in wool dries darker than it ran.
+			int color = 0xFF000000 | set.flesh.tint(Flesh.Tissue.SPLIT, set.blood);
+			Matrix4f m = pose.pose();
+			vertex(buffer, m, a, b, c, depth, b0, c0, color, u0, v0, light, overlay);
+			vertex(buffer, m, a, b, c, depth, b1, c0, color, u1, v0, light, overlay);
+			vertex(buffer, m, a, b, c, depth, b1, c1, color, u1, v1, light, overlay);
+			vertex(buffer, m, a, b, c, depth, b0, c1, color, u0, v1, light, overlay);
+			poseStack.popPose();
+		}
+	}
+
 	private static boolean visible(ModelPart[] chain) {
 		for (ModelPart part : chain) {
 			if (!part.visible) {
@@ -126,6 +216,7 @@ public final class WoundRenderer {
 			case WoundSet.PLUCK -> PLUCKED;
 			case WoundSet.CRUSH -> CRUSHED;
 			case WoundSet.RIBS -> STOVE_IN;
+			case WoundSet.CUT -> set.flesh.rots() ? CUT_ROTTEN : set.flesh == Flesh.POULTRY ? CUT_POULTRY : CUT_MEAT;
 			default -> set.flesh.rots() ? slash ? SLASH_ROTTEN : ROUND_ROTTEN : slash ? SLASH : ROUND;
 		};
 		for (int n = 0; n < layers.length; n++) {
@@ -136,7 +227,8 @@ public final class WoundRenderer {
 
 			// Each layer grows in as the wound deepens through it.
 			float grow = Mth.clamp((severity - layer.opens()) / 0.25F + 0.4F, 0.4F, 1.0F);
-			float r = set.radius[i] * layer.size() * grow;
+			// A cut face is meat right across, so its layers span the whole face whatever its size.
+			float r = (set.morph[i] == WoundSet.CUT ? Math.max(max[b] - min[b], max[c] - min[c]) * 0.5F : set.radius[i]) * layer.size() * grow;
 			float b0 = Math.max(min[b], set.u[i] - r);
 			float b1 = Math.min(max[b], set.u[i] + r);
 			float c0 = Math.max(min[c], set.v[i] - r);

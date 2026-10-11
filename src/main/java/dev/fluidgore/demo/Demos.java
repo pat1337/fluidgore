@@ -24,6 +24,7 @@ import org.jspecify.annotations.Nullable;
  */
 public final class Demos {
 	public static final List<Demo> ALL = List.of(
+			new Demo("meats", "2.7.0", "A pig and a cow diced into pork and steak, and a sheep cut up in its herd, the wool soaking red", false, Demos::meats),
 			new Demo("dice", "2.6.0", "A horse and a donkey butchered like chickens: split in a few chops, then diced down to raw chunks", false, Demos::dice),
 			new Demo("horse", "2.5.0", "Horse death, broken bones and a split carcass", false, Demos::horse),
 			new Demo("butcher", "2.5.0", "A chicken plucked bare, jointed, its carcass split and diced", false, Demos::butcher),
@@ -84,6 +85,41 @@ public final class Demos {
 			}
 		}).pause(100);
 	}
+	/** Pork and steak on the block, then a sheep hacked at in the middle of its herd until their wool is red. */
+	private static void meats(Script s, Stage st) {
+		s.summon(st, "pig", "fgd_pig", -2, 0, 4, 90.0F, "");
+		s.summon(st, "cow", "fgd_cow", 2, 0, 4, 90.0F, "");
+		s.pause(20).hold("minecraft:iron_axe").say("A pig and a cow, killed and split");
+		s.hit("fgd_pig", 100).hit("fgd_cow", 100).pause(70);
+		s.client(mc -> {
+			for (Corpse c : new ArrayList<>(GoreSystems.suffering().corpses())) {
+				ModelParts.Posed posed = ModelParts.pose(c.entity);
+				if (posed != null) GoreSystems.dismemberment().butchery().split(GoreSystems.blood(), mc.level, c, ModelParts.torso(posed.model()), new Vec3(0, -1, 0));
+			}
+		}).pause(20);
+		s.say("Diced: pale pork under its white fat, red steak marbled with it");
+		for (int i = 0; i < 3; i++) {
+			s.client(mc -> {
+				for (GorePart p : new ArrayList<>(GoreSystems.dismemberment().parts().parts())) {
+					if (!p.shattered) GoreSystems.dismemberment().butchery().cut(GoreSystems.blood(), mc.level, p, mc.player.getViewVector(1.0F));
+				}
+			}).pause(25);
+		}
+
+		s.pause(80);
+		for (int i = 0; i < 5; i++) {
+			s.summon(st, "sheep", "fgd_sheep" + i, 6 + (i % 3) * 1.3, 0, 4 + (i / 3) * 1.5, 90.0F, "");
+		}
+
+		s.pause(20).hold("minecraft:iron_sword").say("A sheep cut up in the middle of its herd: the wool drinks the blood, theirs too");
+		for (int i = 0; i < 4; i++) {
+			s.hit("fgd_sheep1", 1.5F).pause(15);
+		}
+
+		s.hit("fgd_sheep1", 100).pause(120);
+		s.hit("fgd_sheep3", 2.0F).pause(10).hit("fgd_sheep3", 100).pause(160);
+	}
+
 	/** A horse and a donkey worked like chickens with a cleaver: opened and split in a few chops, every piece diced down. */
 	private static void dice(Script s, Stage st) {
 		s.summon(st, "horse", "fgd_dice_horse", -2, 0, 4, 90.0F, "");

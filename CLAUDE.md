@@ -133,8 +133,8 @@ Mod Menu 21.0.0 (compile-only, soft dependency).
 colour. Tiles 0-9 are smooth (splats 0-3, puddle 4, pool 5, droplet 6, footprint 7, streak 8, small splat 9) and
 10-15 are pixel-art "redstone" (splats 10-13, puddle 14, droplet 15). **The atlas is full.** Adding a tile means
 growing the grid (e.g. 8x4) and updating `BloodTextures.GRID` math and the generator. `wounds.png` is separate: an
-8x12 grid of 16px greyscale tiles, eight variants per row: rows 0-3 round (bruise, gash, meat, bone), 4-8 slash (margin,
-fat, split, muscle, bone; column % 4 = angle), 9 pus, 10 maggots, 11 plucked skin. All PNGs come from
+8x18 grid of 16px greyscale tiles, eight variants per row: rows 0-3 round (bruise, gash, meat, bone), 4-8 slash (margin,
+fat, split, muscle, bone; column % 4 = angle), 9 pus, 10 maggots, 11 plucked skin, 12 crushed bone, 13 stove-in ribs, 14-17 cut-meat grain, marbling, fat rim, blood smear. All PNGs come from
 `tools/GenerateTextures.java` (deterministic seeds). Never hand-edit the PNG.
 
 ## Looking up APIs
@@ -208,3 +208,4 @@ severable parts; severed heads can't blink.
 
 - **2.5.0 horse/bone additions**: horse head includes head_parts, trunk attachments detach separately for splitting; horse death/blood tuning; Wounds bone thresholds and WoundSet fracture masks with render-time pose deformation. Regression: horsesAndFractures. Demo: horse. Includes unreleased butchery.
 - **2.6.0**: butchery for big animals: `Butchery.hackApart` splits multi-cube pieces into single-cube ones (child offsets baked, child rotation dropped), `GorePart.rawFaces` bitmask carried through every cut (`Wounds.cutFaces(..., rawFaces, depth)`), `Flesh.POULTRY` (chicken: pink), `CorpseStrike.BUTCHER_SHARE` (a blade on a corpse cuts at least 60% of max health deep). Game test: `horsesAndFractures` dices horse/donkey/mule. Demo: `dice`.
+- **2.7.0**: `Flesh.PORK` / `Flesh.BEEF`, `WoundSet.CUT` morph (cut faces span the whole face; rows 14-17 of wounds.png: grain, marbling, fat rim, blood smear, grid now 8x18), `wound/BloodyWool` (per-sheep soak 0..1 from `HitFeedback.hit`, herd spatter capped at 0.35, `BloodyWool.KEY` tint on `SheepFurModel` in `ModelFeatureRendererMixin`, `WoundRenderer.drawStains` on the fleece), `bloodyWool` setting, `maxDetachedParts` 160 (`configVersion` 5). Game test: `meatsAndWool`. Demo: `meats`.

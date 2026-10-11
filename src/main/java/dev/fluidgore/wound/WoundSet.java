@@ -27,6 +27,8 @@ public final class WoundSet {
 	public static final byte CRUSH = 3;
 	/** The ribcage stove in: broken rib ends in a dark hollow. */
 	public static final byte RIBS = 4;
+	/** The cut face of a diced piece: the whole face is meat, as on a butcher's block. */
+	public static final byte CUT = 5;
 	/** Where the trunk's bone damage is kept, after the severable parts. */
 	public static final int TORSO = BodyPart.values().length;
 	/** Widest a wound can be hacked open, in model pixels. */
@@ -225,8 +227,13 @@ public final class WoundSet {
 		stump(at, size, 1.0F, random);
 	}
 
-	/** A raw cut face {@code depth} deep: 1 shows the bone, less only the meat. */
-	void stump(ModelHit.Result at, float size, float depth, RandomSource random) {
+	/** The whole face of a cube cut through, {@code depth} deep (1 shows the bone in it). */
+	void cutFace(ModelHit.Result at, float depth, RandomSource random) {
+		morph[stump(at, 1.5F, depth, random)] = CUT;
+	}
+
+	/** A raw cut face {@code depth} deep: 1 shows the bone, less only the meat. Returns its index. */
+	int stump(ModelHit.Result at, float size, float depth, RandomSource random) {
 		int i = count < MAX ? count++ : shallowest();
 		int b = (at.axis() + 1) % 3;
 		int c = (at.axis() + 2) % 3;
@@ -243,6 +250,7 @@ public final class WoundSet {
 		severity[i] = depth;
 		// Stumps bleed through the dismemberment's own stump drip.
 		ox[i] = oy[i] = oz[i] = Float.NaN;
+		return i;
 	}
 
 	/** Deepest wound on a severable part (0 if none). */
