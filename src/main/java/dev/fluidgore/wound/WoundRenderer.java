@@ -2,6 +2,7 @@ package dev.fluidgore.wound;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.mixin.ModelPartAccessor;
 import net.minecraft.client.model.Model;
@@ -9,6 +10,7 @@ import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.resources.Identifier;
+import net.minecraft.util.LightCoordsUtil;
 import net.minecraft.util.Mth;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
@@ -191,6 +193,11 @@ public final class WoundRenderer {
 		}
 	}
 
+	/** The open cut of an enderman, with Glowing Ender Blood on. */
+	private static boolean glows(WoundSet set, Flesh.Tissue tissue) {
+		return set.flesh == Flesh.ENDER && tissue == Flesh.Tissue.SPLIT && GoreConfig.get().glowingEnderBlood;
+	}
+
 	private static boolean visible(ModelPart[] chain) {
 		for (ModelPart part : chain) {
 			if (!part.visible) {
@@ -247,11 +254,13 @@ public final class WoundRenderer {
 			float v1 = tv + (c1 - (set.v[i] - r)) * spanV;
 			float depth = face + set.sign[i] * LIFT * (n + 1);
 			int color = 0xFF000000 | set.flesh.tint(layer.tissue(), set.blood);
+			// The raw cut in an enderman glows with its blood.
+			int lit = glows(set, layer.tissue()) ? LightCoordsUtil.FULL_BRIGHT : light;
 			Matrix4f m = pose.pose();
-			vertex(buffer, m, a, b, c, depth, b0, c0, color, u0, v0, light, overlay);
-			vertex(buffer, m, a, b, c, depth, b1, c0, color, u1, v0, light, overlay);
-			vertex(buffer, m, a, b, c, depth, b1, c1, color, u1, v1, light, overlay);
-			vertex(buffer, m, a, b, c, depth, b0, c1, color, u0, v1, light, overlay);
+			vertex(buffer, m, a, b, c, depth, b0, c0, color, u0, v0, lit, overlay);
+			vertex(buffer, m, a, b, c, depth, b1, c0, color, u1, v0, lit, overlay);
+			vertex(buffer, m, a, b, c, depth, b1, c1, color, u1, v1, lit, overlay);
+			vertex(buffer, m, a, b, c, depth, b0, c1, color, u0, v1, lit, overlay);
 		}
 	}
 

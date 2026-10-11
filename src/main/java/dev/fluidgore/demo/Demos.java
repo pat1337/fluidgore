@@ -24,6 +24,7 @@ import org.jspecify.annotations.Nullable;
  */
 public final class Demos {
 	public static final List<Demo> ALL = List.of(
+			new Demo("glow", "2.9.0", "Ender blood glows: an enderman bled out, best watched at night or with a shader pack", false, Demos::glow),
 			new Demo("ender", "2.8.0", "An enderman cut apart: violet ender blood, portal sparks from its wounds, and limbs that keep teleporting", false, Demos::ender),
 			new Demo("meats", "2.7.0", "A pig and a cow diced into pork and steak, and a sheep cut up in its herd, the wool soaking red", false, Demos::meats),
 			new Demo("dice", "2.6.0", "A horse and a donkey butchered like chickens: split in a few chops, then diced down to raw chunks", false, Demos::dice),
@@ -86,6 +87,17 @@ public final class Demos {
 			}
 		}).pause(100);
 	}
+	/** Ender blood glowing violet where it lies; at night or with shaders it lights up the ground. */
+	private static void glow(Script s, Stage st) {
+		s.summon(st, "enderman", "fgd_glow", 0, 0, 4, 90.0F, "");
+		s.pause(20).hold("minecraft:iron_sword").say("Ender blood glows: watch it at night, or with a shader pack");
+		for (int i = 0; i < 5; i++) {
+			s.hit("fgd_glow", 3.0F).pause(12);
+		}
+
+		s.hit("fgd_glow", 100).say("Every splat, puddle and drop of it, and the raw cuts in the body, stay lit").pause(200);
+	}
+
 	/** An enderman hacked apart: ender blood and portal sparks, then its severed limbs blinking about on their own. */
 	private static void ender(Script s, Stage st) {
 		s.summon(st, "enderman", "fgd_enderman", 0, 0, 4, 90.0F, "");

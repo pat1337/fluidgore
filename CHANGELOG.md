@@ -2,6 +2,19 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.9.0]
+
+Ender blood glows.
+
+### Added
+- Glowing Ender Blood setting (on): enderman blood (splats, puddles, drops, footprints) and the raw magenta cuts in an
+  enderman are drawn at full brightness, so they glow violet in the dark. With Iris shader packs they stay lit and
+  most packs bloom them.
+- Demo: `glow`.
+
+### Changed
+- Ender blood is a deeper violet (0x7616C4), a hue no other blood colour shares, so it can be told apart at any brightness.
+
 ## [2.8.0]
 
 Endermen of their own, and limbs that stay.

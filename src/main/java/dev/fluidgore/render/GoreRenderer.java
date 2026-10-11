@@ -7,6 +7,7 @@ import dev.fluidgore.blood.BloodCell;
 import dev.fluidgore.blood.BloodTextures;
 import dev.fluidgore.blood.Decal;
 import dev.fluidgore.blood.DropletSystem;
+import dev.fluidgore.config.BloodColor;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.GorePart;
 import dev.fluidgore.suffer.Corpse;
@@ -27,6 +28,7 @@ import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.Direction;
+import net.minecraft.util.LightCoordsUtil;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -153,7 +155,7 @@ public final class GoreRenderer {
 			float b1 = d.pieces[i + 3];
 			float h = d.pieces[i + 4];
 			emitPlanarQuad(pose, buffer, d.face, d.centerA, d.centerB, d.plane + h + lift * sign(d.face), a0, b0, a1, b1,
-					d.half, size, d.tile, d.orient, color, d.light, cam);
+					d.half, size, d.tile, d.orient, color, glow(d.rgb, d.light), cam);
 		}
 	}
 
@@ -194,7 +196,7 @@ public final class GoreRenderer {
 			}
 
 			emitPlanarQuad(pose, buffer, Direction.UP, cx, cz, cell.surfaceY + h + CELL_LIFT, a0, b0, a1, b1,
-					half, half * 2.0F, tile, orient, color, cell.light, cam);
+					half, half * 2.0F, tile, orient, color, glow(cell.rgb, cell.light), cam);
 		}
 	}
 
@@ -283,10 +285,11 @@ public final class GoreRenderer {
 
 			float s = d.size;
 			int color = argb(d.rgb, 0.92F);
-			emitBillboardVertex(pose, buffer, x, y, z, right, up, -s, -s, u0, v0 + span, color, d.light, normal);
-			emitBillboardVertex(pose, buffer, x, y, z, right, up, -s, s, u0, v0, color, d.light, normal);
-			emitBillboardVertex(pose, buffer, x, y, z, right, up, s, s, u0 + span, v0, color, d.light, normal);
-			emitBillboardVertex(pose, buffer, x, y, z, right, up, s, -s, u0 + span, v0 + span, color, d.light, normal);
+			int light = glow(d.rgb, d.light);
+			emitBillboardVertex(pose, buffer, x, y, z, right, up, -s, -s, u0, v0 + span, color, light, normal);
+			emitBillboardVertex(pose, buffer, x, y, z, right, up, -s, s, u0, v0, color, light, normal);
+			emitBillboardVertex(pose, buffer, x, y, z, right, up, s, s, u0 + span, v0, color, light, normal);
+			emitBillboardVertex(pose, buffer, x, y, z, right, up, s, -s, u0 + span, v0 + span, color, light, normal);
 		}
 	}
 
@@ -348,6 +351,11 @@ public final class GoreRenderer {
 		}
 
 		poseStack.popPose();
+	}
+
+	/** Full brightness for glowing ender blood (see {@link BloodColor#glows}), else the light where it is. */
+	private static int glow(int rgb, int light) {
+		return BloodColor.glows(rgb) ? LightCoordsUtil.FULL_BRIGHT : light;
 	}
 
 	private static float sign(Direction face) {

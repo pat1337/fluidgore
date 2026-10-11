@@ -921,6 +921,27 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		System.out.println("[FluidGoreTest] enderman limbs blinked up to " + moved + " blocks");
 		check(moved > 0.8, "enderman limbs did not teleport: " + moved);
 		context.takeScreenshot("enderman_limbs");
+
+		// Glowing ender blood: told apart from every other blood at any brightness it comes out at.
+		for (float f = 0.7F; f <= 1.31F; f += 0.05F) {
+			int c = dev.fluidgore.config.BloodColor.ENDER.rgb;
+			int scaled = Math.min(255, Math.round((c >> 16 & 0xFF) * f)) << 16 | Math.min(255, Math.round((c >> 8 & 0xFF) * f)) << 8
+					| Math.min(255, Math.round((c & 0xFF) * f));
+			check(dev.fluidgore.config.BloodColor.glows(scaled), "ender blood at brightness " + f + " does not glow");
+			for (var other : dev.fluidgore.config.BloodColor.values()) {
+				if (other != dev.fluidgore.config.BloodColor.ENDER) {
+					int o = other.rgb;
+					int s = Math.min(255, Math.round((o >> 16 & 0xFF) * f)) << 16 | Math.min(255, Math.round((o >> 8 & 0xFF) * f)) << 8
+							| Math.min(255, Math.round((o & 0xFF) * f));
+					check(!dev.fluidgore.config.BloodColor.glows(s), other + " blood glows");
+				}
+			}
+		}
+
+		server.runCommand("time set midnight");
+		context.waitTicks(10);
+		context.takeScreenshot("enderman_glow_night");
+		server.runCommand("time set noon");
 		server.runCommand("kill @e[type=!minecraft:player]");
 		context.runOnClient(mc -> {
 			GoreSystems.dismemberment().clear();

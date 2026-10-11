@@ -126,6 +126,8 @@ public final class GoreConfig {
 	public boolean butchery = true;
 	/** Sheep's wool soaks up blood: stains round wounds, the coat reddening as it bleeds, the herd round it spattered. */
 	public boolean bloodyWool = true;
+	/** Ender blood (and the raw cuts in an enderman) drawn at full brightness: it glows in the dark and with shaders. */
+	public boolean glowingEnderBlood = true;
 	/** Blunt blows add up on the bone they land on until it breaks: skulls cave in, ribs stove in, limbs snap and come off. */
 	public boolean fractures = true;
 	/** Wounds on other players. Everyone with the mod sees the same wounds (see trigger/Fate). */
