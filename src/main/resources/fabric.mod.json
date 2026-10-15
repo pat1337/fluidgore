@@ -3,12 +3,13 @@
 	"id": "fluidgore",
 	"version": "${version}",
 	"name": "Fluid Gore",
-	"description": "Client-side, cosmetic butcher's-yard gore: strike any part of the body and wounds open and deepen to the bone, limbs and heads come off, blood sprays and flows, and every animal screams, panics and dies in its own way. Works on vanilla servers.",
+	"description": "Cosmetic butcher's-yard gore: strike any part of the body and wounds open and deepen to the bone, limbs and heads come off, blood sprays and flows, and every animal screams, panics and dies in its own way. Works on vanilla servers; on a server (or LAN host) running it too, slaughtered animals stay where they fell until cleaned up, and everyone sees the same butchery.",
 	"authors": ["Fluid Gore contributors"],
 	"license": "MIT",
 	"icon": "assets/fluidgore/icon.png",
-	"environment": "client",
+	"environment": "*",
 	"entrypoints": {
+		"main": ["dev.fluidgore.FluidGore"],
 		"client": ["dev.fluidgore.FluidGoreClient"],
 		"modmenu": ["dev.fluidgore.ui.ModMenuIntegration"]
 	},

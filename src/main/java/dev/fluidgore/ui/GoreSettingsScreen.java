@@ -81,7 +81,20 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 				OptionInstance.createBoolean("fluidgore.option.bloody_wool", c.bloodyWool, v -> c.bloodyWool = v),
 				OptionInstance.createBoolean("fluidgore.option.glowing_ender_blood", c.glowingEnderBlood, v -> c.glowingEnderBlood = v),
 				OptionInstance.createBoolean("fluidgore.option.fractures", c.fractures, v -> c.fractures = v),
-				OptionInstance.createBoolean("fluidgore.option.wound_players", c.woundPlayers, v -> c.woundPlayers = v)
+				OptionInstance.createBoolean("fluidgore.option.wound_players", c.woundPlayers, v -> c.woundPlayers = v),
+				OptionInstance.createBoolean("fluidgore.option.wounds_heal", c.woundsHeal, v -> c.woundsHeal = v),
+				scaledSlider("fluidgore.option.wound_clot", 1, 120, 5, c.woundClotSeconds, "fluidgore.unit.seconds", v -> c.woundClotSeconds = v),
+				OptionInstance.createBoolean("fluidgore.option.armor_on_parts", c.armorOnParts, v -> c.armorOnParts = v),
+				OptionInstance.createBoolean("fluidgore.option.brutal_pvp", c.brutalPvp, v -> c.brutalPvp = v)
+		);
+
+		this.list.addHeader(Component.translatable("fluidgore.header.injuries"));
+		this.list.addSmall(
+				OptionInstance.createBoolean("fluidgore.option.hurt_screen", c.hurtScreen, v -> c.hurtScreen = v),
+				OptionInstance.createBoolean("fluidgore.option.heartbeat", c.lowHealthHeartbeat, v -> c.lowHealthHeartbeat = v),
+				scaledSlider("fluidgore.option.stagger", 0, 20, 10, c.staggerPercent, "fluidgore.unit.percent", v -> c.staggerPercent = v),
+				OptionInstance.createBoolean("fluidgore.option.limp", c.limp, v -> c.limp = v),
+				OptionInstance.createBoolean("fluidgore.option.bloody_clothes", c.bloodyClothes, v -> c.bloodyClothes = v)
 		);
 
 		this.list.addHeader(Component.translatable("fluidgore.header.suffering"));
@@ -94,6 +107,11 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 				OptionInstance.createBoolean("fluidgore.option.ecology", c.ecology, v -> c.ecology = v),
 				scaledSlider("fluidgore.option.grief", 0, 60, 30, c.griefSeconds, "fluidgore.unit.seconds", v -> c.griefSeconds = v),
 				scaledSlider("fluidgore.option.death_launch", 0, 30, 10, c.deathLaunchPercent, "fluidgore.unit.percent", v -> c.deathLaunchPercent = v),
+				OptionInstance.createBoolean("fluidgore.option.death_throes", OptionInstance.cachedConstantTooltip(Component.translatable("fluidgore.option.death_throes.tooltip")),
+						c.deathThroes, v -> c.deathThroes = v),
+				OptionInstance.createBoolean("fluidgore.option.keep_bodies", OptionInstance.cachedConstantTooltip(Component.translatable("fluidgore.option.keep_bodies.tooltip")),
+						c.keepBodies, v -> c.keepBodies = v),
+				scaledSlider("fluidgore.option.max_kept_bodies", 1, 64, 8, c.maxKeptBodies, null, v -> c.maxKeptBodies = v),
 				scaledSlider("fluidgore.option.corpse_linger", 1, 120, 5, c.corpseLingerSeconds, "fluidgore.unit.seconds", v -> c.corpseLingerSeconds = v),
 				OptionInstance.createBoolean("fluidgore.option.red_death", c.redDeath, v -> c.redDeath = v),
 				OptionInstance.createBoolean("fluidgore.option.death_pop", c.deathPop, v -> c.deathPop = v),

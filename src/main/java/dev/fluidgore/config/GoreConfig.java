@@ -3,7 +3,7 @@ package dev.fluidgore.config;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
-import dev.fluidgore.FluidGoreClient;
+import dev.fluidgore.FluidGore;
 import dev.fluidgore.dismember.Giblets;
 import java.io.IOException;
 import java.io.Reader;
@@ -90,8 +90,20 @@ public final class GoreConfig {
 	 * suffering. It calls to the place it happened, less and less often. 0 turns grief off. Needs {@link #ecology}.
 	 */
 	public int griefSeconds = 600;
-	/** How long a body stays on the ground after its death throes, in seconds. */
+	/** How long a body stays on the ground after its death throes, in seconds. Unused while the server keeps bodies. */
 	public int corpseLingerSeconds = 10;
+	/**
+	 * Off: the vanilla death, made gory: the body goes red and keels over onto its side in one second, bleeding out as
+	 * it lies there, and stays still. On: the realistic death throes (kicking, gasps, a rigid phase) instead.
+	 */
+	public boolean deathThroes = false;
+	/**
+	 * Server side (the host of a LAN world, or a server running Fluid Gore): the bodies of the {@link #sufferingAnimals}
+	 * are kept where they fell instead of vanishing, until someone cleans them up or butchers them apart.
+	 */
+	public boolean keepBodies = true;
+	/** Server side: most kept bodies per dimension. The oldest goes up in smoke when another one falls. */
+	public int maxKeptBodies = 64;
 	/** Dying bodies stay tinted red, like vanilla's death, until they are gone. */
 	public boolean redDeath = true;
 	/**
@@ -132,6 +144,24 @@ public final class GoreConfig {
 	public boolean fractures = true;
 	/** Wounds on other players. Everyone with the mod sees the same wounds (see trigger/Fate). */
 	public boolean woundPlayers = true;
+	/** Wounds close as health comes back: meat to a gash, a gash to a bruise, a bruise gone; broken bones knit. */
+	public boolean woundsHeal = true;
+	/** A living body's wounds stop dripping this many seconds after the last blow (bodies of the dead still bleed out). */
+	public int woundClotSeconds = 30;
+	/** Severed limbs and heads keep the armour they wore: a helmet stays on the head, boots on the legs. */
+	public boolean armorOnParts = true;
+	/** Player-on-player blades cut deeper and bleed harder, and a kill on High or Extreme takes more than the struck part. */
+	public boolean brutalPvp = true;
+	/** Your own injuries on screen: chunky pixel blood thrown across it from the side a blow came from, running down. */
+	public boolean hurtScreen = true;
+	/** Near death the screen closes in red and your heart pounds, faster the closer you are. */
+	public boolean lowHealthHeartbeat = true;
+	/** How hard a blow knocks your view about, in percent; 0 turns it off. A low-health sway comes with it. */
+	public int staggerPercent = 100;
+	/** A broken or cut leg makes the body limp (your own view hitches on that step), a hurt arm hangs, a belly wound is clutched. */
+	public boolean limp = true;
+	/** Blood soaks through clothes and smears armour over every open wound on a player. */
+	public boolean bloodyClothes = true;
 	/** Severed parts can be punched, kicked, picked up, thrown and stomped. */
 	public boolean playWithParts = true;
 	/** How hard the killing blow throws a body in the direction it was struck, in percent. 0 turns it off. */
@@ -199,7 +229,7 @@ public final class GoreConfig {
 					instance = loaded;
 				}
 			} catch (IOException | JsonParseException e) {
-				FluidGoreClient.LOGGER.error("Could not read {}, using defaults", PATH, e);
+				FluidGore.LOGGER.error("Could not read {}, using defaults", PATH, e);
 				instance = new GoreConfig();
 			}
 		}
@@ -215,7 +245,7 @@ public final class GoreConfig {
 				GSON.toJson(instance, writer);
 			}
 		} catch (IOException e) {
-			FluidGoreClient.LOGGER.error("Could not write {}", PATH, e);
+			FluidGore.LOGGER.error("Could not write {}", PATH, e);
 		}
 	}
 
@@ -258,6 +288,8 @@ public final class GoreConfig {
 		maxActiveCellsPerTick = clamp(maxActiveCellsPerTick, 8, 1024);
 		maxDroplets = clamp(maxDroplets, 50, 5000);
 		partLifetimeSeconds = clamp(partLifetimeSeconds, 5, 3600);
+		woundClotSeconds = clamp(woundClotSeconds, 5, 600);
+		staggerPercent = clamp(staggerPercent, 0, 200);
 		maxDetachedParts = clamp(maxDetachedParts, 1, 256);
 		maxGiblets = clamp(maxGiblets, 0, Giblets.CAPACITY);
 		if (!(heavyHitDamage > 0.0F)) heavyHitDamage = 6.0F;
@@ -265,6 +297,7 @@ public final class GoreConfig {
 		screamVolume = clamp(screamVolume, 0, 200);
 		maxScreams = clamp(maxScreams, 1, 32);
 		corpseLingerSeconds = clamp(corpseLingerSeconds, 3, 600);
+		maxKeptBodies = clamp(maxKeptBodies, 1, 512);
 		griefSeconds = clamp(griefSeconds, 0, 3600);
 		if (sufferingAnimals == null) sufferingAnimals = new ArrayList<>();
 		if (bladedItems == null) bladedItems = new ArrayList<>();

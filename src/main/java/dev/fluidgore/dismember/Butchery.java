@@ -5,6 +5,8 @@ import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.mixin.ModelPartAccessor;
+import dev.fluidgore.net.GoreAction;
+import dev.fluidgore.net.GoreSync;
 import dev.fluidgore.suffer.Corpse;
 import dev.fluidgore.suffer.CorpseStrike;
 import dev.fluidgore.suffer.Ragdoll;
@@ -50,7 +52,9 @@ import org.jspecify.annotations.Nullable;
  * <li><b>Dicing</b>: a blade on any loose piece cuts it in two across its longest side, raw meat on the new faces,
  *     until the pieces are too small to cut.</li>
  * </ul>
- * Every pluck and cut keeps the body on the ground longer, so it is not gone before the work is done.
+ * Every pluck and cut keeps the body on the ground longer, so it is not gone before the work is done. With Fluid Gore on
+ * the server too, every player sees the same work (see {@link GoreSync}); the pieces are named alike on every screen
+ * ({@link GorePart#key}) so cuts on them can be shown as well.
  */
 public final class Butchery {
 	/** Plucks that leave a bird completely bare. */
@@ -119,7 +123,7 @@ public final class Butchery {
 
 		lastPluck = tick;
 		player.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
-		pluck(level, corpse, player.getEyePosition(), player.getViewVector(1.0F));
+		GoreSync.act(GoreAction.of(GoreAction.PLUCK, corpse.entity.getId(), 0L, player.getEyePosition(), player.getViewVector(1.0F), 0, 0.0F));
 		return true;
 	}
 
@@ -385,6 +389,26 @@ public final class Butchery {
 		}
 
 		return new float[]{minU * texW, minV * texH, texW, texH};
+	}
+
+	/** Handfuls plucked and chops through the backbone so far, for evidence (see {@code net/Evidence}). */
+	public int plucks(int entityId) {
+		return plucks.get(entityId);
+	}
+
+	public int chops(int entityId) {
+		return chops.get(entityId);
+	}
+
+	/** Restores what was plucked and chopped on a body this player was not there for. */
+	public void restore(int entityId, int plucked, int chopped) {
+		if (plucked > 0) {
+			plucks.put(entityId, plucked);
+		}
+
+		if (chopped > 0) {
+			chops.put(entityId, chopped);
+		}
 	}
 
 	public void forget(int entityId) {

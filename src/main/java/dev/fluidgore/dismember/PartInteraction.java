@@ -5,6 +5,9 @@ import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.blood.BoneEmitter;
 import dev.fluidgore.GoreSystems;
 import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.net.GoreAction;
+import dev.fluidgore.net.GoreSync;
+import dev.fluidgore.net.PieceSync;
 import dev.fluidgore.suffer.CorpseStrike;
 import dev.fluidgore.wound.Weapon;
 import java.util.List;
@@ -74,7 +77,7 @@ public final class PartInteraction {
 
 		Vec3 look = player.getViewVector(1.0F);
 		if (GoreConfig.get().butchery && Weapon.of(player.getMainHandItem()).cuts()
-				&& GoreSystems.dismemberment().butchery().cut(GoreSystems.blood(), level, target, look)) {
+				&& GoreSync.act(GoreAction.of(GoreAction.CUT, -1, target.key, player.getEyePosition(), look, 0, 0.0F))) {
 			// A blade on a loose piece cuts it in two.
 			player.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
 			return true;
@@ -82,12 +85,15 @@ public final class PartInteraction {
 
 		if (target.bone() && ++target.hits >= 2) {
 			// Second blow: the bone breaks apart.
+			PieceSync.moved(target);
+			PieceSync.shattered(target);
 			BoneEmitter.shatter(level, new Vec3(target.x, target.y, target.z), 1.0F);
 			target.shattered = true;
 			player.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
 			return true;
 		}
 
+		PieceSync.moved(target);
 		wake(target);
 		target.vx += look.x * 0.55 + (random.nextDouble() - 0.5) * 0.1;
 		target.vy += 0.22 + Math.max(0.0, look.y) * 0.3;
@@ -126,6 +132,7 @@ public final class PartInteraction {
 		lastUseTick = tick;
 		held = target;
 		target.held = true;
+		PieceSync.moved(target);
 		wake(target);
 		if (mc.level != null) {
 			mc.level.playLocalSound(target.x, target.y, target.z, SoundEvents.SLIME_SQUISH_SMALL, SoundSource.NEUTRAL, 0.6F, 1.2F, false);
@@ -169,7 +176,9 @@ public final class PartInteraction {
 
 			if (motion.y < -0.3 && player.getY() > part.y && part.squash > 0.5F) {
 				// Landed on it.
+				PieceSync.moved(part);
 				if (part.bone()) {
+					PieceSync.shattered(part);
 					BoneEmitter.shatter(level, new Vec3(part.x, part.y, part.z), 1.2F);
 					part.shattered = true;
 					continue;
@@ -186,6 +195,7 @@ public final class PartInteraction {
 			double horizontal = Math.sqrt(motion.x * motion.x + motion.z * motion.z);
 			if (horizontal > 0.03 && Math.abs(part.vx) + Math.abs(part.vz) < 0.15) {
 				// Walked into it: a kick in the walking direction.
+				PieceSync.moved(part);
 				wake(part);
 				part.vx += motion.x * 1.6;
 				part.vz += motion.z * 1.6;
@@ -196,6 +206,7 @@ public final class PartInteraction {
 	}
 
 	private void carry(LocalPlayer player, GorePart part, BloodWorld blood) {
+		PieceSync.moved(part);
 		Vec3 eye = player.getEyePosition();
 		Vec3 target = eye.add(player.getViewVector(1.0F).scale(HOLD_DISTANCE)).subtract(0.0, 0.25, 0.0);
 		part.x += (target.x - part.x) * 0.5;
@@ -218,6 +229,7 @@ public final class PartInteraction {
 
 		part.held = false;
 		Vec3 look = player.getViewVector(1.0F);
+		PieceSync.moved(part);
 		Vec3 motion = player.getDeltaMovement();
 		part.vx = look.x * strength + motion.x;
 		part.vy = look.y * strength + 0.1 + Math.max(0.0, motion.y);

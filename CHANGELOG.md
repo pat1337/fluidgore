@@ -2,6 +2,67 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.11.0]
+
+The vanilla death, made gory, and bodies that stay until you clean them up. Butchery everyone sees.
+
+### Added
+- Kept Bodies (needs Fluid Gore on the server; in singleplayer and on a LAN world you host, that is you): a
+  slaughtered animal stays where it fell, with every wound, missing limb and plucked feather, until someone cleans it
+  up with a sponge or butchers it apart. It is saved with the world. Settings: Keep Bodies, Most Kept
+  Bodies (64 per dimension; the oldest goes up in smoke).
+- Shared butchery: with the mod on the server, every chop, cut, pluck, clean-up and scrub on a body is shown to the
+  other players with the mod as it happens, and comes out the same on every screen.
+- A sponge (or any cleaning item) on a body cleans the whole body away in a puff of smoke.
+- Shared loose pieces: whoever punches, kicks, carries, throws, stomps or cuts off a limb or a diced chunk moves it on
+  every screen; it lands and lies the same for everyone, and a bone smashed by one player breaks for all.
+- Evidence: the server keeps what was done. A creature someone hit or butchered keeps its picture (wounds, missing
+  limbs, broken bones, char, plucks), saved with it in the world; the pieces cut off or moved are kept for as long as
+  they live. A player who was not there, comes back later or rejoins finds the zombie missing its arm and the arm
+  lying where it fell, until it despawns.
+- Demo: `kept`.
+
+### Fixed
+- Horses, donkeys and mules floated above the ground once they lay on their side (they were lifted by half their
+  hitbox, which is twice as wide as their body; now by half their trunk).
+
+### Changed
+- Deaths are the vanilla death by default, made gory: the animal goes red and keels over onto its side exactly as in
+  vanilla, its heart pumping its blood out as it lies still. The death throes are a setting now (Death Throes, off).
+  The weapon shows in it: it goes over away from the blow; a sword turns it with the swing and throws blood off the
+  slash as it goes; an axe (or a pick) is hacked into it, the body jolts and its legs buckle for a moment before it
+  keels over. It is red until it is down, then it is just dead.
+- A dead body can no longer be milked, sheared, fed, leashed or ridden.
+- The mod now has a server half (`environment` is `*`). On a vanilla server, or a server without the mod, everything
+  works as before, on your screen only.
+
+## [2.10.0]
+
+Injuries you feel, wounds that heal, and armour that stays on.
+
+### Added
+- Player Injuries (new settings section). Your own hits now show on your screen. Chunky pixel-art blood is thrown
+  across it from the side the blow came from and runs down it, drying darker as it fades. A fall splashes the bottom,
+  a blast hits every edge. Setting: Blood on Screen.
+- A heavy blow knocks your view aside, away from where it came from. Setting: Stagger, 0-200%.
+- Low Health Heartbeat: below a third of your health the screen edge closes in red (a dithered, old-school fade) and
+  your heart pounds, faster and louder the closer you are to death. Your view sways slowly as well.
+- Limping: a cut or broken leg makes players and humanoid mobs (zombies, skeletons, piglins) limp. The leg barely
+  swings and the body drops onto it. In first person your view hitches on that step. A hurt arm hangs. A deep belly
+  wound, or a player near death, is held with the free hand, and their head hangs.
+- Bloody Clothes: blood from open wounds soaks through a player's jacket, sleeves and trousers and smears their
+  armour.
+- Wounds Heal: wounds close as health comes back (meat to a gash, a gash to a bruise, then nothing) and broken bones
+  knit. Full health is a whole body again.
+- Wounds Clot After (30 s): a living body stops dripping that long after the last blow. The dead still bleed out.
+- Armor on Severed Parts: heads and limbs keep the armour they wore.
+- Brutal PvP: a player's blade cuts other players deeper and they bleed harder. A kill on High or Extreme takes more
+  than one limb.
+- A creeper that kills a player tears them apart like any other body.
+- Demos: `injured`, `heal`, `armor`.
+
+All of it is cosmetic and client-side. Health, damage and movement are untouched.
+
 ## [2.9.0]
 
 Ender blood glows.

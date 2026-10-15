@@ -5,6 +5,8 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.dismember.ModelParts;
+import dev.fluidgore.player.Injury;
+import dev.fluidgore.player.InjuryPose;
 import dev.fluidgore.suffer.BodyPose;
 import dev.fluidgore.suffer.SufferPose;
 import dev.fluidgore.config.GoreConfig;
@@ -15,9 +17,12 @@ import dev.fluidgore.wound.WoundSet;
 import dev.fluidgore.wound.Wounds;
 import java.util.ArrayList;
 import java.util.List;
+import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.Model;
 import net.minecraft.client.model.animal.sheep.SheepFurModel;
 import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.model.player.PlayerModel;
+import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.client.renderer.feature.ModelFeatureRenderer;
 import net.minecraft.client.renderer.feature.RenderTypeFeatureRenderer;
@@ -72,7 +77,8 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 		SufferPose pose = state.getData(SufferPose.KEY);
 		BodyPose body = state.getData(BodyPose.KEY);
 		WoundSet wounds = state.getData(Wounds.KEY);
-		if ((mask == null || mask == 0) && pose == null && body == null && (wounds == null || wounds.brokenMask() == 0)) {
+		Injury injury = submit.model() instanceof HumanoidModel<?> ? state.getData(Injury.KEY) : null;
+		if ((mask == null || mask == 0) && pose == null && body == null && (wounds == null || wounds.brokenMask() == 0) && injury == null) {
 			return;
 		}
 
@@ -91,6 +97,10 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 		if (pose != null) {
 			Float clock = state.getData(SufferPose.CLOCK);
 			fluidgore$animate(parts, pose, clock != null ? clock : state.ageInTicks);
+		}
+
+		if (injury != null) {
+			InjuryPose.apply(parts, injury, state, this::fluidgore$save);
 		}
 
 		if (body != null) {
@@ -115,9 +125,19 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 			WoundSet wounds = state.getData(Wounds.KEY);
 			if (wounds != null && wounds.count() > 0 && wounds.drawsOn(submit.model())) {
 				WoundRenderer.draw(wounds, poseStack, getVertexBuilder(WoundRenderer.renderType()), submit.lightCoords(), submit.overlayCoords());
+				if (submit.model() instanceof PlayerModel && GoreConfig.get().bloodyClothes) {
+					// Blood soaks through the jacket, sleeves and trousers over the wounds.
+					WoundRenderer.drawStains(wounds, submit.model(), true, poseStack, getVertexBuilder(WoundRenderer.renderType()), submit.lightCoords(),
+							submit.overlayCoords());
+				}
 			} else if (wounds != null && wounds.count() > 0 && submit.model() instanceof SheepFurModel && GoreConfig.get().bloodyWool) {
 				// The fleece over the wounds is soaked with their blood.
-				WoundRenderer.drawStains(wounds, submit.model(), poseStack, getVertexBuilder(WoundRenderer.renderType()), submit.lightCoords(),
+				WoundRenderer.drawStains(wounds, submit.model(), false, poseStack, getVertexBuilder(WoundRenderer.renderType()), submit.lightCoords(),
+						submit.overlayCoords());
+			} else if (wounds != null && wounds.count() > 0 && submit.model() instanceof HumanoidModel<?> && state instanceof AvatarRenderState
+					&& GoreConfig.get().bloodyClothes) {
+				// A player's armour is smeared with the blood of the wounds under it.
+				WoundRenderer.drawStains(wounds, submit.model(), false, poseStack, getVertexBuilder(WoundRenderer.renderType()), submit.lightCoords(),
 						submit.overlayCoords());
 			}
 		}

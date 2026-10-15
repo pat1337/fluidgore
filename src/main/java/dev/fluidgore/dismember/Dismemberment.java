@@ -88,6 +88,16 @@ public final class Dismemberment {
 		return vaporized.contains(entityId);
 	}
 
+	/** Bodies with nothing left to draw: torn or butchered apart, or cleaned away. */
+	public IntOpenHashSet vaporizedIds() {
+		return vaporized;
+	}
+
+	/** A body cleaned away: no longer drawn, though the entity is there until the server takes it. */
+	public void hide(int entityId) {
+		vaporized.add(entityId);
+	}
+
 	/**
 	 * A blast at {@code from} tore {@code entity} apart: it is no longer drawn, its body becomes a spray of pieces of
 	 * every tissue it is made of, and blood goes everywhere.
@@ -236,7 +246,7 @@ public final class Dismemberment {
 		float scale = state.scale * ModelParts.chainScale(root.root(), source);
 		if (roll != 0.0F) {
 			offset.rotateZ(roll);
-			offset.y += entity.getBbWidth() * 0.5F * Math.abs((float) Math.sin(roll));
+			offset.y += ModelParts.sideLift(entity.getId(), entity.getBbWidth(), state.scale) * Math.abs((float) Math.sin(roll));
 		}
 
 		bodyRotation.transform(offset);
@@ -284,6 +294,13 @@ public final class Dismemberment {
 
 	public int missingMask(int entityId) {
 		return missing.get(entityId);
+	}
+
+	/** Restores the parts a body lost before this player was there (see {@code net/Evidence}). */
+	public void restoreMissing(int entityId, int mask) {
+		if (mask != 0) {
+			missing.put(entityId, missing.get(entityId) | mask);
+		}
 	}
 
 	/**
@@ -375,7 +392,7 @@ public final class Dismemberment {
 		if (roll != 0.0F) {
 			// A tipped-over body: lean about its feet like the renderer does, then lift it so it rests on the floor.
 			offset.rotateZ(roll);
-			offset.y += entity.getBbWidth() * 0.5F * Math.abs((float) Math.sin(roll));
+			offset.y += ModelParts.sideLift(entity.getId(), entity.getBbWidth(), state.scale) * Math.abs((float) Math.sin(roll));
 		}
 
 		bodyRotation.transform(offset);
@@ -387,6 +404,7 @@ public final class Dismemberment {
 
 		GorePart part = new GorePart(piece, texture, localCenter, half, scale, rgb, lifetime);
 		part.wounds = pieceWounds;
+		part.armor = ArmorPieces.of(entity, posed, bodyPart);
 		Integer plucked = butchery.tint(entity.getId());
 		if (plucked != null) {
 			part.tint = plucked;

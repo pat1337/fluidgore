@@ -1,6 +1,6 @@
 # Fluid Gore
 
-Client-side-only Fabric mod for **Minecraft Java 26.3**: blood, a blood fluid simulation, dismemberment, and
+Fabric mod for **Minecraft Java 26.3**, client-side gore with an optional server half (2.11): blood, a blood fluid simulation, dismemberment, and
 "Animal Suffering" (screams, death throes, herd panic). Mod id `fluidgore`, MIT. Current version: see
 `gradle.properties` (`version=`). Released versions are git tags (`v1.1.0`, `v1.2.0`, ...) with jars in
 `releases/` (git-ignored).
@@ -8,10 +8,15 @@ Client-side-only Fabric mod for **Minecraft Java 26.3**: blood, a blood fluid si
 Easy follow-up work is listed in **TASKS.md**. Do those one at a time.
 
 ## Hard rules
-1. **Client-side only.** No registries (blocks, items, entities, particle types, sounds), no packets, no
-   server-side code. It must keep working on a vanilla server. Use vanilla sound events and particle types only.
-2. **Cosmetic only.** Never change health, damage, drops, loot, AI or game rules. The one exception, asked for by the
-   user in 2.3: the inventory sorter (`ui/InventorySorter`, `ui/SortButtons`), which moves items with ordinary vanilla
+1. **Client-side first.** No registries (blocks, items, entities, particle types, sounds). Use vanilla sound events and
+   particle types only. It must keep working on a vanilla server and when the server lacks the mod. The one exception,
+   asked for by the user in 2.11 ("a server side mod so i can see my brother chopping up the bits of dead cow"): the
+   server half, `server/KeptBodies` (common code, `main` entrypoint `FluidGore`, mixin `LivingEntityDeathMixin`) and
+   its one packet `net/GoreAction`. Keep it that small: the server keeps bodies and relays actions; it never works out
+   gore. Every client feature must still work with `GoreSync.serverKeepsBodies()` false.
+2. **Cosmetic only.** Never change health, damage, drops, loot, AI or game rules. Exceptions: kept bodies (2.11, a
+   dead body stays as an entity on the server and refuses interactions; drops and XP are untouched), and, asked for by the
+   user in 2.3, the inventory sorter (`ui/InventorySorter`, `ui/SortButtons`), which moves items with ordinary vanilla
    inventory clicks (`handleContainerInput` PICKUP), exactly what a player could do by hand. No custom packets.
 3. **26.3 is not 1.21.** Names are Mojang's unobfuscated names and many APIs changed (render states,
    `SubmitNodeCollector`, `LevelRenderEvents`, `GuiGraphicsExtractor`, `Identifier` instead of `ResourceLocation`,
@@ -50,6 +55,19 @@ Fabric Loader 0.19.5, Fabric API 0.162.0+26.3, Loom 1.18-SNAPSHOT (resolves 1.18
 Mod Menu 21.0.0 (compile-only, soft dependency).
 
 ## Architecture (`src/main/java/dev/fluidgore/`)
+- `FluidGore` (common `main` entrypoint): loads the config, registers the server half. `server/KeptBodies` (2.11):
+  `keep` (called from `LivingEntityDeathMixin` at `tickDeath` HEAD) holds bodies of `sufferingAnimals` instead of
+  vanilla's removal, up to `maxKeptBodies` per dimension; `UseEntityCallback` refuses
+  interactions with the dead; it relays `GoreAction`s to players within 96 blocks and removes a body on CLEAN.
+- `net/`: `GoreAction` (the payload: STRIKE/PLUCK/CUT/CLEAN/SCRUB, eye + look floats, weapon, damage; `seed()`),
+  `GoreSync` (client: `act` = `perform` here + send, `perform` reseeds `Fate` from the action and the body's UUID,
+  `tick` asks the server to take bodies that are vaporized). `PieceSync` + `PieceState` (2.11): the game whose player moved a
+  piece (`PieceSync.moved`: punch, kick, carry, throw, stomp, or made inside a local action/hit, `GoreSync.local`)
+  streams its pose until it settles; others `apply` it. `Evidence` + `EvidenceRecord` + `server/EvidenceStore`: the
+  actor uploads a picture of a creature (`WoundCodec`, missing mask, char, plucks, chops; entity attachment `GORE`,
+  persistent) and of each moved piece (`dismember/PieceCodec`: the whole model tree, polygons exactly); sent on
+  `START_TRACKING` / when a player comes within 64 blocks of a piece; restored only where this client saw nothing. **A new way of acting on a body must go through
+  `GoreSync.act`, and a piece must be found by `GorePart.key`** (named by `Fate.key()` in `GorePartManager.add`).
 - `FluidGoreClient`: entrypoint; registers events. `GoreSystems`: owns all state, runs it from the client tick,
   and clears it on level change, disconnect, or when a feature is set to Off.
 - `config/`: `GoreConfig` (Gson JSON at `config/fluidgore.json`, read live every tick), `GoreLevel` (Off..Extreme
@@ -94,6 +112,11 @@ Mod Menu 21.0.0 (compile-only, soft dependency).
   - `BodyPart` maps parts to model-part names.
 - `suffer/`:
   - `Suffering` handles per-animal fear and pain, herd panic, corpses and severed-head moans.
+  - `Corpse.vanilla` (2.11, `deathThroes` off, the default): `Suffering.vanillaTip` rolls the body exactly like
+    vanilla's tip-over, `Deaths.tick` only pumps blood (`heart`), red for `VANILLA_TICKS`. `Corpse.held`/`kept()`: the
+    server keeps the body, so it is `done` only when the entity is removed (cleaned, or out of range); a removal within
+    `KEEP_GRACE` ticks means the server did not keep it after all. `Suffering.adopt` makes a lying corpse for a kept body
+    seen already dead; `Suffering.clean` is the sponge.
   - `Corpse` keeps a body on screen after server removal while it dies. `Deaths` (2.1) chooses the cause
     (`Corpse.Kind`: CONCUSSION, EXSANGUINATION, SPINAL, DECAPITATION, CHEST, TRAUMA, BURN, BEATEN), `plan`s the death
     from `Corpse.random` (tonic/clonic/gasps/fasciculation/heart, ground ticks, 60-100 total) and plays it in `tick`.
@@ -211,3 +234,17 @@ severable parts; severed heads can't blink.
 - **2.7.0**: `Flesh.PORK` / `Flesh.BEEF`, `WoundSet.CUT` morph (cut faces span the whole face; rows 14-17 of wounds.png: grain, marbling, fat rim, blood smear, grid now 8x18), `wound/BloodyWool` (per-sheep soak 0..1 from `HitFeedback.hit`, herd spatter capped at 0.35, `BloodyWool.KEY` tint on `SheepFurModel` in `ModelFeatureRendererMixin`, `WoundRenderer.drawStains` on the fleece), `bloodyWool` setting, `maxDetachedParts` 160 (`configVersion` 5). Game test: `meatsAndWool`. Demo: `meats`.
 - **2.8.0**: `Flesh.ENDER` + `Flesh.ender(type)`, `BloodColor.ENDER` (forced for endermen/endermites in `EntityFilter.bloodType`), portal sparks + crystal sounds in `HitFeedback`, `GorePart.ender()` (by blood colour) and `GorePartManager.blink` (hops every 2-7 s for `ENDER_RESTLESS` ticks, fizzing and hopping fast when wet). `partLifetimeSeconds` 600 (`configVersion` 6, max 3600). Game test: `endermen`. Demo: `ender`.
 - **2.9.0**: `BloodColor.glows(rgb)` recognises ender blood by hue ratio (variation only scales brightness; mixing with other blood loses it), `GoreRenderer.glow` and `WoundRenderer.glows` use `LightCoordsUtil.FULL_BRIGHT`; `glowingEnderBlood` setting. Demo: `glow`.
+- **2.11.0**: the server half (see `server/`, `net/`), the vanilla death by default (`deathThroes`), kept bodies
+  (`keepBodies`, `maxKeptBodies`), shared butchery, sponge on a body. Game test: `keptBodies` (the rest of the suite runs
+  with `deathThroes` on and `keepBodies` off, as it was written). Demo: `kept`.
+- **2.10.0**: `player/` package. `PlayerInjuries` (owned by `GoreSystems.injuries()`): the local player's own hurt,
+  fed from the top of `DamageTracker.hurt` (cause STRUCK/BLAST/FALL/OTHER from the pending hit). It holds screen
+  `Splat`s, the hit flash, the heartbeat (`WARDEN_HEARTBEAT`, below `Injury.WEAK_BELOW` of health) and the stagger;
+  `fakeHealth` is for demos. `HurtScreen` is a Fabric `HudElement` after `MISC_OVERLAYS` that draws `hurt.png`
+  (192x64: dithered vignette, 2x2 splats, 4 drips; from the generator). `GameRendererMixin` adds the stagger/sway at
+  `bobHurt` TAIL and the limp hitch at `bobView` TAIL. `Injury` (render-state key, from `WoundSet` + health, on any
+  living body that is not a corpse) drives `InjuryPose` on every `HumanoidModel` in `ModelFeatureRendererMixin`, plus
+  the limp lean in `LivingEntityRendererMixin.setupRotations`. `WoundRenderer.drawStains(..., clothes, ...)` puts
+  stains on a `PlayerModel`'s outer layer (hat/jacket/sleeves/pants) and on a player's armour. Also: wounds heal with
+  health (`Wounds.heal`), clot (`WoundSet.quiet`, `woundClotSeconds`), `ArmorPieces` on severed parts, brutal PvP, and
+  blast gore on players. Game tests: `playerGore`, `playerInjuries`. Demos: `injured`, `heal`, `armor`.

@@ -53,6 +53,8 @@ public final class Wounds {
 	public static final float FRACTURE = 0.55F;
 	/** And is smashed beyond saving (the head caved in, the limb torn off, the ribs stove right in) past this. */
 	public static final float DESTROY = 1.6F;
+	/** Severity healed per share of health regained: a third of the bar closes a wound to the bone back to nothing. */
+	private static final float HEAL_RATE = 3.0F;
 	/** What a blow did to the bone under it. */
 	public static final int INTACT = 0;
 	public static final int BROKE = 1;
@@ -329,7 +331,17 @@ public final class Wounds {
 				continue;
 			}
 
-			if (set.trauma > 0.8F && RANDOM.nextFloat() < Math.min(0.6F, (set.trauma - 0.8F) * 0.35F)) {
+			// The living clot: the drip thins out after the last blow and stops, so a wounded survivor does not pool forever.
+			float flow = 1.0F;
+			if (corpse == null) {
+				set.quiet += 5;
+				flow = 1.0F - set.quiet / (GoreConfig.get().woundClotSeconds * 20.0F);
+				if (flow <= 0.0F) {
+					continue;
+				}
+			}
+
+			if (set.trauma > 0.8F && RANDOM.nextFloat() < Math.min(0.6F, (set.trauma - 0.8F) * 0.35F) * flow) {
 				// Beaten without the skin giving way: it bleeds inside, and the blood comes from the mouth and nose.
 				Vec3 mouth = mouth(corpse != null ? corpse.entity : (LivingEntity) entity);
 				if (mouth != null) {
@@ -339,7 +351,7 @@ public final class Wounds {
 
 			for (int i = 0; i < set.count; i++) {
 				float severity = set.severity[i];
-				if (severity < 0.25F || Float.isNaN(set.ox[i]) || RANDOM.nextFloat() > severity * 0.6F) {
+				if (severity < 0.25F || Float.isNaN(set.ox[i]) || RANDOM.nextFloat() > severity * 0.6F * flow) {
 					continue;
 				}
 
@@ -440,6 +452,26 @@ public final class Wounds {
 		float yaw = posed.state().bodyRot * Mth.DEG_TO_RAD;
 		double reach = entity.getBbWidth() * 0.25;
 		return head.add(-Mth.sin(yaw) * reach, -entity.getBbHeight() * 0.08, Mth.cos(yaw) * reach);
+	}
+
+	/**
+	 * {@code entityId} got {@code fraction} of its health back (natural regeneration, food, potions): its wounds close
+	 * that much, and a whole bar of health heals the deepest wound there is. Back to full health, nothing is left.
+	 */
+	public void heal(int entityId, float fraction, boolean full) {
+		WoundSet set = sets.get(entityId);
+		if (set == null || !GoreConfig.get().woundsHeal) {
+			return;
+		}
+
+		if (set.heal(full ? 2.0F : fraction * HEAL_RATE)) {
+			sets.remove(entityId);
+		}
+	}
+
+	/** Puts the wounds a body had before this player was there on it (see {@code net/Evidence}). */
+	public void restore(int entityId, WoundSet set) {
+		sets.put(entityId, set);
 	}
 
 	public void forget(int entityId) {

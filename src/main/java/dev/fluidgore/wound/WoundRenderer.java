@@ -71,6 +71,9 @@ public final class WoundRenderer {
 	private static final float TILE_U = 1.0F / 8.0F;
 	private static final float TILE_V = 1.0F / 18.0F;
 
+	/** The outer skin layer over each {@link dev.fluidgore.dismember.BodyPart} of a player model, in its order. */
+	private static final String[] CLOTHES = {"hat", "right_sleeve", "left_sleeve", "right_pants", "left_pants"};
+
 	private static final Vector3f POS = new Vector3f();
 	private static final Vector3f NORMAL = new Vector3f();
 	private static final float[] CORNER = new float[3];
@@ -119,11 +122,12 @@ public final class WoundRenderer {
 	}
 
 	/**
-	 * Blood soaked into a coat drawn over the body ({@code coat}, a sheep's wool): a wet stain on the fleece over every
-	 * wound that bleeds, wider than the wound as the wool wicks it, the deeper the wider. {@code poseStack} holds the
-	 * coat's root transform, as after renderToBuffer.
+	 * Blood soaked into a coat drawn over the body ({@code coat}: a sheep's wool, a player's armour): a wet stain over
+	 * every wound that bleeds, wider than the wound as the wool or cloth wicks it, the deeper the wider. With
+	 * {@code clothes}, {@code coat} is the player model itself and the stain goes on its outer skin layer (jacket, sleeves,
+	 * trousers, hat) over the part. {@code poseStack} holds the coat's root transform, as after renderToBuffer.
 	 */
-	public static void drawStains(WoundSet set, Model<?> coat, PoseStack poseStack, VertexConsumer buffer, int light, int overlay) {
+	public static void drawStains(WoundSet set, Model<?> coat, boolean clothes, PoseStack poseStack, VertexConsumer buffer, int light, int overlay) {
 		ModelPart[] parts = ModelParts.index(coat);
 		ModelPart torso = ModelParts.torso(coat);
 		for (int i = 0; i < set.count; i++) {
@@ -132,6 +136,11 @@ public final class WoundRenderer {
 			}
 
 			ModelPart part = set.bodyPart[i] == null ? torso : parts[set.bodyPart[i].ordinal()];
+			if (clothes && part != null) {
+				String layer = set.bodyPart[i] == null ? "jacket" : CLOTHES[set.bodyPart[i].ordinal()];
+				part = part.hasChild(layer) ? part.getChild(layer) : null;
+			}
+
 			if (part == null || ((ModelPartAccessor) (Object) part).fluidgore$getCubes().isEmpty()) {
 				continue;
 			}

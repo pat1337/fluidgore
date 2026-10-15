@@ -4,8 +4,10 @@ import dev.fluidgore.GoreSystems;
 import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.BodyPart;
+import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.dismember.GorePart;
 import dev.fluidgore.dismember.ModelParts;
+import dev.fluidgore.net.GoreSync;
 import dev.fluidgore.trigger.EntityFilter;
 import dev.fluidgore.trigger.Fate;
 import dev.fluidgore.wound.Weapon;
@@ -51,6 +53,8 @@ public final class Suffering {
 	private static final int TERROR_MEMORY = 600;
 	private static final double TERROR_RADIUS_SQ = 14.0 * 14.0;
 	private static final int MAX_CORPSES = 12;
+	/** Ticks a dead body the server keeps is on screen with no corpse before it is taken for one already lying there. */
+	private static final int ADOPT_AFTER = 5;
 	/** How much longer a beaten or burnt body lies than an ordinary kill, on High and Extreme. */
 	private static final float EVIDENCE_LINGER = 3.0F;
 	/** Survivors notice a body, and a mother her young, from this far. */
@@ -259,9 +263,19 @@ public final class Suffering {
 		float size = entity.isBaby() || entity.getType() == EntityTypes.HORSE ? 1.5F : 1.0F;
 		int linger = Math.round(GoreConfig.get().corpseLingerSeconds * 20 * size * GoreConfig.get().goreLevel.linger
 				* (GoreConfig.get().goreLevel.linger > 1.0F ? evidence : 1.0F));
-		Corpse corpse = new Corpse(entity, kind, state.voice, deaths.collapse(kind), linger, random.nextFloat() * 100.0F);
+		// The vanilla death goes over at once; the death throes give the legs a moment first.
+		boolean vanilla = !GoreConfig.get().deathThroes;
+		Corpse corpse = new Corpse(entity, kind, state.voice, vanilla ? 0 : deaths.collapse(kind), linger, random.nextFloat() * 100.0F);
+		corpse.vanilla = vanilla;
+		corpse.held = GoreSync.serverKeepsBodies();
 		corpse.pops = pops;
 		deaths.plan(corpse);
+		if (vanilla) {
+			Deaths.vanillaFall(corpse, weapon, strike);
+			// Red until it is down, as in vanilla; an axe holds it on its feet a moment longer.
+			corpse.throeTicks = Corpse.VANILLA_TICKS + corpse.fallDelay;
+		}
+
 		corpses.put(entity.getId(), corpse);
 		evictOldCorpses();
 		boolean gore = GoreConfig.get().goreLevel.enabled() && !EntityFilter.isBloodless(entity);
@@ -289,6 +303,26 @@ public final class Suffering {
 		mourn(level, entity);
 	}
 
+	/**
+	 * A body the server kept, seen here for the first time (it died out of sight, or this player came back to it):
+	 * already lying on its side, still. What was done to it before is not known here.
+	 */
+	private void adopt(LivingEntity entity) {
+		Corpse corpse = new Corpse(entity, Corpse.Kind.EXSANGUINATION, state(entity).voice, 0, 0, random.nextFloat() * 100.0F);
+		corpse.vanilla = true;
+		corpse.held = true;
+		deaths.plan(corpse);
+		corpse.throeTicks = 0;
+		corpse.heartEnd = 0;
+		corpse.voiceEnd = 0;
+		corpse.toppled = true;
+		corpse.landed = true;
+		corpse.body.roll = corpse.body.proll = Mth.HALF_PI;
+		// Long dead: past the red of dying and the first moments.
+		corpse.age = Corpse.KEEP_GRACE;
+		corpses.put(entity.getId(), corpse);
+	}
+
 	/** For tests and demos: the next animal to die dies this way (null: as it would), and bursts at the end or not. */
 	public void forceNextDeath(Corpse.@Nullable Kind kind, boolean pop) {
 		forcing = true;
@@ -314,15 +348,26 @@ public final class Suffering {
 		}
 	}
 
+	/** Bodies only this client keeps are capped; the ones the server keeps are capped by the server. */
 	private void evictOldCorpses() {
-		while (corpses.size() > MAX_CORPSES) {
+		while (true) {
+			int loose = 0;
 			int oldest = -1;
 			int oldestAge = -1;
 			for (Int2ObjectMap.Entry<Corpse> entry : corpses.int2ObjectEntrySet()) {
+				if (entry.getValue().kept()) {
+					continue;
+				}
+
+				loose++;
 				if (entry.getValue().age > oldestAge) {
 					oldestAge = entry.getValue().age;
 					oldest = entry.getIntKey();
 				}
+			}
+
+			if (loose <= MAX_CORPSES) {
+				return;
 			}
 
 			finishCorpse(corpses.remove(oldest));
@@ -338,11 +383,20 @@ public final class Suffering {
 		poses.clear();
 
 		Entity camera = Minecraft.getInstance().getCameraEntity();
+		boolean kept = GoreSync.serverKeepsBodies();
 		if (camera != null) {
 			for (Entity entity : level.entitiesForRendering()) {
-				if (entity instanceof LivingEntity living && living.isAlive() && !corpses.containsKey(living.getId())
-						&& camera.distanceToSqr(living) < ACTIVE_RANGE_SQ && applies(living)) {
-					tickLiving(level, living);
+				if (!(entity instanceof LivingEntity living) || corpses.containsKey(living.getId())) {
+					continue;
+				}
+
+				if (living.isAlive()) {
+					if (camera.distanceToSqr(living) < ACTIVE_RANGE_SQ && applies(living)) {
+						tickLiving(level, living);
+					}
+				} else if (kept && living.deathTime >= ADOPT_AFTER && !living.isRemoved() && applies(living)
+						&& !GoreSystems.dismemberment().vaporized(living.getId())) {
+					adopt(living);
 				}
 			}
 		}
@@ -379,6 +433,11 @@ public final class Suffering {
 		}
 
 		state = state(entity);
+		if (state.dying && entity.getHealth() > entity.getMaxHealth() * 0.5F) {
+			// It pulled through: healed past half its health, it stops staggering and bleeding its way down.
+			state.dying = false;
+		}
+
 		Personality self = state.voice.self();
 		boolean predator = ecology && self.role() == Personality.Role.PREDATOR;
 		boolean kin = near != null && near.entity.getType() == entity.getType() && near.entity.isBaby() != entity.isBaby();
@@ -577,11 +636,13 @@ public final class Suffering {
 		body.move(level, box, 0.0);
 		if (c.age >= c.collapseAt && !c.toppled) {
 			c.toppled = true;
-			topple(c);
+			if (!c.vanilla) {
+				topple(c);
+			}
 		}
 
 		shove(c, box);
-		float landing = c.toppled ? body.tip() : 0.0F;
+		float landing = !c.toppled ? 0.0F : c.vanilla ? vanillaTip(c) : body.tip();
 		if (landing > 0.0F) {
 			slam(level, c, landing, color, gore);
 		}
@@ -684,6 +745,30 @@ public final class Suffering {
 		c.keepFor(40);
 	}
 
+	/**
+	 * Vanilla's tip-over, to the frame: fast at first, flat on the ground after about 13 ticks, onto the side away from
+	 * the blow, after the axe's hold and turning with the sword's swing (see {@link Deaths#vanillaFall}). Blows do not
+	 * roll it after that; it lies as it fell. Returns the landing speed on the tick it lands, else 0.
+	 */
+	private static float vanillaTip(Corpse c) {
+		Ragdoll body = c.body;
+		float f = vanillaCurve(c.age - c.fallDelay);
+		body.yaw += c.fallTwist * (f - vanillaCurve(c.age - 1 - c.fallDelay));
+		body.roll = c.fallSide * f * Mth.HALF_PI;
+		body.rollV = 0.0F;
+		if (f < 1.0F || c.landed) {
+			return 0.0F;
+		}
+
+		c.landed = true;
+		return 0.25F;
+	}
+
+	/** How far over vanilla's dying mob is, 0..1, {@code ticks} after it died. */
+	private static float vanillaCurve(int ticks) {
+		return Math.min(1.0F, Mth.sqrt(Math.max(0.0F, ticks - 1.0F) / Corpse.VANILLA_TICKS * 1.6F));
+	}
+
 	/** Starts the fall: the push comes from the body's own momentum, so a hit knocks it over away from the blow. */
 	private void topple(Corpse c) {
 		Ragdoll body = c.body;
@@ -718,8 +803,9 @@ public final class Suffering {
 
 		LivingEntity entity = corpse.entity;
 		if (corpse.unloaded) {
-			// The vanilla "poof" was held back while the body lay there; play it now that it disappears.
-			if (entity.level() instanceof ClientLevel level) {
+			// The vanilla "poof" was held back while the body lay there; play it now that it disappears. A body already torn or
+			// butchered apart has nothing left to go up in smoke.
+			if (entity.level() instanceof ClientLevel level && !GoreSystems.dismemberment().vaporized(entity.getId())) {
 				for (int i = 0; i < 20; i++) {
 					level.addParticle(ParticleTypes.POOF,
 							entity.getRandomX(1.0), entity.getRandomY(), entity.getRandomZ(1.0),
@@ -727,7 +813,7 @@ public final class Suffering {
 				}
 
 				GoreConfig config = GoreConfig.get();
-				if (corpse.pops && config.goreLevel.enabled() && !EntityFilter.isBloodless(entity)) {
+				if (corpse.pops && !corpse.kept() && config.goreLevel.enabled() && !EntityFilter.isBloodless(entity)) {
 					Ragdoll body = corpse.body;
 					// The body's own dice: it bursts the same way on every client.
 					Fate.begin(corpse.random.nextLong());
@@ -751,12 +837,48 @@ public final class Suffering {
 			return false;
 		}
 
+		if (!corpse.unloaded) {
+			corpse.unloadedAt = corpse.age;
+		}
+
 		corpse.unloaded = true;
 		return true;
 	}
 
 	public boolean holdsBody(int entityId) {
 		return corpses.containsKey(entityId);
+	}
+
+	/**
+	 * The body is cleaned away (a player used a cleaning item on it): a puff of smoke, as vanilla's death ends, and it
+	 * is gone from this screen at once; the server removes the entity after. Returns false if there was no body.
+	 */
+	public boolean clean(ClientLevel level, int entityId) {
+		Corpse corpse = corpses.remove(entityId);
+		Dismemberment dismemberment = GoreSystems.dismemberment();
+		boolean gone = dismemberment.vaporized(entityId);
+		if (corpse == null) {
+			dismemberment.hide(entityId);
+			return !gone && level.getEntity(entityId) instanceof LivingEntity body && !body.isAlive();
+		}
+
+		if (!gone) {
+			Vec3 at = centre(corpse);
+			for (int i = 0; i < 20; i++) {
+				level.addParticle(ParticleTypes.POOF, at.x + random.nextGaussian() * 0.3, at.y + random.nextDouble() * 0.4, at.z + random.nextGaussian() * 0.3,
+						random.nextGaussian() * 0.02, random.nextGaussian() * 0.02, random.nextGaussian() * 0.02);
+			}
+
+			level.playLocalSound(at.x, at.y, at.z, SoundEvents.SPONGE_ABSORB, SoundSource.PLAYERS, 0.8F, 0.9F + random.nextFloat() * 0.2F, false);
+		}
+
+		if (corpse.unloaded) {
+			dismemberment.onEntityUnload(entityId);
+		} else {
+			dismemberment.hide(entityId);
+		}
+
+		return true;
 	}
 
 	static Supplier<Vec3> follow(LivingEntity entity) {

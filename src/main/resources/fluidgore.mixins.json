@@ -2,11 +2,18 @@
 	"required": true,
 	"package": "dev.fluidgore.mixin",
 	"compatibilityLevel": "JAVA_25",
+	"mixins": [
+		"LivingEntityDeathMixin"
+	],
 	"client": [
 		"AbstractContainerScreenAccessor",
 		"ClientLevelMixin",
 		"ClientPacketListenerMixin",
+		"EntityRenderDispatcherAccessor",
+		"GameRendererMixin",
+		"HumanoidArmorLayerAccessor",
 		"LivingEntityMixin",
+		"LivingEntityRendererAccessor",
 		"LivingEntityRendererMixin",
 		"LivingEntitySoundInvoker",
 		"MinecraftMixin",

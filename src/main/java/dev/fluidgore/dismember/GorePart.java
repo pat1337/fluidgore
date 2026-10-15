@@ -2,6 +2,7 @@ package dev.fluidgore.dismember;
 
 import dev.fluidgore.suffer.Voice;
 import dev.fluidgore.wound.WoundSet;
+import java.util.List;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.resources.Identifier;
 import org.joml.Quaternionf;
@@ -21,6 +22,18 @@ public final class GorePart {
 	public final Vector3f halfExtents;
 	public final float scale;
 	public final int bloodRgb;
+	/**
+	 * Names this piece the same on every client: drawn from the dice of the hit or the cut that made it (see
+	 * {@link dev.fluidgore.trigger.Fate#key}), so a cut on it can be shown to the other players (see
+	 * {@link dev.fluidgore.net.GoreSync}). Set when it is added.
+	 */
+	public long key;
+	/** Ticks this client still sends the piece's motion to the others: its player moved it (see {@link dev.fluidgore.net.PieceSync}). */
+	public int streamFor;
+	/** Ticks it still hangs where another player carries it, unless their game says otherwise first. */
+	public int remoteHeld;
+	/** The server has been told what this piece is (see {@link dev.fluidgore.net.Evidence#piece}). */
+	public boolean uploaded;
 	public int lifetime;
 	/** Colour multiplied into the part's texture: white, or the char of a body that burnt. */
 	public int tint = 0xFFFFFF;
@@ -61,6 +74,8 @@ public final class GorePart {
 	public int lastSplat = -100;
 	/** For an enderman's pieces: ticks until the piece next blinks somewhere else. */
 	public int blinkIn;
+	/** Armour the part still wears (see {@link ArmorPieces}); null or empty for none. */
+	public @Nullable List<ArmorPieces.Piece> armor;
 
 	public GorePart(ModelPart model, Identifier texture, Vector3f localCenter, Vector3f halfExtents, float scale, int bloodRgb, int lifetime) {
 		this.model = model;

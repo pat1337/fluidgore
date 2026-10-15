@@ -9,6 +9,7 @@ import dev.fluidgore.blood.Decal;
 import dev.fluidgore.blood.DropletSystem;
 import dev.fluidgore.config.BloodColor;
 import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.dismember.ArmorPieces;
 import dev.fluidgore.dismember.GorePart;
 import dev.fluidgore.suffer.Corpse;
 import dev.fluidgore.suffer.SufferPose;
@@ -343,6 +344,15 @@ public final class GoreRenderer {
 		poseStack.translate(-part.localCenter.x, -part.localCenter.y, -part.localCenter.z);
 		collector.submitModelPart(part.model, poseStack, RenderTypes.entityTranslucent(part.texture), part.light, OVERLAY, null,
 				argb(part.tint, alpha));
+		if (ArmorPieces.any(part.armor)) {
+			// The armour it wore, over it; while the piece fades it fades too, without the glint.
+			for (ArmorPieces.Piece armor : part.armor) {
+				RenderType type = alpha < 1.0F ? RenderTypes.entityTranslucent(armor.texture())
+						: armor.foil() ? RenderTypes.armorCutoutNoCullGlint(armor.texture()) : RenderTypes.armorCutoutNoCull(armor.texture());
+				collector.submitModelPart(armor.model(), poseStack, type, part.light, OVERLAY, null, argb(armor.color(), alpha));
+			}
+		}
+
 		WoundSet wounds = part.wounds;
 		// Cutout wounds cannot fade, so they go just before the piece starts to.
 		if (wounds != null && wounds.count() > 0 && alpha >= 1.0F) {

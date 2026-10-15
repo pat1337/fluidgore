@@ -1,6 +1,10 @@
 package dev.fluidgore.blood;
 
 import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.net.GoreAction;
+import dev.fluidgore.net.GoreSync;
+import dev.fluidgore.suffer.Corpse;
+import dev.fluidgore.suffer.CorpseStrike;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
@@ -16,9 +20,9 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Scrubbing blood away with a held cleaning item (a sponge by default). Holding the use key repeats the click, so
- * a floor is wiped by dragging the crosshair over it. Blood is client-side, so nothing is sent to the server; a
- * sponge is only kept from being placed while there is blood to wipe, or while the player is still scrubbing.
+ * Cleaning up with a held cleaning item (a sponge by default): a body that is down is cleaned away, and blood is
+ * scrubbed off surfaces. Holding the use key repeats the click, so a floor is wiped by dragging the crosshair over it.
+ * A sponge is only kept from being placed while there is blood to wipe, or while the player is still scrubbing.
  */
 public final class Cleaning {
 	private static final double REACH = 4.5;
@@ -46,13 +50,27 @@ public final class Cleaning {
 		return false;
 	}
 
-	/** Use key pressed. Returns true if the click scrubbed (the vanilla item use is then skipped). */
+	/**
+	 * Use key pressed. Returns true if the click cleaned (the vanilla item use is then skipped). On a body that is down
+	 * it cleans the whole body away; on a surface it scrubs the blood there. Both are shown to the other players when
+	 * the server runs Fluid Gore (see {@link GoreSync}).
+	 */
 	public static boolean onUse(Minecraft mc, BloodWorld blood) {
 		LocalPlayer player = mc.player;
 		GoreConfig config = GoreConfig.get();
 		if (!config.cleaning || !config.goreLevel.enabled() || player == null || player.isShiftKeyDown()
-				|| !(mc.level instanceof ClientLevel level) || !(mc.hitResult instanceof BlockHitResult hit)
-				|| hit.getType() != HitResult.Type.BLOCK || !isCleaningItem(player.getMainHandItem())) {
+				|| !(mc.level instanceof ClientLevel level) || !isCleaningItem(player.getMainHandItem())) {
+			return false;
+		}
+
+		Corpse body = CorpseStrike.aimed(mc, player);
+		if (body != null) {
+			player.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
+			GoreSync.act(GoreAction.of(GoreAction.CLEAN, body.entity.getId(), 0L, player.getEyePosition(), player.getViewVector(1.0F), 0, 0.0F));
+			return true;
+		}
+
+		if (!(mc.hitResult instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) {
 			return false;
 		}
 
@@ -62,16 +80,26 @@ public final class Cleaning {
 		}
 
 		long now = level.getGameTime();
-		int wiped = blood.clean(at, hit.getDirection(), RADIUS);
-		if (wiped == 0) {
+		Direction face = hit.getDirection();
+		if (scrub(level, blood, at, face) == 0) {
 			// Nothing here: only swallow the click while a scrub is under way, otherwise the sponge is placed as usual.
 			return now - lastScrub <= SCRUB_GRACE && blood.hasBloodNear(at, RADIUS * 2.5F);
 		}
 
 		lastScrub = now;
 		player.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
+		GoreSync.send(GoreAction.of(GoreAction.SCRUB, -1, 0L, at, face.getUnitVec3(), face.ordinal(), 0.0F));
+		return true;
+	}
+
+	/** Wipes the blood around {@code at} on {@code face}, with the sound and wet of it. Returns how much was wiped (0: none). */
+	public static int scrub(ClientLevel level, BloodWorld blood, Vec3 at, Direction face) {
+		int wiped = blood.clean(at, face, RADIUS);
+		if (wiped == 0) {
+			return 0;
+		}
+
 		level.playLocalSound(at.x, at.y, at.z, SoundEvents.BRUSH_GENERIC, SoundSource.PLAYERS, 0.7F, 0.9F + level.getRandom().nextFloat() * 0.2F, false);
-		Direction face = hit.getDirection();
 		for (int i = 0; i < 4; i++) {
 			double ox = (level.getRandom().nextDouble() - 0.5) * RADIUS;
 			double oz = (level.getRandom().nextDouble() - 0.5) * RADIUS;
@@ -80,6 +108,6 @@ public final class Cleaning {
 					0.0, 0.05, 0.0);
 		}
 
-		return true;
+		return wiped;
 	}
 }

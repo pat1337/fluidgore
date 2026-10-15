@@ -232,7 +232,7 @@ public final class ModelHit {
 
 		root.rotateY((180.0F - state.bodyRot) * Mth.DEG_TO_RAD);
 		if (body != null) {
-			root.translate(0.0F, state.boundingBoxWidth * 0.5F / state.scale * Mth.abs(Mth.sin(body.roll())), 0.0F);
+			root.translate(0.0F, ModelParts.sideLift(entity.getId(), state.boundingBoxWidth, state.scale) / state.scale * Mth.abs(Mth.sin(body.roll())), 0.0F);
 			root.rotateZ(body.roll());
 		} else if (state.deathTime > 0.0F) {
 			root.rotateZ(Math.min(1.0F, Mth.sqrt((state.deathTime - 1.0F) / 20.0F * 1.6F)) * Mth.HALF_PI);

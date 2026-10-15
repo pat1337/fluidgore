@@ -328,6 +328,11 @@ public final class Deaths {
 		RandomSource r = c.random;
 		Ragdoll body = c.body;
 		int ground = c.groundTicks();
+		if (c.vanilla) {
+			vanillaTick(level, c, p, color, gore, ground);
+			return;
+		}
+
 		p.legSeed = c.legSeed;
 		p.hindLimp = c.hindLimp;
 		if (ground < 0) {
@@ -414,6 +419,51 @@ public final class Deaths {
 			c.lastBreathTaken = true;
 			screams.lastBreath(Suffering.follow(c.entity), c.voice);
 		}
+	}
+
+	/**
+	 * How a vanilla death goes, from what killed it. It goes over away from the blow (onto its right side, as in vanilla,
+	 * when nothing struck it). A sword turns it a little along the swing as it goes and throws blood off the slash; an
+	 * axe or a pick is hacked into it: the body jolts, the legs buckle under it for a moment, then it goes over.
+	 */
+	static void vanillaFall(Corpse c, @Nullable Weapon weapon, @Nullable Vec3 strike) {
+		RandomSource r = c.random;
+		if (strike != null) {
+			float yawRad = c.body.yaw * Mth.DEG_TO_RAD;
+			// Positive roll tips it towards (cos yaw, sin yaw); the strike runs from the attacker to the body.
+			c.fallSide = strike.x * Mth.cos(yawRad) + strike.z * Mth.sin(yawRad) >= 0.0 ? 1.0F : -1.0F;
+		}
+
+		if (weapon == Weapon.BLADE) {
+			c.fallTwist = c.fallSide * (15.0F + 15.0F * r.nextFloat());
+			c.slash = strike;
+		} else if (weapon == Weapon.CHOP || weapon == Weapon.PICK) {
+			c.fallDelay = 4 + r.nextInt(3);
+			c.body.spasm(r, 0.5F);
+		}
+	}
+
+	/**
+	 * One tick of a vanilla death: no kicking and no gasps. The axe's buckle and the sword's spray at the start, then it
+	 * only bleeds out where it lies, the heart pumping its blood out in slowing beats.
+	 */
+	private void vanillaTick(ClientLevel level, Corpse c, Posture p, int color, boolean gore, int ground) {
+		if (c.fallDelay > 0) {
+			// The blade goes in: the legs give under the blow and it sags onto them, shaking, before it goes over.
+			float buckle = ramp(ground, 0, 2) * (1.0F - ramp(ground, c.fallDelay, c.fallDelay + 6));
+			if (buckle > 0.0F) {
+				fold(c, p, 0.6F * buckle, 0.35F * buckle);
+				p.tremble = 0.35F * buckle;
+			}
+		}
+
+		if (gore && c.slash != null && ground == 1) {
+			// The sword's cut opens as it goes over: blood thrown off along the swing.
+			Vec3 away = new Vec3(c.slash.x, 0.35, c.slash.z).normalize();
+			BloodEmitter.cut(GoreSystems.blood(), level, Suffering.centre(c), away, color, 0.05F, 18);
+		}
+
+		heart(level, c, color, gore, ground);
 	}
 
 	/** An agonal gasp when one is due: the chest heaves, the head lifts. Lungs full of blood bring some up. */

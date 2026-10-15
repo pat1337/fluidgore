@@ -6,6 +6,10 @@ import dev.fluidgore.blood.Gush;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.dismember.ModelParts;
+import dev.fluidgore.net.Evidence;
+import dev.fluidgore.net.GoreSync;
+import dev.fluidgore.net.PieceSync;
+import dev.fluidgore.player.PlayerInjuries;
 import dev.fluidgore.suffer.Suffering;
 import dev.fluidgore.trigger.DamageTracker;
 import net.minecraft.client.Minecraft;
@@ -22,6 +26,7 @@ public final class GoreSystems {
 	private static final Dismemberment DISMEMBERMENT = new Dismemberment();
 	private static final Suffering SUFFERING = new Suffering();
 	private static final DamageTracker TRACKER = new DamageTracker();
+	private static final PlayerInjuries INJURIES = new PlayerInjuries();
 	private static @Nullable ClientLevel currentLevel;
 	private static int tickCount;
 
@@ -38,6 +43,10 @@ public final class GoreSystems {
 
 	public static Suffering suffering() {
 		return SUFFERING;
+	}
+
+	public static PlayerInjuries injuries() {
+		return INJURIES;
 	}
 
 	public static DamageTracker tracker() {
@@ -78,11 +87,15 @@ public final class GoreSystems {
 		}
 
 		tickCount++;
+		INJURIES.tick(client);
 		Gush.tick();
 		TRACKER.tick(level, BLOOD, DISMEMBERMENT, SUFFERING);
 		if (gore) {
 			BLOOD.tick(level, tickCount);
 			DISMEMBERMENT.tick(level, BLOOD);
+			GoreSync.tick(level);
+			PieceSync.tick(level);
+			Evidence.tick(level);
 		}
 
 		if (suffering) {
@@ -100,6 +113,8 @@ public final class GoreSystems {
 
 	public static void onEntityUnload(int entityId) {
 		TRACKER.forget(entityId);
+		GoreSync.forget(entityId);
+		Evidence.forget(entityId);
 		ModelParts.forgetDrawn(entityId);
 		// A body still going through its death throes keeps its missing parts until it is gone.
 		if (!SUFFERING.onEntityUnload(entityId)) {
@@ -108,9 +123,12 @@ public final class GoreSystems {
 	}
 
 	public static void clearAll() {
+		GoreSync.clear();
+		Evidence.clear();
 		Gush.clear();
 		BrokenBlocks.clear();
 		ModelParts.clearDrawn();
+		INJURIES.clear();
 		SUFFERING.clear();
 		BLOOD.clear();
 		DISMEMBERMENT.clear();

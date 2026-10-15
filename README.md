@@ -10,9 +10,17 @@ and heads hacked off, blood that sprays, pools and runs downhill, and animals th
 
 ![A cow's leg hacked open to the bone](docs/images/wounded-leg.png)
 
-Everything is visual and local to your game. The mod adds no blocks, items, entities, packets or registry entries, so
-it works on **vanilla servers** and nobody else needs it installed. It never changes health, damage, drops, AI or game
-rules.
+Everything is visual. The mod adds no blocks, items, entities or registry entries, so it works on **vanilla servers**
+and nobody else needs it installed. It never changes health, damage, drops, AI or game rules.
+
+**Kept bodies (with Fluid Gore on the server too):** in singleplayer, on a LAN world you host (e4mc included) or on a
+Fabric server that runs the mod, a slaughtered animal does not vanish. It dies the vanilla way, gone red and keeled
+over onto its side, bleeds out where it lies, and stays there with everything you did to it until someone cleans it
+up (right-click it with a sponge) or butchers it apart. Everyone with the mod sees the same chops, cuts
+and plucks on it as they happen. Loose limbs and chunks move the same for everyone when someone kicks, carries or throws them, and
+what was done stays as evidence: someone who walks in later or rejoins finds the zombie missing its arm and the arm
+lying where it fell. This is the one thing the mod changes in the world: the body's drops and experience
+still come out when it dies, as in vanilla, and a dead body cannot be milked, sheared, fed, leashed or ridden.
 
 **Multiplayer:** everyone on a server who has the mod sees the same gore: the same wound on the same spot, the same
 severed part, the same death. The clients never talk to each other; each one works the outcome out from what the server
@@ -73,8 +81,13 @@ with a patter of wet slaps and the clatter of bone. Medium gore level and up; ne
   lungs full of blood gurgle and bring it up; a blast leaves it limp; a burnt one draws its limbs in; a beating ends
   in violent kicking. Every length, kick and gasp is rolled anew, so no two deaths are alike. A blow during the
   rigid phase sets the legs going. One death in twenty ends with the body bursting apart when it finally goes.
+- **The vanilla death, or death throes.** By default an animal dies the vanilla way, made gory: it goes red and keels
+  over onto its side in a second, its heart pumping the blood out of it as it lies still. It goes over away from the
+  blow; a sword turns it with the swing and throws blood off the slash, an axe hacks into it and its legs buckle a
+  moment before it keels over. Red until it is down, then just dead. Turn on Death Throes for the
+  realistic deaths described above instead.
 - **Bodies stay.** The body outlives the server's entity: it falls, is thrown along the killing blow, and can still
-  be struck, shoved and cut where it lies.
+  be struck, shoved and cut where it lies. On a server with the mod it stays until it is cleaned up (see above).
 
 ### Mothers and their young
 Hurt a calf and it cries for its mother, and she answers: her head comes up and turns to the cries, and she shakes.
@@ -104,6 +117,7 @@ Process a carcass the way it is done on a farm: right-click a dead chicken with 
 handful of feathers at a time, down to bare, goose-pimpled skin. Take the head, wings and legs off at the joints
 with a blade. Cut through the carcass to the bone and it splits in two, and a blade on any loose piece cuts it in
 two again, raw on the cut face, until it is diced. The body stays on the ground as long as you keep working on it.
+On a server with the mod, the other players see each cut as you make it.
 
 ### Inventory sorting
 A small extra, the way 1.7.10 did it: a tiny sort button in the top right of every chest, barrel, ender chest and
@@ -164,6 +178,15 @@ Tested alongside Sodium, Iris (without a shader pack), Lithium, FerriteCore, Ent
 | Inventory Sorting | On | Sort buttons on chests and your inventory, and middle-click to sort. |
 | Rotten Undead | On | Zombies and their kin are rotting meat, with rotten wounds and dark, thick rotten blood. |
 | Wounds on Players | On | Wounds on other players. Everyone with the mod sees the same ones. |
+| Wounds Heal | On | Wounds close as health comes back and broken bones knit. |
+| Wounds Clot After | 30 s | How long a living body keeps dripping after the last blow. |
+| Armor on Severed Parts | On | Severed heads and limbs keep the armour they wore. |
+| Brutal PvP | On | Players' blades cut other players deeper; a kill on High or Extreme takes more than one limb. |
+| Blood on Screen | On | When you are hit, pixel blood is thrown across your screen from that side and runs down it. |
+| Low Health Heartbeat | On | Below a third of your health the screen edge goes red and your heart pounds, faster near death. |
+| Stagger | 100% | How hard a blow knocks your view aside; near death the view also sways. 0 turns both off. |
+| Limping | On | A cut or broken leg makes players and humanoid mobs limp (your own view hitches too). A hurt arm hangs, and a belly wound is held. |
+| Bloody Clothes | On | Blood from open wounds soaks a player's jacket, sleeves and trousers and smears their armour. |
 | Suffering | Medium | Screams, trembling, death throes and herd panic, separate from Gore Level. Off disables it. |
 | Scream Volume | 100% | Also follows the Friendly Creatures volume. |
 | Max Screams | 8 | Sounds playing at once; background whimpers and bellows are dropped first. |
@@ -172,7 +195,10 @@ Tested alongside Sodium, Iris (without a shader pack), Lithium, FerriteCore, Ent
 | Ecology | On | Animals remember killing and react by role: prey, herds, mothers, predators, flies. |
 | Grief | 600 s | How long a mother grieves for her killed young (and a young animal for its mother), at Medium suffering. 0 turns it off. |
 | Death Launch | 100% | How hard the killing blow throws a body. 0 turns it off. |
-| Body Lingers | 10 s | How long a body stays after its death throes. |
+| Death Throes | Off | Off: the vanilla death, made gory (red, over onto its side, bleeding out, still). On: the realistic death throes. |
+| Keep Bodies | On | Server side (singleplayer, LAN host, a server with the mod): bodies stay until cleaned up or butchered apart. |
+| Most Kept Bodies | 64 | Server side: kept bodies per dimension; the oldest goes up in smoke. |
+| Body Lingers | 10 s | How long a body stays after it dies when the server does not keep bodies. |
 | Red Death | On | Dying bodies stay red until they are gone, like the vanilla death. |
 | Death Pop | On | Some bodies, when they finally go, pop into their head, limbs and scraps of flesh, which you can kick about. |
 | Death Pop Chance | 5% | How many deaths end in that burst; the rest die out on the ground and are left lying. |
@@ -208,6 +234,12 @@ Only in `config/fluidgore.json`:
   budget. Decals are cut into pieces that sit on the real surface heights of stairs and slabs.
 - **Bodies** are small physics systems (gravity, block collision, toppling, springy joints, weight from body size)
   that keep going after the server has removed the entity.
+- **Kept bodies and shared butchery** are the one part that needs the mod on the server. The server stops vanilla
+  from removing a dead animal (up to Most Kept Bodies per dimension; the oldest goes up in smoke) and refuses
+  interactions with it. A blow, cut, pluck or clean-up on a body is sent to the server as what the player did (where
+  they stood and looked, what they held), passed on to the players nearby, and played on each screen with dice seeded
+  from that action and the body's UUID, so it comes out the same everywhere. Loose pieces are named by the dice of
+  the hit that made them, so a cut on a piece finds the same piece on every screen.
 
 ## Building from source
 
@@ -226,6 +258,9 @@ screenshots to `build/run/clientGameTest/screenshots`. Textures are generated, n
 ## Known limitations
 
 - An item held in a severed hand still renders where the hand was.
+- Evidence covers what a player with the mod did; gore from hits no one with the mod made (a skeleton's arrows) is only
+  seen by those watching. Blood splats and puddles are not kept. Loose pieces are kept in the server's memory: they
+  are gone after the world is closed, while what was done to bodies is saved with them.
 - Mobs with unusual models (slimes, fish, ghasts) bleed but have no parts to lose.
 - Not yet verified with an Iris shader pack enabled.
 

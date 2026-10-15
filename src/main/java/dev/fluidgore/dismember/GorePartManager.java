@@ -7,6 +7,8 @@ import dev.fluidgore.blood.BoneEmitter;
 import dev.fluidgore.blood.BrokenBlocks;
 import dev.fluidgore.blood.SurfaceProbe;
 import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.net.GoreSync;
+import dev.fluidgore.net.PieceSync;
 import dev.fluidgore.trigger.Fate;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,6 +26,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import org.joml.Quaternionf;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Simulates severed parts: gravity, drag, block collision with a slight bounce, tumbling, and finally settling
@@ -50,10 +53,30 @@ public final class GorePartManager {
 	}
 
 	public void add(GorePart part) {
+		if (part.key == 0L) {
+			part.key = Fate.key();
+		}
+
+		if (GoreSync.local()) {
+			// Cut off by this player: their game says where it flies.
+			PieceSync.moved(part);
+		}
+
 		parts.add(part);
 		while (parts.size() > GoreConfig.get().maxDetachedParts) {
 			parts.removeFirst();
 		}
+	}
+
+	/** The piece with this {@link GorePart#key}, or null. */
+	public @Nullable GorePart byKey(long key) {
+		for (GorePart part : parts) {
+			if (part.key == key) {
+				return part;
+			}
+		}
+
+		return null;
 	}
 
 	public void tick(Level level, BloodWorld blood) {
@@ -278,7 +301,8 @@ public final class GorePartManager {
 		}
 	}
 
-	private static void shatter(ClientLevel level, GorePart p) {
+	public static void shatter(ClientLevel level, GorePart p) {
+		PieceSync.shattered(p);
 		BoneEmitter.shatter(level, new Vec3(p.x, p.y, p.z), Math.min(1.5F, 0.6F + radius(p) * 3.0F));
 	}
 

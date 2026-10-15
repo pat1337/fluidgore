@@ -23,6 +23,9 @@ public final class Fate {
 	private static final List<Stream> STREAMS = new ArrayList<>();
 	private static long seed;
 	private static boolean active;
+	/** Pieces named so far in this hit, see {@link #key}. */
+	private static long keys;
+	private static final RandomSource UNSEEDED = RandomSource.create();
 
 	private record Stream(RandomSource random, long salt) {
 	}
@@ -54,6 +57,7 @@ public final class Fate {
 	public static void begin(long hitSeed) {
 		seed = scramble(hitSeed);
 		active = true;
+		keys = 0;
 		for (Stream stream : STREAMS) {
 			stream.random().setSeed(scramble(seed ^ stream.salt()));
 		}
@@ -61,6 +65,15 @@ public final class Fate {
 
 	public static void end() {
 		active = false;
+	}
+
+	/**
+	 * A name for a new piece of a body, the same on every client: the n-th piece made by a hit or an action gets the
+	 * same key wherever it is played. Outside a hit the key is random (only this client has that piece).
+	 */
+	public static long key() {
+		long key = active ? scramble(seed ^ ++keys * 0x9E3779B97F4A7C15L) : UNSEEDED.nextLong();
+		return key != 0L ? key : 1L;
 	}
 
 	/**

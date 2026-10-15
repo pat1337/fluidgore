@@ -49,6 +49,7 @@ public final class GenerateTextures {
 		ImageIO.write(atlas, "png", new File(misc, "blood.png"));
 		ImageIO.write(wounds(), "png", new File(misc, "wounds.png"));
 		ImageIO.write(flesh(), "png", new File(misc, "flesh.png"));
+		ImageIO.write(hurt(), "png", new File(misc, "hurt.png"));
 
 		ImageIO.write(icon(), "png", new File(root, "icon.png"));
 		System.out.println("Wrote textures to " + root.getAbsolutePath());
@@ -319,8 +320,8 @@ public final class GenerateTextures {
 	}
 
 	private static void fillCircle(boolean[][] mask, double cx, double cy, double r) {
-		for (int y = 0; y < 16; y++) {
-			for (int x = 0; x < 16; x++) {
+		for (int y = 0; y < mask.length; y++) {
+			for (int x = 0; x < mask[y].length; x++) {
 				double dx = x + 0.5 - (cx + 0.5);
 				double dy = y + 0.5 - (cy + 0.5);
 				if (dx * dx + dy * dy <= r * r) {
@@ -331,7 +332,7 @@ public final class GenerateTextures {
 	}
 
 	private static void set(boolean[][] mask, int x, int y) {
-		if (x >= 1 && y >= 1 && x < 15 && y < 15) {
+		if (x >= 1 && y >= 1 && y < mask.length - 1 && x < mask[y].length - 1) {
 			mask[y][x] = true;
 		}
 	}
@@ -860,6 +861,126 @@ public final class GenerateTextures {
 		}
 
 		return image;
+	}
+
+	/**
+	 * hurt.png, 192x64, for the injured player's screen. Left, 64x64: a vignette in big ordered-dither steps, clear in
+	 * the middle and thickening to the edges, stretched over the whole screen so every texel is a chunky block. Middle,
+	 * a 2x2 grid of 32px blood splats. Right, four 16x64 drips: a run of blood from the top down, a fat drop at its foot,
+	 * revealed a bit more every tick so the blood creeps down the screen. All white/grey; the game tints them.
+	 */
+	private static BufferedImage hurt() {
+		BufferedImage image = new BufferedImage(192, 64, BufferedImage.TYPE_INT_ARGB);
+		int[][] bayer = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
+		for (int y = 0; y < 64; y++) {
+			for (int x = 0; x < 64; x++) {
+				double dx = (x + 0.5) / 32.0 - 1.0;
+				double dy = (y + 0.5) / 32.0 - 1.0;
+				// A rounded square, so the corners close in first.
+				double d = Math.pow(Math.pow(Math.abs(dx), 3.0) + Math.pow(Math.abs(dy), 3.0), 1.0 / 3.0);
+				double t = smoothstep(0.45, 1.05, d);
+				// Four flat steps of alpha, dithered in between, like an old 16-colour fade.
+				double level = t * 4.0;
+				int step = (int) level;
+				if (level - step > (bayer[y % 4][x % 4] + 0.5) / 16.0) {
+					step++;
+				}
+
+				if (step > 0) {
+					image.setRGB(x, y, argb(Math.min(4, step) / 4.0, 1.0 - 0.12 * Math.min(4, step)));
+				}
+			}
+		}
+
+		for (int i = 0; i < 4; i++) {
+			Random random = new Random(9500 + i);
+			boolean[][] mask = new boolean[32][32];
+			int blobs = 3 + random.nextInt(3);
+			for (int b = 0; b < blobs; b++) {
+				fillCircle(mask, 15.5 + random.nextGaussian() * 2.5, 15.5 + random.nextGaussian() * 2.5, 3.0 + random.nextDouble() * 3.5);
+			}
+
+			for (int a = 0; a < 5 + random.nextInt(4); a++) {
+				double angle = random.nextDouble() * Math.PI * 2.0;
+				double x = 15.5;
+				double y = 15.5;
+				int length = 8 + random.nextInt(7);
+				for (int s = 0; s < length; s++) {
+					angle += random.nextGaussian() * 0.3;
+					x += Math.cos(angle);
+					y += Math.sin(angle);
+					set(mask, (int) Math.round(x), (int) Math.round(y));
+				}
+
+				fillCircle(mask, x, y, 1.0 + random.nextDouble());
+			}
+
+			for (int s = 0; s < 14; s++) {
+				double angle = random.nextDouble() * Math.PI * 2.0;
+				double dist = 9.0 + random.nextDouble() * 6.0;
+				set(mask, (int) Math.round(15.5 + Math.cos(angle) * dist), (int) Math.round(15.5 + Math.sin(angle) * dist));
+			}
+
+			shadeMask(image, 64 + (i % 2) * 32, (i / 2) * 32, mask, random);
+		}
+
+		for (int i = 0; i < 4; i++) {
+			Random random = new Random(9600 + i);
+			boolean[][] mask = new boolean[64][16];
+			double x = 7.5 + random.nextGaussian();
+			double width = 1.6 + random.nextDouble() * 1.2;
+			int length = 44 + random.nextInt(12);
+			for (int y = 0; y < length; y++) {
+				x += random.nextGaussian() * 0.25;
+				// The run thins as the blood is left behind on the way down.
+				double w = width * (1.0 - 0.35 * y / length);
+				for (int px = 0; px < 16; px++) {
+					if (Math.abs(px + 0.5 - x) <= w) {
+						mask[y][px] = true;
+					}
+				}
+			}
+
+			double r = width + 1.2;
+			for (int y = 0; y < 64; y++) {
+				for (int px = 0; px < 16; px++) {
+					double ddx = px + 0.5 - x;
+					double ddy = y + 0.5 - (length + 1.0);
+					if (ddx * ddx + ddy * ddy * 0.6 <= r * r) {
+						mask[y][px] = true;
+					}
+				}
+			}
+
+			shadeMask(image, 128 + i * 16, 0, mask, random);
+		}
+
+		return image;
+	}
+
+	/** Draws a mask texel for texel, darker at the edges like {@link #drawPixelArt}, with a wet highlight inside. */
+	private static void shadeMask(BufferedImage image, int ox, int oy, boolean[][] mask, Random random) {
+		double[] shades = {0.5, 0.62, 0.75, 0.88};
+		for (int y = 0; y < mask.length; y++) {
+			for (int x = 0; x < mask[y].length; x++) {
+				if (!mask[y][x]) {
+					continue;
+				}
+
+				int neighbours = 0;
+				for (int[] d : new int[][]{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
+					int nx = x + d[0];
+					int ny = y + d[1];
+					if (ny >= 0 && nx >= 0 && ny < mask.length && nx < mask[y].length && mask[ny][nx]) {
+						neighbours++;
+					}
+				}
+
+				int shade = Math.max(0, Math.min(3, neighbours - 1 + random.nextInt(2) - (random.nextInt(4) == 0 ? 1 : 0)));
+				boolean shine = neighbours == 4 && random.nextInt(9) == 0;
+				image.setRGB(ox + x, oy + y, argb(1.0, shine ? 1.0 : shades[shade]));
+			}
+		}
 	}
 
 	private static int argb(double alpha, double light) {

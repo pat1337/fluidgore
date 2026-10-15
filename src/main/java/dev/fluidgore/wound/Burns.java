@@ -190,6 +190,13 @@ public final class Burns {
 	}
 
 	/** The entity respawned or is gone for good. */
+	/** Restores how charred a body is, for evidence (see {@code net/Evidence}). */
+	public void restore(int entityId, float charred) {
+		if (charred > 0.0F) {
+			charOf.put(entityId, Math.max(charOf.get(entityId), charred));
+		}
+	}
+
 	public void forget(int entityId) {
 		charOf.remove(entityId);
 		cold.remove(entityId);

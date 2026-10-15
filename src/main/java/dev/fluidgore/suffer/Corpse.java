@@ -5,10 +5,14 @@ import dev.fluidgore.trigger.Fate;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The body of a slaughtered animal, kept on the client after the server removes the entity so it can die out on
- * screen.
+ * screen, or for as long as the server keeps the entity (see {@link #kept}).
+ *
+ * <p>By default ({@link #vanilla}) it dies the vanilla way, made gory: red, over onto its side in vanilla's own
+ * curve, the heart pumping its blood out while it lies still. With Death Throes on it dies as described below.
  *
  * <p>Every body goes down at once: the legs give way within a few ticks and it falls onto its side, as an animal does
  * when a fatal blow takes its brain or its blood pressure. Everything after that happens on the ground and follows
@@ -44,6 +48,13 @@ public final class Corpse {
 
 	/** Length of the fall onto its side, roughly, in ticks. */
 	static final float FALL_TICKS = 12.0F;
+	/** Vanilla's death takes this many ticks: red, over onto its side, then gone. A vanilla death is red as long. */
+	static final int VANILLA_TICKS = 20;
+	/**
+	 * A body the server removes within this many ticks of its death went the vanilla way: the server does not keep
+	 * bodies after all, so this client keeps it a while on its own.
+	 */
+	static final int KEEP_GRACE = 30;
 
 	public final LivingEntity entity;
 	public final Kind kind;
@@ -57,6 +68,22 @@ public final class Corpse {
 	public int age;
 	/** True once the server has removed the entity and only this client-side body remains. */
 	public boolean unloaded;
+	/** Age at which the server removed the entity, or -1. */
+	int unloadedAt = -1;
+	/** The server runs Fluid Gore and keeps this body until it is cleaned away (see {@link #kept}). */
+	public boolean held;
+	/** Died the vanilla way (see {@code GoreConfig.deathThroes}): over onto its side, then still. */
+	public boolean vanilla;
+	/** The vanilla fall has hit the ground. */
+	boolean landed;
+	/** Vanilla death: the side it goes over onto, +1 its right, -1 its left: away from the killing blow. */
+	float fallSide = 1.0F;
+	/** Vanilla death: ticks it stays on buckling legs before it goes over (an axe hacked into it). */
+	int fallDelay;
+	/** Vanilla death: degrees it turns as it goes over, along the swing (a sword). */
+	float fallTwist;
+	/** Vanilla death by a blade: the way the blow went, for the blood thrown off the slash; null otherwise. */
+	@Nullable Vec3 slash;
 
 	public final Ragdoll body;
 	/** This body's own dice for its death, seeded by the killing blow: the same on every client (see Fate). */
@@ -144,7 +171,16 @@ public final class Corpse {
 		return groundTicks() > throeTicks;
 	}
 
+	/** The server keeps this body: it stays until the server takes it away (cleaned up, or the player went away). */
+	public boolean kept() {
+		return held && (!unloaded || unloadedAt > KEEP_GRACE);
+	}
+
 	public boolean done() {
+		if (kept()) {
+			return unloaded;
+		}
+
 		return groundTicks() > throeTicks + stillTicks + extraTicks;
 	}
 

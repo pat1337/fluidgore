@@ -1,5 +1,8 @@
 package dev.fluidgore.trigger;
 
+import dev.fluidgore.GoreSystems;
+import dev.fluidgore.net.Evidence;
+import dev.fluidgore.net.GoreSync;
 import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.config.GoreConfig;
@@ -7,6 +10,7 @@ import dev.fluidgore.config.GoreLevel;
 import dev.fluidgore.demo.DemoPlayer;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.Dismemberment;
+import dev.fluidgore.player.PlayerInjuries;
 import dev.fluidgore.suffer.Deaths;
 import dev.fluidgore.suffer.Suffering;
 import dev.fluidgore.wound.HitFeedback;
@@ -18,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.damagesource.DamageSource;
@@ -60,6 +65,9 @@ public final class DamageTracker {
 	/** Blast impact (0..1, vanilla's measure) at which a body is shredded outright, and at which it is torn open. */
 	private static final float SHRED_IMPACT = 0.72F;
 	public static final float TEAR_IMPACT = 0.45F;
+	/** With brutal PvP on: how much more one player's blade bleeds another, and how much deeper it cuts. */
+	private static final float PVP_BLEED = 1.6F;
+	private static final float PVP_DEPTH = 1.5F;
 
 	private final Int2FloatOpenHashMap lastHealth = new Int2FloatOpenHashMap();
 	private final Int2ObjectOpenHashMap<PendingHit> pending = new Int2ObjectOpenHashMap<>();
@@ -102,6 +110,10 @@ public final class DamageTracker {
 			if (previous <= 0.0F && health > 0.0F) {
 				// Respawned (or revived by a totem): the body is whole again.
 				dismemberment.restore(id);
+			} else if (previous > 0.0F && health > previous + 0.01F) {
+				// Healing: the wounds close as the health comes back.
+				float max = Math.max(1.0F, living.getMaxHealth());
+				dismemberment.wounds().heal(id, (health - previous) / max, health >= max - 0.01F);
 			}
 
 			PendingHit hit = pending.get(id);
@@ -122,10 +134,18 @@ public final class DamageTracker {
 
 			// Seeded from what every client is told the same way, so everyone with the mod sees the same outcome.
 			Fate.begin(living, hit != null && hit.attackerId() >= 0 ? level.getEntity(hit.attackerId()) : null);
+			// This player's own hit: the parts it cuts off are this game's to move (see PieceSync).
+			GoreSync.local(hit != null && Minecraft.getInstance().player != null && hit.attackerId() == Minecraft.getInstance().player.getId());
 			try {
 				hurt(level, blood, dismemberment, suffering, living, damage, health <= 0.0F, hit);
 			} finally {
+				GoreSync.local(false);
 				Fate.end();
+			}
+
+			if (hit != null && Minecraft.getInstance().player != null && hit.attackerId() == Minecraft.getInstance().player.getId()) {
+				// This player's own hit: the server keeps the picture of what it did (see Evidence).
+				Evidence.touched(living.getId());
 			}
 		}
 
@@ -135,6 +155,17 @@ public final class DamageTracker {
 
 	private void hurt(ClientLevel level, BloodWorld blood, Dismemberment dismemberment, Suffering suffering, LivingEntity victim,
 			float damage, boolean lethal, @Nullable PendingHit hit) {
+		if (victim instanceof LocalPlayer self && self == Minecraft.getInstance().player) {
+			// What the player feels of it themselves: blood on the screen from that side, the view knocked about.
+			Entity source = hit != null && hit.attackerId() >= 0 ? level.getEntity(hit.attackerId()) : null;
+			Vec3 from = hit != null && hit.sourceAt() != null ? hit.sourceAt() : source != null ? source.getEyePosition() : null;
+			PlayerInjuries.Cause cause = hit == null || hit.fire() ? PlayerInjuries.Cause.OTHER
+					: hit.explosion() ? PlayerInjuries.Cause.BLAST
+					: hit.fall() ? PlayerInjuries.Cause.FALL
+					: from != null ? PlayerInjuries.Cause.STRUCK : PlayerInjuries.Cause.OTHER;
+			GoreSystems.injuries().onHurt(self, damage, from, cause);
+		}
+
 		boolean gore = EntityFilter.affects(victim);
 		boolean suffers = suffering.applies(victim);
 		if (!gore && !suffers) {
@@ -185,8 +216,8 @@ public final class DamageTracker {
 
 		GoreConfig config = GoreConfig.get();
 		boolean torn = false;
-		if (gore && blastAt != null && lethal && config.blastGore && config.goreLevel.ordinal() >= GoreLevel.MEDIUM.ordinal()
-				&& !(victim instanceof Player)) {
+		// Players too: a creeper that kills you throws your limbs about for everyone watching.
+		if (gore && blastAt != null && lethal && config.blastGore && config.goreLevel.ordinal() >= GoreLevel.MEDIUM.ordinal()) {
 			if (impact >= SHRED_IMPACT) {
 				// Right next to the charge: the body is torn to pieces and there is nothing left to die slowly.
 				dismemberment.vaporize(blood, level, victim, blastAt);
@@ -199,19 +230,21 @@ public final class DamageTracker {
 		}
 
 		Weapon weapon = weapon(attacker, meleeAttacker, blastAt);
+		// One player's blade on another: deeper cuts, harder bleeding, and a kill takes more than one limb.
+		boolean pvp = config.brutalPvp && victim instanceof Player && meleeAttacker instanceof Player && weapon != null && weapon.cuts();
 		Deaths.Zone zone = Deaths.Zone.UNKNOWN;
 		if (gore) {
 			// No attacker and no blast: a fall, fire, drowning. Bruising and a little bleeding.
 			// Fire sears the flesh shut instead: it chars (see Burns) but does not bleed.
 			if (hit == null || !hit.fire()) {
 				// What is in a walking corpse is old and thick: it oozes rather than sprays.
-				float flow = EntityFilter.isRotten(victim) ? 0.55F : 1.0F;
+				float flow = (EntityFilter.isRotten(victim) ? 0.55F : 1.0F) * (pvp ? PVP_BLEED : 1.0F);
 				BloodEmitter.bleed(blood, level, victim, damage, lethal, away, (weapon != null ? weapon.bleed : 0.25F) * flow);
 			}
 
 			Wounds.Strike wound = weapon == null ? null : blastAt != null
 					? dismemberment.wounds().onBlast(victim, blastAt, damage)
-					: dismemberment.wounds().onDamage(victim, attacker, meleeAttacker != null, weapon, damage);
+					: dismemberment.wounds().onDamage(victim, attacker, meleeAttacker != null, weapon, damage * (pvp ? PVP_DEPTH : 1.0F));
 			if (wound != null) {
 				BodyPart part = wound.hit().bodyPart();
 				zone = part == null ? Deaths.Zone.BODY : part == BodyPart.HEAD ? Deaths.Zone.HEAD : Deaths.Zone.LEG;
@@ -241,6 +274,11 @@ public final class DamageTracker {
 				boolean chop = weapon.cuts() && (lethal || heavy) && RANDOM.nextFloat() < config.goreLevel.partChance;
 				if (struck != null && (wound.cut() || chop)) {
 					dismemberment.severPart(blood, level, victim, struck, victim::position, Float.NaN, 0.0F, away);
+				}
+
+				if (pvp && lethal && config.goreLevel.ordinal() >= GoreLevel.HIGH.ordinal()) {
+					// Hacked down: more of the body comes apart than the limb that took the blow.
+					dismemberment.onBladedHit(blood, level, victim, true, away);
 				}
 			} else if (torn) {
 				// Already torn apart above.

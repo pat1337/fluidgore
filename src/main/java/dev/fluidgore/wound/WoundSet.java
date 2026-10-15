@@ -1,5 +1,6 @@
 package dev.fluidgore.wound;
 
+import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.BodyPart;
 import java.util.Map;
 import net.minecraft.client.model.Model;
@@ -77,6 +78,8 @@ public final class WoundSet {
 	/** Bits (1 << part index, {@link #TORSO} for the trunk) of bones that are broken, and of those smashed beyond that. */
 	int broken;
 	int smashed;
+	/** Ticks since the last blow opened or deepened a wound; a living body's wounds clot as this grows. */
+	int quiet;
 
 	WoundSet(Model<?> model, Flesh flesh, int blood) {
 		this.model = model;
@@ -106,6 +109,7 @@ public final class WoundSet {
 			trauma += amount;
 		}
 
+		quiet = 0;
 		int b = (hit.axis() + 1) % 3;
 		int c = (hit.axis() + 2) % 3;
 		float hu = hit.local().get(b);
@@ -265,6 +269,33 @@ public final class WoundSet {
 		return deepest;
 	}
 
+	/** Deepest wound on the trunk, the part that cannot come off (0 if none). */
+	public float torsoSeverity() {
+		float deepest = 0.0F;
+		for (int i = 0; i < count; i++) {
+			if (bodyPart[i] == null) {
+				deepest = Math.max(deepest, severity[i]);
+			}
+		}
+
+		return deepest;
+	}
+
+	/**
+	 * How hard the living body is bleeding right now, 0..1: its deepest open wound, thinning to nothing as the wounds
+	 * clot after the last blow (see {@link GoreConfig#woundClotSeconds}).
+	 */
+	public float bleeding() {
+		float open = 0.0F;
+		for (int i = 0; i < count; i++) {
+			if (severity[i] >= 0.25F && !Float.isNaN(ox[i]) && morph[i] != PLUCK && morph[i] != CUT) {
+				open = Math.max(open, severity[i]);
+			}
+		}
+
+		return open * Math.max(0.0F, 1.0F - quiet / (GoreConfig.get().woundClotSeconds * 20.0F));
+	}
+
 	/** Crushing injury so far; see {@link #trauma}. */
 	public float trauma() {
 		return trauma;
@@ -329,6 +360,49 @@ public final class WoundSet {
 				target.ox[j] = target.oy[j] = target.oz[j] = Float.NaN;
 			}
 		}
+	}
+
+	/**
+	 * Health came back: every wound closes by {@code amount} of severity (meat back to a gash, a gash to a bruise, a
+	 * bruise gone), the crushing eases and broken bones knit; a fracture's shards go once its bone has mended.
+	 * Stumps and cut faces never heal. Returns true if nothing is left.
+	 */
+	boolean heal(float amount) {
+		trauma = Math.max(0.0F, trauma - amount * 2.0F);
+		for (int j = 0; j < bone.length; j++) {
+			bone[j] = Math.max(0.0F, bone[j] - amount * Wounds.FRACTURE);
+			if (bone[j] < Wounds.FRACTURE) {
+				broken &= ~(1 << j);
+				smashed &= ~(1 << j);
+			}
+		}
+
+		int kept = 0;
+		for (int i = 0; i < count; i++) {
+			boolean gone;
+			if (morph[i] == CRUSH || morph[i] == RIBS) {
+				gone = (broken & 1 << (bodyPart[i] == null ? TORSO : bodyPart[i].ordinal())) == 0;
+			} else if (morph[i] == CUT || morph[i] == PLUCK || Float.isNaN(ox[i])) {
+				gone = false;
+			} else {
+				severity[i] -= amount;
+				radius[i] = Math.max(0.6F, radius[i] - amount * 2.0F);
+				gone = severity[i] <= 0.02F;
+			}
+
+			if (!gone) {
+				copy(i, kept++);
+			}
+		}
+
+		for (int i = kept; i < count; i++) {
+			part[i] = null;
+			cube[i] = null;
+			bodyPart[i] = null;
+		}
+
+		count = kept;
+		return count == 0 && trauma <= 0.0F && broken == 0;
 	}
 
 	/** Drops the wounds on a part that has just been cut off (it takes them with it). */

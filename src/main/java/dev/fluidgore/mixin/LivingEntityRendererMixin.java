@@ -6,6 +6,8 @@ import dev.fluidgore.GoreSystems;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.dismember.ModelParts;
+import dev.fluidgore.player.Injury;
+import dev.fluidgore.player.InjuryPose;
 import dev.fluidgore.suffer.BodyPose;
 import dev.fluidgore.suffer.Corpse;
 import dev.fluidgore.suffer.Ragdoll;
@@ -16,6 +18,7 @@ import dev.fluidgore.wound.Wounds;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
+import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.util.Mth;
@@ -57,6 +60,7 @@ public abstract class LivingEntityRendererMixin {
 		state.setData(Burns.KEY, tint);
 		state.setData(BloodyWool.KEY, GoreSystems.dismemberment().wool().tint(entity.getId()));
 		state.setData(ModelParts.ENTITY_ID, entity.getId());
+		state.setData(Injury.KEY, GoreSystems.suffering().corpse(entity.getId()) == null ? Injury.of(entity) : null);
 
 		Corpse corpse = GoreSystems.suffering().corpse(entity.getId());
 		if (corpse != null) {
@@ -80,6 +84,10 @@ public abstract class LivingEntityRendererMixin {
 		} else {
 			state.setData(BodyPose.KEY, null);
 			state.setData(SufferPose.CLOCK, null);
+			if (!entity.isAlive() && entity.deathTime > 20) {
+				// A body the server keeps, with no corpse here (suffering is off): vanilla would keep it red for good.
+				state.hasRedOverlay = entity.hurtTime > 0;
+			}
 		}
 	}
 
@@ -122,9 +130,17 @@ public abstract class LivingEntityRendererMixin {
 			// Lift it by the half-width it swings below the pivot (pose scale is already applied here). Past the side, on
 			// its way onto its back, the whole height of the body swings below the feet as well.
 			float roll = body.roll();
-			float lift = state.boundingBoxWidth * 0.5F * Mth.abs(Mth.sin(roll)) + state.boundingBoxHeight * Math.max(0.0F, -Mth.cos(roll)) * 0.7F;
+			Integer id = state.getData(ModelParts.ENTITY_ID);
+			float side = id != null ? ModelParts.sideLift(id, state.boundingBoxWidth, state.scale) : state.boundingBoxWidth * 0.5F;
+			float lift = side * Mth.abs(Mth.sin(roll)) + state.boundingBoxHeight * Math.max(0.0F, -Mth.cos(roll)) * 0.7F;
 			poseStack.translate(0.0F, lift / entityScale, 0.0F);
 			poseStack.rotateDegrees(Axis.ZP, body.roll() * Mth.RAD_TO_DEG);
+		}
+
+		Injury injury = state.getData(Injury.KEY);
+		if (injury != null && state instanceof HumanoidRenderState) {
+			// A limp: the body drops onto the bad leg as it takes the weight.
+			poseStack.rotateDegrees(Axis.ZP, InjuryPose.lean(injury, state));
 		}
 
 		SufferPose pose = state.getData(SufferPose.KEY);

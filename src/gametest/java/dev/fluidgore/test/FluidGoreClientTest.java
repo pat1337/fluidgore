@@ -28,7 +28,13 @@ import net.minecraft.world.entity.monster.zombie.Husk;
 public class FluidGoreClientTest implements FabricClientGameTest {
 	@Override
 	public void runTest(ClientGameTestContext context) {
-		context.runOnClient(mc -> GoreConfig.get().goreLevel = GoreLevel.EXTREME);
+		// The tests below were written for the death throes and for bodies that go when the throes are over; keptBodies
+		// tests the vanilla death and the server keeping bodies.
+		context.runOnClient(mc -> {
+			GoreConfig.get().goreLevel = GoreLevel.EXTREME;
+			GoreConfig.get().deathThroes = true;
+			GoreConfig.get().keepBodies = false;
+		});
 
 		try (TestSingleplayerContext singleplayer = context.worldBuilder().create()) {
 			singleplayer.getConnection().waitForChunksRender();
@@ -49,7 +55,10 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			singleplayer.getConnection().waitForChunksRender();
 			horsesAndFractures(context, singleplayer.getServer());
 			butchery(context, singleplayer.getServer());
+			keptBodies(context, singleplayer.getServer());
 			meatsAndWool(context, singleplayer.getServer());
+			playerGore(context, singleplayer.getServer());
+			playerInjuries(context, singleplayer.getServer());
 			endermen(context, singleplayer.getServer());
 			suffering(context, singleplayer.getServer());
 			hackModel(context, singleplayer.getServer());
@@ -88,7 +97,11 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			combat(context, server, "server");
 		}
 
-		context.runOnClient(mc -> GoreConfig.get().goreLevel = GoreLevel.MEDIUM);
+		context.runOnClient(mc -> {
+			GoreConfig.get().goreLevel = GoreLevel.MEDIUM;
+			GoreConfig.get().deathThroes = false;
+			GoreConfig.get().keepBodies = true;
+		});
 	}
 
 	private static void setUpArena(TestServerContext server) {
@@ -849,6 +862,239 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		System.out.println("[FluidGoreTest] horses and fractures passed");
 	}
 	/**
+	 * 2.10: severed parts keep their armour; a living body's wounds clot and close as it heals; a creeper that kills the
+	 * player tears the player apart like any other body.
+	 */
+	private static void playerGore(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("time set noon");
+		server.runCommand("tp @a 160.5 -60 -1.5 0 25");
+		server.runCommand("summon minecraft:zombie 160.5 -60 2.5 {NoAI:1b,Rotation:[180f,0f],equipment:{head:{id:\"minecraft:diamond_helmet\"},"
+				+ "chest:{id:\"minecraft:iron_chestplate\"},legs:{id:\"minecraft:iron_leggings\"},feet:{id:\"minecraft:iron_boots\"}}}");
+		// Bodies from the last test are made a tick after the kill; let them appear so they are cleared too.
+		context.waitTicks(5);
+		server.runCommand("summon minecraft:pig 158.0 -60 2.5 {NoAI:1b,Rotation:[90f,0f]}");
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+			GoreConfig.get().woundClotSeconds = 5;
+		});
+		context.waitTicks(15);
+		int zombie = findId(context, net.minecraft.world.entity.monster.zombie.Zombie.class);
+		int pig = findId(context, net.minecraft.world.entity.animal.pig.Pig.class);
+		check(zombie >= 0 && pig >= 0, "test zombie or pig not found");
+
+		String armour = context.computeOnClient(mc -> {
+			var body = (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(zombie);
+			StringBuilder worn = new StringBuilder();
+			for (BodyPart part : new BodyPart[]{BodyPart.HEAD, BodyPart.RIGHT_ARM, BodyPart.LEFT_LEG}) {
+				int before = GoreSystems.dismemberment().parts().parts().size();
+				GoreSystems.dismemberment().severPart(GoreSystems.blood(), mc.level, body, part, body::position, body.yBodyRot, 0.0F, null);
+				var parts = GoreSystems.dismemberment().parts().parts();
+				var piece = parts.size() > before ? parts.get(parts.size() - 1) : null;
+				worn.append(piece == null || piece.armor == null ? -1 : piece.armor.size()).append(' ');
+			}
+
+			return worn.toString().trim();
+		});
+		System.out.println("[FluidGoreTest] armour layers on head, arm, leg: " + armour);
+		check("1 1 2".equals(armour), "severed parts lost their armour: " + armour);
+		context.waitTicks(20);
+		context.takeScreenshot("armoured_parts");
+		// The zombie's stumps and severed pieces drip on their own; only the pig's wounds are measured below. Sent far
+		// away rather than killed, so it leaves no bleeding body behind.
+		server.runCommand("tp @e[type=minecraft:zombie] 160.5 -60 300");
+		context.waitTicks(5);
+		context.runOnClient(mc -> GoreSystems.dismemberment().parts().clear());
+
+		// A living pig cut deep: it drips at first, then the wounds clot and the dripping stops.
+		server.runCommand("damage @e[type=minecraft:pig,limit=1] 3 minecraft:generic");
+		context.waitTicks(10);
+		int opened = context.computeOnClient(mc -> {
+			var body = (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(pig);
+			var posed = ModelParts.pose(body);
+			var target = ModelHit.centre(body, posed, ModelParts.torso(posed.model()));
+			var eye = target.add(0.0, 0.3, -1.5);
+			for (int i = 0; i < 3; i++) {
+				GoreSystems.dismemberment().wounds().strike(body, eye, target.subtract(eye).normalize(), 8, Weapon.BLADE, 6);
+			}
+
+			GoreSystems.blood().clear();
+			var set = GoreSystems.dismemberment().wounds().get(pig);
+			return set == null ? 0 : set.count();
+		});
+		check(opened > 0, "the pig was not wounded");
+		int fresh = dropsOver(context, 40, 158.0, 2.5);
+		context.waitTicks(100);
+		context.runOnClient(mc -> GoreSystems.blood().clear());
+		int clotted = dropsOver(context, 60, 158.0, 2.5);
+		System.out.println("[FluidGoreTest] living wounds: " + opened + ", drops fresh " + fresh + ", after clotting " + clotted);
+		check(fresh > 0, "fresh wounds on a living pig do not drip");
+		check(clotted == 0, "a living pig's wounds still drip after clotting: " + clotted);
+
+		// Health back: the wounds close.
+		server.runCommand("effect give @e[type=minecraft:pig,limit=1] minecraft:instant_health 1 1");
+		context.waitTicks(10);
+		int healed = context.computeOnClient(mc -> {
+			var set = GoreSystems.dismemberment().wounds().get(pig);
+			return set == null ? 0 : set.count();
+		});
+		System.out.println("[FluidGoreTest] wounds after healing: " + healed);
+		check(healed == 0, "the pig healed but kept " + healed + " wounds");
+
+		// A creeper goes off at the player's feet: the player is torn apart for everyone watching.
+		boolean creative = context.computeOnClient(mc -> mc.player.isCreative());
+		String difficulty = context.computeOnClient(mc -> mc.level.getDifficulty().getSerializedName());
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("difficulty normal");
+		server.runCommand("gamemode survival @a");
+		server.runCommand("tp @a 170.5 -60 0.5 0 25");
+		context.waitTicks(10);
+		int self = context.computeOnClient(mc -> mc.player.getId());
+		server.runCommand("summon minecraft:creeper 170.5 -60 1.5 {Fuse:0s,ignited:1b}");
+		context.waitTicks(20);
+		String blown = context.computeOnClient(mc -> mc.player.isDeadOrDying() + " " + GoreSystems.dismemberment().vaporized(self) + " "
+				+ GoreSystems.dismemberment().missingMask(self) + " " + GoreSystems.dismemberment().giblets().count());
+		System.out.println("[FluidGoreTest] player blown up (dead, shredded, missing, giblets): " + blown);
+		String[] b = blown.split(" ");
+		check("true".equals(b[0]), "the creeper did not kill the player");
+		check("true".equals(b[1]) || !"0".equals(b[2]), "the player was killed by a blast but not torn apart: " + blown);
+		context.takeScreenshot("player_blown_up");
+		context.runOnClient(mc -> {
+			mc.player.respawn();
+			mc.gui.setScreen(null);
+		});
+		context.waitTicks(40);
+		boolean whole = context.computeOnClient(mc -> !mc.player.isDeadOrDying() && !GoreSystems.dismemberment().vaporized(mc.player.getId())
+				&& GoreSystems.dismemberment().missingMask(mc.player.getId()) == 0);
+		check(whole, "the player is not whole again after respawning");
+		server.runCommand("difficulty " + difficulty);
+		// Respawning put the player back at the world spawn: return to the test area and let its chunks load.
+		server.runCommand("tp @a 160.5 -60 -1.5 0 25");
+		context.waitTicks(20);
+		context.waitFor(mc -> mc.levelRenderer.hasRenderedAllSections());
+		server.runCommand(creative ? "gamemode creative @a" : "gamemode survival @a");
+		server.runCommand("kill @e[type=!minecraft:player]");
+		context.runOnClient(mc -> {
+			GoreConfig.get().woundClotSeconds = 30;
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+		System.out.println("[FluidGoreTest] playerGore passed");
+	}
+
+	/**
+	 * 2.10 injuries: a blow from the right throws blood on the right of the screen and knocks the view; a smashed leg
+	 * makes a body limp; near death the screen reddens. Survival mode, real /damage from a zombie.
+	 */
+	private static void playerInjuries(ClientGameTestContext context, TestServerContext server) {
+		boolean creative = context.computeOnClient(mc -> mc.player.isCreative());
+		String difficulty = context.computeOnClient(mc -> mc.level.getDifficulty().getSerializedName());
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("difficulty normal");
+		server.runCommand("gamemode survival @a");
+		server.runCommand("effect give @a minecraft:instant_health 1 5");
+		// Facing south (+z): the player's right hand is to the west (-x).
+		server.runCommand("tp @a 180.5 -60 0.5 0 10");
+		server.runCommand("summon minecraft:zombie 178.5 -60 0.5 {NoAI:1b,Rotation:[-90f,0f],Tags:[\"hurter\"]}");
+		server.runCommand("summon minecraft:zombie 180.5 -60 4.5 {NoAI:1b,Rotation:[90f,0f],Tags:[\"limper\"]}");
+		context.waitTicks(15);
+		context.runOnClient(mc -> GoreSystems.injuries().clear());
+
+		server.runCommand("damage @p 4 minecraft:mob_attack by @e[tag=hurter,limit=1]");
+		context.waitTicks(4);
+		String splats = context.computeOnClient(mc -> {
+			var all = GoreSystems.injuries().splats();
+			double x = 0.0;
+			for (var splat : all) {
+				x += splat.x;
+			}
+
+			return all.size() + " " + (all.isEmpty() ? 0.0 : x / all.size());
+		});
+		System.out.println("[FluidGoreTest] hurt from the right: splats, mean x: " + splats);
+		String[] sp = splats.split(" ");
+		check(Integer.parseInt(sp[0]) > 0, "a blow put no blood on the screen");
+		check(Double.parseDouble(sp[1]) > 0.55, "a blow from the right put the blood on the left: " + splats);
+		context.takeScreenshot("hurt_screen");
+
+		// A smashed leg and an open belly: the zombie limps and clutches; and the same for the player's own leg.
+		boolean limps = context.computeOnClient(mc -> {
+			var zombie = (net.minecraft.world.entity.LivingEntity) mc.level.getEntitiesOfClass(net.minecraft.world.entity.monster.zombie.Zombie.class,
+					mc.player.getBoundingBox().inflate(8.0), z -> z.getZ() > 2.5).getFirst();
+			var posed = ModelParts.pose(zombie);
+			var leg = ModelHit.centre(zombie, posed, BodyPart.RIGHT_LEG);
+			var eye = leg.add(0.0, 0.2, -1.5);
+			GoreSystems.dismemberment().wounds().strike(zombie, eye, leg.subtract(eye).normalize(), 4, Weapon.BLUNT, 14);
+			var injury = dev.fluidgore.player.Injury.of(zombie);
+			return injury != null && injury.rightLeg() > 0.5F;
+		});
+		check(limps, "a smashed leg does not make the zombie limp");
+		context.waitTicks(5);
+		context.takeScreenshot("limping_zombie");
+
+		// Near death: the edge goes red with the heartbeat.
+		server.runCommand("damage @p 13 minecraft:generic");
+		context.waitTicks(30);
+		float red = context.computeOnClient(mc -> GoreSystems.injuries().redness(mc.player, 0.0F));
+		float health = context.computeOnClient(mc -> mc.player.getHealth());
+		System.out.println("[FluidGoreTest] near death: health " + health + ", red edge " + red);
+		check(health > 0.0F && health < 6.0F, "the player is not near death: " + health);
+		check(red > 0.2F, "near death but the screen edge is not red: " + red);
+		context.takeScreenshot("near_death");
+
+		server.runCommand("effect give @a minecraft:instant_health 1 5");
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("difficulty " + difficulty);
+		server.runCommand(creative ? "gamemode creative @a" : "gamemode survival @a");
+		context.waitTicks(10);
+		context.runOnClient(mc -> {
+			GoreSystems.injuries().clear();
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+		System.out.println("[FluidGoreTest] playerInjuries passed");
+	}
+
+	/** Drops seen near x, z, summed over {@code ticks} ticks: each one is only in the air for a few. */
+	private static int dropsOver(ClientGameTestContext context, int ticks, double x, double z) {
+		int seen = 0;
+		for (int t = 0; t < ticks; t++) {
+			context.waitTicks(1);
+			seen += context.computeOnClient(mc -> dropsNear(x, z));
+		}
+
+		return seen;
+	}
+
+	/** Blood drops in the air within two blocks (across) of x, z. */
+	private static int dropsNear(double x, double z) {
+		int n = 0;
+		for (var d : GoreSystems.blood().droplets().droplets()) {
+			if (Math.abs(d.x - x) < 2.0 && Math.abs(d.z - z) < 2.0) {
+				n++;
+			}
+		}
+
+		return n;
+	}
+
+	private static int findId(ClientGameTestContext context, Class<? extends Entity> type) {
+		return context.computeOnClient(mc -> {
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (type.isInstance(e)) {
+					return e.getId();
+				}
+			}
+
+			return -1;
+		});
+	}
+
+	/**
 	 * Endermen: violet ender blood and flesh, and limbs that keep blinking about after they come off; every severed
 	 * limb now stays for minutes.
 	 */
@@ -1173,6 +1419,45 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		});
 		System.out.println("[FluidGoreTest] diced: " + cuts + " cuts, pieces now " + context.computeOnClient(mc -> GoreSystems.dismemberment().parts().parts().size()));
 		check(cuts >= 3, "the pieces could not be cut down: " + cuts + " cuts");
+		// Shared dicing: a cut made by this player (through GoreSync, as the click does) leaves pieces this game moves for
+		// everyone; a piece told where another player's game put it lies there.
+		long[] madeKey = new long[1];
+		String shared = context.computeOnClient(mc -> {
+			var parts = GoreSystems.dismemberment().parts().parts();
+			for (int i = parts.size() - 1; i >= 0; i--) {
+				var piece = parts.get(i);
+				int sizeBefore = parts.size();
+				if (dev.fluidgore.net.GoreSync.act(dev.fluidgore.net.GoreAction.of(dev.fluidgore.net.GoreAction.CUT, -1, piece.key, mc.player.getEyePosition(),
+						new net.minecraft.world.phys.Vec3(0.0, -1.0, 0.0), 0, 0.0F))) {
+					var made = parts.getLast();
+					// The other half keeps going on this game, so it is the one the server keeps.
+					madeKey[0] = parts.get(parts.size() - 2).key;
+					boolean streamed = made.streamFor > 0 && made.key != piece.key;
+					var q = made.rotation;
+					dev.fluidgore.net.PieceSync.apply(new dev.fluidgore.net.PieceState(made.key, (float) made.x + 1.0F, (float) made.y, (float) made.z, 0, 0, 0,
+							q.x, q.y, q.z, q.w, 1, 0, 0, 0, dev.fluidgore.net.PieceState.RESTING));
+					return "cut " + (parts.size() - sizeBefore + 1) + " streamed=" + streamed + " followed=" + (made.resting && made.streamFor == 0);
+				}
+			}
+
+			return "nothing to cut";
+		});
+		System.out.println("[FluidGoreTest] shared dicing: " + shared);
+		check(shared.contains("streamed=true followed=true"), "dicing is not shared: " + shared);
+
+		// Evidence: a player who goes away (the pieces unload) and comes back finds the diced piece lying there again.
+		context.waitTicks(20);
+		server.runCommand("tp @a 600.5 -60 0.5");
+		context.waitTicks(60);
+		check(context.computeOnClient(mc -> GoreSystems.dismemberment().parts().byKey(madeKey[0]) == null), "the diced piece did not unload with its chunk");
+		server.runCommand("tp @a 80.5 -60 0.8 0 55");
+		context.waitTicks(80);
+		String back = context.computeOnClient(mc -> {
+			var piece = GoreSystems.dismemberment().parts().byKey(madeKey[0]);
+			return piece == null ? "gone" : String.format(java.util.Locale.ROOT, "at %.2f %.2f %.2f resting=%s", piece.x, piece.y, piece.z, piece.resting);
+		});
+		System.out.println("[FluidGoreTest] diced piece after coming back: " + back);
+		check(!back.equals("gone"), "the diced piece was not there when the player came back");
 		check(context.computeOnClient(mc -> {
 			var last = GoreSystems.dismemberment().parts().parts().getLast();
 			return last.wounds != null && last.wounds.flesh() == dev.fluidgore.wound.Flesh.POULTRY && last.rawFaces != 0;
@@ -1181,6 +1466,195 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		server.runCommand("tp @a 80.5 -60 0.8 0 55");
 		context.waitTicks(3);
 		context.takeScreenshot("butcher_03_diced");
+	}
+
+	/**
+	 * Kept bodies: with Death Throes off a cow dies the vanilla way, red and over onto its side, and the server running
+	 * Fluid Gore keeps the body long after vanilla would have removed it. Butchery played on it through GoreSync (as a
+	 * relayed action from another player is played) comes out the same both times on the same body, which is what lets
+	 * every screen agree. A body butchered apart is taken away by the server; a sponge cleans one away there too.
+	 */
+	private static void keptBodies(ClientGameTestContext context, TestServerContext server) {
+		context.runOnClient(mc -> {
+			GoreConfig.get().deathThroes = false;
+			GoreConfig.get().keepBodies = true;
+		});
+		java.util.UUID uuid = new java.util.UUID(5L << 32 | 6L, 7L << 32 | 8L);
+		String[] outcome = new String[2];
+		for (int run = 0; run < 2; run++) {
+			server.runCommand("kill @e[type=!minecraft:player]");
+			context.waitTicks(40);
+			context.runOnClient(mc -> {
+				GoreSystems.blood().clear();
+				GoreSystems.dismemberment().clear();
+				GoreSystems.suffering().clear();
+			});
+			server.runCommand("tp @a 120.5 -60 0.5 0 15");
+			server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");
+			server.runCommand("summon minecraft:cow 120.5 -60 2.5 {NoAI:1b,Rotation:[90f,0f],UUID:[I;5,6,7,8]}");
+			context.waitTicks(15);
+			int cowId = context.computeOnClient(mc -> {
+				for (Entity e : mc.level.entitiesForRendering()) {
+					if (e instanceof net.minecraft.world.entity.animal.cow.Cow) {
+						return e.getId();
+					}
+				}
+
+				return -1;
+			});
+			check(cowId >= 0, "kept-bodies cow not found");
+			check(context.computeOnClient(mc -> dev.fluidgore.net.GoreSync.serverKeepsBodies()), "the integrated server does not take Fluid Gore actions");
+			server.runCommand("damage @e[type=minecraft:cow,limit=1] 100 minecraft:generic");
+			context.waitTicks(8);
+			String falling = context.computeOnClient(mc -> {
+				var corpse = GoreSystems.suffering().corpse(cowId);
+				return corpse == null ? "no body" : "vanilla=" + corpse.vanilla + " held=" + corpse.held + " roll=" + corpse.body.roll(1.0F);
+			});
+			System.out.println("[FluidGoreTest] kept body falling: " + falling);
+			check(falling.startsWith("vanilla=true held=true"), "the cow did not die the vanilla way on a server that keeps bodies: " + falling);
+			float roll = Float.parseFloat(falling.substring(falling.indexOf("roll=") + 5));
+			check(roll > 0.2F && roll < 1.56F, "the cow is not keeling over 8 ticks after death: roll " + roll);
+			if (run == 0) {
+				context.takeScreenshot("kept_01_keeling_over");
+			}
+
+			// Vanilla removes a dead mob 20 ticks after it dies.
+			context.waitTicks(80);
+			boolean onServer = server.computeOnServer(s -> s.overworld().getEntity(uuid) instanceof net.minecraft.world.entity.LivingEntity body && !body.isAlive());
+			check(onServer, "the server did not keep the dead cow");
+			String lying = context.computeOnClient(mc -> {
+				var corpse = GoreSystems.suffering().corpse(cowId);
+				return corpse == null ? "no body" : "unloaded=" + corpse.unloaded + " lifeless=" + corpse.lifeless() + " roll=" + corpse.body.roll(1.0F);
+			});
+			System.out.println("[FluidGoreTest] kept body lying: " + lying);
+			check(lying.startsWith("unloaded=false lifeless=true roll=1.570"), "the kept cow is not lying still on its side: " + lying);
+			if (run == 0) {
+				server.runCommand("tp @a 120.5 -60 1.0 0 45");
+				context.waitTicks(3);
+				context.takeScreenshot("kept_02_lying");
+			}
+
+			// The same chops, played the way an action relayed from another player is played.
+			int r = run;
+			context.runOnClient(mc -> {
+				var corpse = GoreSystems.suffering().corpse(cowId);
+				var centre = dev.fluidgore.suffer.CorpseStrike.centre(corpse);
+				for (int i = 0; i < 6; i++) {
+					var eye = centre.add(Math.cos(i * 1.3) * 1.3, 1.0, Math.sin(i * 1.3) * 1.3);
+					dev.fluidgore.net.GoreSync.perform(dev.fluidgore.net.GoreAction.of(dev.fluidgore.net.GoreAction.STRIKE, cowId, 0L, eye,
+							centre.subtract(eye).normalize(), Weapon.CHOP.ordinal(), 9.0F));
+				}
+
+				var set = GoreSystems.dismemberment().wounds().get(cowId);
+				StringBuilder s = new StringBuilder(set == null ? "no wounds" : set.count() + " wounds");
+				for (BodyPart part : BodyPart.values()) {
+					s.append(' ').append(part).append('=').append(set == null ? 0.0F : set.severity(part));
+				}
+
+				s.append(" missing=").append(GoreSystems.dismemberment().missingMask(cowId)).append(" pieces=");
+				for (var part : GoreSystems.dismemberment().parts().parts()) {
+					s.append(Long.toHexString(part.key)).append(',');
+				}
+
+				outcome[r] = s.toString();
+			});
+			System.out.println("[FluidGoreTest] kept body butchered, run " + run + ": " + outcome[run]);
+			check(!outcome[run].startsWith("no wounds"), "chops on the kept body opened no wounds");
+			if (run == 0) {
+				// Evidence: the picture of the chopped body goes to the server, and a player who goes away and comes back
+				// finds it chopped, not whole.
+				context.runOnClient(mc -> dev.fluidgore.net.Evidence.touched(cowId));
+				context.waitTicks(15);
+				check(server.computeOnServer(s -> s.overworld().getEntity(uuid) != null
+						&& s.overworld().getEntity(uuid).getAttached(dev.fluidgore.server.EvidenceStore.GORE) != null), "the server kept no picture of the chopped body");
+				int woundsBefore = context.computeOnClient(mc -> GoreSystems.dismemberment().wounds().get(cowId).count());
+				server.runCommand("tp @a 700.5 -60 0.5");
+				context.waitTicks(60);
+				check(context.computeOnClient(mc -> GoreSystems.suffering().corpse(cowId) == null), "the body did not unload when the player went away");
+				server.runCommand("tp @a 120.5 -60 0.5 0 15");
+				context.waitTicks(80);
+				String back = context.computeOnClient(mc -> {
+					var set = GoreSystems.dismemberment().wounds().get(cowId);
+					return (GoreSystems.suffering().corpse(cowId) == null ? "no body" : "body") + " wounds=" + (set == null ? 0 : set.count());
+				});
+				System.out.println("[FluidGoreTest] kept body after coming back: " + back + " (had " + woundsBefore + ")");
+				check(back.equals("body wounds=" + woundsBefore), "the chopped body did not come back as it was left: " + back + ", had " + woundsBefore + " wounds");
+			}
+
+			context.waitTicks(20);
+			if (run == 0) {
+				context.takeScreenshot("kept_03_chopped");
+				// Butchered apart: nothing is left to keep, and the server is asked to take it.
+				context.runOnClient(mc -> GoreSystems.dismemberment().hide(cowId));
+			} else {
+				boolean cleaned = context.computeOnClient(mc -> dev.fluidgore.net.GoreSync.act(dev.fluidgore.net.GoreAction.of(dev.fluidgore.net.GoreAction.CLEAN,
+						cowId, 0L, mc.player.getEyePosition(), mc.player.getViewVector(1.0F), 0, 0.0F)));
+				check(cleaned, "the sponge did not clean the body away");
+				check(context.computeOnClient(mc -> GoreSystems.suffering().corpse(cowId) == null), "the cleaned body is still on screen");
+			}
+
+			context.waitTicks(10);
+			boolean gone = server.computeOnServer(s -> s.overworld().getEntity(uuid) == null);
+			check(gone, run == 0 ? "the server kept a body that was butchered apart" : "the server kept a body that was cleaned away");
+		}
+
+		check(outcome[0].equals(outcome[1]), "the same butchery on the same body came out differently: " + outcome[0] + " vs " + outcome[1]);
+
+		// The weapon's touch on the vanilla death. The player stands on the cow's left (+z side faces it from z=4.5), so a
+		// sword kill sends it over onto its left side (negative roll) and turns it with the swing; an axe holds it on its
+		// feet a few ticks before it goes over.
+		String[] weapons = {"minecraft:iron_sword", "minecraft:iron_axe"};
+		float[][] seen = new float[2][];
+		for (int w = 0; w < 2; w++) {
+			server.runCommand("kill @e[type=!minecraft:player]");
+			context.waitTicks(20);
+			// Kept bodies stay (selectors never pick the dead), so each kill gets its own spot.
+			double x = 130.5 + w * 4;
+			server.runCommand("tp @a " + x + " -60 4.5 180 15");
+			server.runCommand("item replace entity @a weapon.mainhand with " + weapons[w]);
+			server.runCommand("summon minecraft:cow " + x + " -60 2.5 {NoAI:1b,Rotation:[90f,0f]}");
+			context.waitTicks(15);
+			server.runCommand("execute as @p run damage @e[type=minecraft:cow,limit=1,sort=nearest] 100 minecraft:player_attack by @s");
+			context.waitTicks(3);
+			float early = context.computeOnClient(mc -> {
+				for (var corpse : GoreSystems.suffering().corpses()) {
+					if (Math.abs(corpse.entity.getX() - x) < 1.0) {
+						return corpse.body.roll(1.0F);
+					}
+				}
+
+				return Float.NaN;
+			});
+			context.waitTicks(25);
+			int ww = w;
+			context.runOnClient(mc -> {
+				for (var corpse : GoreSystems.suffering().corpses()) {
+					if (Math.abs(corpse.entity.getX() - x) < 1.0) {
+						seen[ww] = new float[]{early, corpse.body.roll(1.0F), corpse.body.yaw(1.0F)};
+					}
+				}
+			});
+			check(seen[w] != null, "no body for the " + weapons[w] + " kill");
+			System.out.println("[FluidGoreTest] " + weapons[w] + " kill: roll at 3 ticks " + seen[w][0] + ", then " + seen[w][1] + ", yaw " + seen[w][2]);
+		}
+
+		// Sponged away, so the bodies do not lie about in the tests that follow.
+		context.runOnClient(mc -> {
+			for (var corpse : new java.util.ArrayList<>(GoreSystems.suffering().corpses())) {
+				dev.fluidgore.net.GoreSync.act(dev.fluidgore.net.GoreAction.of(dev.fluidgore.net.GoreAction.CLEAN, corpse.entity.getId(), 0L,
+						mc.player.getEyePosition(), mc.player.getViewVector(1.0F), 0, 0.0F));
+			}
+		});
+		context.waitTicks(10);
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");
+		check(seen[0][1] < -1.5F, "the sword kill did not go over away from the blade: roll " + seen[0][1]);
+		check(Math.abs(net.minecraft.util.Mth.wrapDegrees(seen[0][2] - 90.0F)) > 10.0F, "the sword kill did not turn with the swing: yaw " + seen[0][2]);
+		check(Math.abs(seen[1][0]) < 0.3F && seen[1][1] < -1.5F, "the axe kill did not hold on its feet, then go over: " + seen[1][0] + " then " + seen[1][1]);
+		context.runOnClient(mc -> {
+			GoreConfig.get().deathThroes = true;
+			GoreConfig.get().keepBodies = false;
+		});
 	}
 
 	/** The head, or for babies without one (a chick is a single block) the first part the model has. */

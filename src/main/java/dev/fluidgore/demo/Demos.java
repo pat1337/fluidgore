@@ -4,6 +4,9 @@ import dev.fluidgore.GoreSystems;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.GorePart;
 import dev.fluidgore.dismember.ModelParts;
+import dev.fluidgore.net.GoreAction;
+import dev.fluidgore.net.GoreSync;
+import dev.fluidgore.player.PlayerInjuries;
 import dev.fluidgore.suffer.Corpse;
 import dev.fluidgore.suffer.CorpseStrike;
 import dev.fluidgore.wound.ModelHit;
@@ -24,6 +27,10 @@ import org.jspecify.annotations.Nullable;
  */
 public final class Demos {
 	public static final List<Demo> ALL = List.of(
+			new Demo("kept", "2.11.0", "The vanilla death made gory: a sword kill and an axe kill keel over, stay, are chopped where they lie, and are cleaned up", false, Demos::kept),
+			new Demo("injured", "2.10.0", "Injuries: a zombie limps on a smashed leg holding its belly, then you take blows and fade near death", false, Demos::injured),
+			new Demo("armor", "2.10.0", "A zombie in armour hacked apart: the helmet flies off with the head, the boots stay on the leg", false, Demos::armor),
+			new Demo("heal", "2.10.0", "A wounded pig heals: its cuts stop dripping and close as the health comes back", false, Demos::heal),
 			new Demo("glow", "2.9.0", "Ender blood glows: an enderman bled out, best watched at night or with a shader pack", false, Demos::glow),
 			new Demo("ender", "2.8.0", "An enderman cut apart: violet ender blood, portal sparks from its wounds, and limbs that keep teleporting", false, Demos::ender),
 			new Demo("meats", "2.7.0", "A pig and a cow diced into pork and steak, and a sheep cut up in its herd, the wool soaking red", false, Demos::meats),
@@ -87,6 +94,79 @@ public final class Demos {
 			}
 		}).pause(100);
 	}
+
+	/**
+	 * A zombie with its leg smashed, its arm cut and its belly opened walks past and limps, holding the wound. Then the
+	 * player's own screen as if struck from the right and the left, and near death: none of it touches their real health.
+	 */
+	private static void injured(Script s, Stage st) {
+		s.summon(st, "zombie", "fgd_limper", -2.5, 0, 4, -90.0F, "");
+		s.pause(20).hold("minecraft:iron_sword").say("A zombie with a smashed leg, a cut arm and an open belly");
+		s.client(mc -> {
+			LivingEntity e = st.find(mc.level, EntityTypes.ZOMBIE, -2.5, 0, 4);
+			if (e != null) {
+				wound(e, BodyPart.RIGHT_LEG, Weapon.BLUNT, 14.0F);
+				wound(e, BodyPart.LEFT_ARM, Weapon.BLADE, 8.0F);
+				wound(e, null, Weapon.BLADE, 9.0F);
+			}
+		}).pause(30);
+		s.say("It limps on the bad leg and holds its belly");
+		for (int i = 0; i <= 80; i++) {
+			s.cmd("tp @e[tag=fgd_limper,limit=1] " + st.pos(-2.5 + i * 0.06, 0, 4) + " " + st.yaw(-90.0F) + " 0").pause(1);
+		}
+
+		s.say("Now you: blood flies from the side the blow came from");
+		s.client(mc -> GoreSystems.injuries().onHurt(mc.player, 6.0F, st.at(4, 1.5, 1), PlayerInjuries.Cause.STRUCK)).pause(40);
+		s.client(mc -> GoreSystems.injuries().onHurt(mc.player, 9.0F, st.at(-4, 1.5, 2), PlayerInjuries.Cause.STRUCK)).pause(50);
+		s.say("Near death: the edge closes in red and your heart pounds");
+		s.client(mc -> GoreSystems.injuries().fakeHealth(0.08F, 160)).pause(170);
+		s.cmd("kill @e[tag=fgd_limper]").pause(20);
+	}
+
+	/** Strikes {@code part} of {@code e} (its trunk if null) from the player's side, as a blow from {@code weapon} would. */
+	private static void wound(LivingEntity e, @Nullable BodyPart part, Weapon weapon, float damage) {
+		ModelParts.Posed posed = ModelParts.pose(e);
+		if (posed == null) {
+			return;
+		}
+
+		Vec3 target = part != null ? ModelHit.centre(e, posed, part) : ModelHit.centre(e, posed, ModelParts.torso(posed.model()));
+		if (target != null) {
+			Vec3 eye = target.add(e.getLookAngle().scale(1.5));
+			GoreSystems.dismemberment().wounds().strike(e, eye, target.subtract(eye).normalize(), 4.0, weapon, damage);
+		}
+	}
+
+	/** A zombie in a full set of armour cut to pieces: each piece flies off still wearing what covered it. */
+	private static void armor(Script s, Stage st) {
+		s.summon(st, "zombie", "fgd_armored", 0, 0, 4, 180.0F, "equipment:{head:{id:\"minecraft:diamond_helmet\"},chest:{id:\"minecraft:iron_chestplate\"},"
+				+ "legs:{id:\"minecraft:leather_leggings\",components:{\"minecraft:dyed_color\":11546150}},feet:{id:\"minecraft:golden_boots\"}}");
+		s.pause(20).hold("minecraft:iron_axe").say("Armour stays on what it covered: helmet on the head, sleeve on the arm, boots on the leg");
+		s.client(mc -> {
+			LivingEntity e = st.find(mc.level, EntityTypes.ZOMBIE, 0, 0, 4);
+			if (e != null) {
+				for (BodyPart part : new BodyPart[]{BodyPart.HEAD, BodyPart.RIGHT_ARM, BodyPart.LEFT_LEG}) {
+					GoreSystems.dismemberment().severPart(GoreSystems.blood(), mc.level, e, part, e::position, e.yBodyRot, 0.0F, null);
+				}
+			}
+		}).pause(30);
+		s.hit("fgd_armored", 100).say("A creeper does the same to a player: the pieces fly, armour and all").pause(200);
+	}
+
+	/** A pig cut a few times, then given regeneration: the wounds clot, then close up one layer at a time. */
+	private static void heal(Script s, Stage st) {
+		s.summon(st, "pig", "fgd_heal", 0, 0, 3.5, 90.0F, "");
+		s.pause(20).hold("minecraft:iron_sword").say("A pig cut open: it drips while the wounds are fresh");
+		for (int i = 0; i < 3; i++) {
+			s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.PIG, 0, 0, 3.5), null));
+			s.hit("fgd_heal", 2.0F).pause(16);
+		}
+
+		s.pause(60).say("Healing: the cuts close as its health comes back, meat to a gash, a gash to a bruise, then nothing");
+		s.cmd("effect give @e[tag=fgd_heal,limit=1] minecraft:regeneration 12 2").pause(240);
+		s.cmd("kill @e[tag=fgd_heal]");
+	}
+
 	/** Ender blood glowing violet where it lies; at night or with shaders it lights up the ground. */
 	private static void glow(Script s, Stage st) {
 		s.summon(st, "enderman", "fgd_glow", 0, 0, 4, 90.0F, "");
@@ -220,6 +300,36 @@ public final class Demos {
 	}
 
 	/** A chicken processed like on a farm: killed, plucked bare, jointed with a cleaver, the carcass split and diced. */
+	/**
+	 * The vanilla death made gory, and a body the server keeps (in singleplayer and on a LAN world the host is the
+	 * server): it lies where it fell, is chopped where it lies, and stays until it is cleaned up with a sponge.
+	 */
+	private static void kept(Script s, Stage st) {
+		s.summon(st, "cow", "fgd_kept_sword", -1.5, 0, 3, 90.0F, "");
+		s.summon(st, "cow", "fgd_kept", 1.5, 0, 3, 90.0F, "");
+		s.pause(20).hold("minecraft:iron_sword").say("A sword kill: slashed open, it goes red and over away from the blade, turning with the swing");
+		s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.COW, -1.5, 0, 3), null));
+		s.hit("fgd_kept_sword", 100.0F).pause(50);
+		s.hold("minecraft:iron_axe").say("An axe kill: hacked into, its legs buckle, then it keels over");
+		s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.COW, 1.5, 0, 3), null));
+		s.hit("fgd_kept", 100.0F).pause(60);
+		s.say("Out of the red, and dead: no puff of smoke. They lie there, bleeding out").pause(60);
+		s.say("Chopped where it lies: everyone with the mod sees the same cuts");
+		for (BodyPart part : BodyPart.values()) {
+			for (int i = 0; i < 3; i++) {
+				s.client(mc -> chopAt(mc, part)).pause(8);
+			}
+		}
+
+		s.pause(60).hold("minecraft:sponge").say("It stays until someone cleans it up: right-click it with a sponge").pause(40);
+		s.client(mc -> {
+			Corpse corpse = nearest(mc);
+			if (corpse != null) {
+				GoreSync.act(GoreAction.of(GoreAction.CLEAN, corpse.entity.getId(), 0L, mc.player.getEyePosition(), mc.player.getViewVector(1.0F), 0, 0.0F));
+			}
+		}).pause(60);
+	}
+
 	private static void butcher(Script s, Stage st) {
 		s.summon(st, "chicken", "fgd_chicken", 0, 0, 2.5, 90.0F, "");
 		s.pause(20).hold("minecraft:air").say("A chicken, killed with one blow");
@@ -286,7 +396,8 @@ public final class Demos {
 		if (target != null) {
 			Vec3 eye = target.add(target.subtract(CorpseStrike.centre(corpse)).add(0.0, 0.3, 0.0).normalize().scale(1.5));
 			lookAt(mc, target);
-			CorpseStrike.strike(mc.level, GoreSystems.blood(), corpse, eye, target.subtract(eye).normalize(), Weapon.CHOP, 9.0F);
+			// Through GoreSync, so a player watching with the mod sees the same cuts.
+			GoreSync.act(GoreAction.of(GoreAction.STRIKE, corpse.entity.getId(), 0L, eye, target.subtract(eye).normalize(), Weapon.CHOP.ordinal(), 9.0F));
 		}
 	}
 

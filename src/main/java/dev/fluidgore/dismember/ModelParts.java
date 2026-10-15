@@ -40,6 +40,7 @@ public final class ModelParts {
 	/** Arm (or front leg) and leg slots in the order ragdoll joints use them. */
 	public static final BodyPart[] LIMBS = {BodyPart.RIGHT_ARM, BodyPart.LEFT_ARM, BodyPart.RIGHT_LEG, BodyPart.LEFT_LEG};
 	private static final Map<Model<?>, Optional<ModelPart>> TORSO = new WeakHashMap<>();
+	private static final Map<Model<?>, Float> TRUNK_HALF_WIDTH = new WeakHashMap<>();
 
 	private ModelParts() {
 	}
@@ -212,6 +213,29 @@ public final class ModelParts {
 	}
 
 	/** The legs of the model this entity was last drawn with ({@link Legs#NONE} if not drawn yet or legless). */
+	/**
+	 * How far a body lying on its side is lifted so it rests on the ground, in blocks: half the width of its trunk.
+	 * The hitbox is no measure of that: a horse's is twice as wide as its body, and it would float. Falls back to half
+	 * the hitbox width before the entity has been drawn or for a model without a body part.
+	 */
+	public static float sideLift(int entityId, float bbWidth, float scale) {
+		EntityModel<?> model = DRAWN.get(entityId);
+		if (model == null) {
+			return bbWidth * 0.5F;
+		}
+
+		float half = TRUNK_HALF_WIDTH.computeIfAbsent(model, m -> {
+			ModelPart trunk = torso(m);
+			if (trunk == null) {
+				return -1.0F;
+			}
+
+			float[] b = bounds(trunk);
+			return (b[3] - b[0]) * 0.5F;
+		});
+		return half > 0.0F ? Math.min(bbWidth * 0.5F, half * scale) : bbWidth * 0.5F;
+	}
+
 	public static Legs legs(int entityId) {
 		EntityModel<?> model = DRAWN.get(entityId);
 		if (model == null) {

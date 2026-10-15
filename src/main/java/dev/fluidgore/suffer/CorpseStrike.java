@@ -6,6 +6,8 @@ import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.ModelParts;
+import dev.fluidgore.net.GoreAction;
+import dev.fluidgore.net.GoreSync;
 import dev.fluidgore.trigger.EntityFilter;
 import dev.fluidgore.trigger.Fate;
 import dev.fluidgore.wound.HitFeedback;
@@ -31,8 +33,8 @@ import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Hitting a body that is already down or still going through its death throes. The server no longer knows about
- * these bodies, so nothing can hit them in the normal way; the attack click is caught here, aimed against the
+ * Hitting a body that is already down or still going through its death throes. The server cannot hurt the dead
+ * (and may not even have these bodies any more), so nothing can hit them in the normal way; the attack click is caught here, aimed against the
  * body's own box, and answered with blood, a shove into the ragdoll and, with a blade, a chance to cut a part off.
  */
 public final class CorpseStrike {
@@ -65,8 +67,9 @@ public final class CorpseStrike {
 		player.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
 		if (level.getGameTime() - lastStrike >= COOLDOWN) {
 			lastStrike = (int) level.getGameTime();
-			strike(level, blood, best, eye, player.getViewVector(1.0F), Weapon.of(player.getMainHandItem()),
-					(float) player.getAttributeValue(Attributes.ATTACK_DAMAGE));
+			// Played here and shown to the other players: see GoreSync.
+			GoreSync.act(GoreAction.of(GoreAction.STRIKE, best.entity.getId(), 0L, eye, player.getViewVector(1.0F), Weapon.of(player.getMainHandItem()).ordinal(),
+					(float) player.getAttributeValue(Attributes.ATTACK_DAMAGE)));
 		}
 
 		return true;
