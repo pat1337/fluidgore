@@ -10,6 +10,7 @@ import dev.fluidgore.net.Evidence;
 import dev.fluidgore.net.GoreSync;
 import dev.fluidgore.net.PieceSync;
 import dev.fluidgore.player.PlayerInjuries;
+import dev.fluidgore.rot.Decay;
 import dev.fluidgore.suffer.Suffering;
 import dev.fluidgore.trigger.DamageTracker;
 import net.minecraft.client.Minecraft;
@@ -27,6 +28,7 @@ public final class GoreSystems {
 	private static final Suffering SUFFERING = new Suffering();
 	private static final DamageTracker TRACKER = new DamageTracker();
 	private static final PlayerInjuries INJURIES = new PlayerInjuries();
+	private static final Decay DECAY = new Decay();
 	private static @Nullable ClientLevel currentLevel;
 	private static int tickCount;
 
@@ -47,6 +49,10 @@ public final class GoreSystems {
 
 	public static PlayerInjuries injuries() {
 		return INJURIES;
+	}
+
+	public static Decay decay() {
+		return DECAY;
 	}
 
 	public static DamageTracker tracker() {
@@ -74,6 +80,7 @@ public final class GoreSystems {
 		if (!gore) {
 			BLOOD.clear();
 			DISMEMBERMENT.clear();
+			DECAY.clear();
 		}
 
 		if (!gore && !suffering) {
@@ -93,6 +100,7 @@ public final class GoreSystems {
 		if (gore) {
 			BLOOD.tick(level, tickCount);
 			DISMEMBERMENT.tick(level, BLOOD);
+			DECAY.tick(level, BLOOD);
 			GoreSync.tick(level);
 			PieceSync.tick(level);
 			Evidence.tick(level);
@@ -115,6 +123,7 @@ public final class GoreSystems {
 		TRACKER.forget(entityId);
 		GoreSync.forget(entityId);
 		Evidence.forget(entityId);
+		DECAY.forget(entityId);
 		ModelParts.forgetDrawn(entityId);
 		// A body still going through its death throes keeps its missing parts until it is gone.
 		if (!SUFFERING.onEntityUnload(entityId)) {
@@ -129,6 +138,7 @@ public final class GoreSystems {
 		BrokenBlocks.clear();
 		ModelParts.clearDrawn();
 		INJURIES.clear();
+		DECAY.clear();
 		SUFFERING.clear();
 		BLOOD.clear();
 		DISMEMBERMENT.clear();

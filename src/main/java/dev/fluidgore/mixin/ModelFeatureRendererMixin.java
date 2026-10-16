@@ -7,6 +7,8 @@ import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.player.Injury;
 import dev.fluidgore.player.InjuryPose;
+import dev.fluidgore.rot.Rot;
+import dev.fluidgore.rot.RotRenderer;
 import dev.fluidgore.suffer.BodyPose;
 import dev.fluidgore.suffer.SufferPose;
 import dev.fluidgore.config.GoreConfig;
@@ -78,7 +80,8 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 		BodyPose body = state.getData(BodyPose.KEY);
 		WoundSet wounds = state.getData(Wounds.KEY);
 		Injury injury = submit.model() instanceof HumanoidModel<?> ? state.getData(Injury.KEY) : null;
-		if ((mask == null || mask == 0) && pose == null && body == null && (wounds == null || wounds.brokenMask() == 0) && injury == null) {
+		Rot rot = state.getData(Rot.KEY);
+		if ((mask == null || mask == 0) && pose == null && body == null && (wounds == null || wounds.brokenMask() == 0) && injury == null && rot == null) {
 			return;
 		}
 
@@ -111,6 +114,45 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 		if (wounds != null && wounds.brokenMask() != 0 && wounds.drawsOn(model)) {
 			ModelParts.applyFractures(model, parts, wounds, this::fluidgore$save);
 		}
+
+		if (rot != null) {
+			fluidgore$rot(model, parts, rot);
+		}
+	}
+
+	/**
+	 * A rotting body: rigor mortis arches the head back and locks the legs; the gas of the bloat swells the trunk and
+	 * pushes the legs out stiff, until it bursts and the trunk sinks in. Wool, saddles and armour swell with it.
+	 */
+	@Unique
+	private void fluidgore$rot(Model<?> model, ModelPart[] parts, Rot rot) {
+		float swell = rot.swell();
+		float rigor = rot.rigor();
+		ModelPart torso = ModelParts.torso(model);
+		if (torso != null && swell != 0.0F) {
+			fluidgore$save(torso);
+			float girth = 1.0F + 0.28F * swell;
+			torso.xScale *= girth;
+			torso.zScale *= girth;
+			torso.yScale *= 1.0F + 0.1F * swell;
+		}
+
+		float out = Math.max(rigor * 0.3F, Math.max(0.0F, swell) * 0.7F);
+		if (out > 0.0F) {
+			for (int i = 0; i < ModelParts.LIMBS.length; i++) {
+				ModelPart leg = parts[ModelParts.LIMBS[i].ordinal()];
+				if (leg != null) {
+					fluidgore$save(leg);
+					leg.xRot += i < 2 ? -out : out;
+				}
+			}
+		}
+
+		ModelPart head = parts[BodyPart.HEAD.ordinal()];
+		if (head != null && rigor > 0.0F) {
+			fluidgore$save(head);
+			head.xRot -= 0.35F * rigor;
+		}
 	}
 
 	@Inject(
@@ -122,6 +164,14 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 		// block-breaking overlay, and while the parts are still posed and severed parts still hidden.
 		if (submit.state() instanceof LivingEntityRenderState state && submit.sheetedDecalPose() == null
 				&& submit.tintedColor() >>> 24 == 0xFF) {
+			Rot rot = state.getData(Rot.KEY);
+			Integer id = state.getData(ModelParts.ENTITY_ID);
+			if (rot != null && RotRenderer.shows(rot.days) && id != null && submit.model() == ModelParts.drawn(id)) {
+				// The rot goes under the wounds.
+				RotRenderer.draw(submit.model().root(), rot.days, rot.arid, rot.seed, poseStack, getVertexBuilder(WoundRenderer.renderType()),
+						submit.lightCoords(), submit.overlayCoords());
+			}
+
 			WoundSet wounds = state.getData(Wounds.KEY);
 			if (wounds != null && wounds.count() > 0 && wounds.drawsOn(submit.model())) {
 				WoundRenderer.draw(wounds, poseStack, getVertexBuilder(WoundRenderer.renderType()), submit.lightCoords(), submit.overlayCoords());

@@ -2,6 +2,27 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.12.0]
+
+Bodies rot.
+
+### Added
+- Bodies Rot (Extreme gore level): a body left lying rots like a real carcass, one Minecraft day for a real day.
+  Fresh: pale, stiff with rigor mortis, the first flies. Bloat: swollen green and tight, legs pushed out stiff, the
+  skin marbling, gas gurgling in it. Then it bursts with a wet rip and goes into active decay: the skin slips and
+  splits, pus and maggots in it, maggots spilling off, a black pool of fluid spreading under it, swarms of flies and
+  their buzzing, a stench haze. Then it sinks in, the bones come through, and it dries to bones and hide, bleaching.
+- The pace follows forensic degree-days: a day at 20 degrees is a full day of rot, colder is slower, freezing stops it,
+  and in water it is half as fast. Small bodies go faster: in the plains a chicken is bones in about ten days, a pig in
+  four weeks, a cow in five, a horse in eight. In dry heat (deserts, badlands, savanna, the Nether) bodies dry out into
+  leathery mummies instead.
+- Severed pieces rot too, from as rotten as the body they came off, at their own size's pace.
+- With Fluid Gore on the server (singleplayer, LAN host), a kept body remembers when it died: it goes on rotting while
+  nobody is near and while players sleep, and a player who comes along later sees it as rotten as it is. Every player
+  with the mod sees the same rot.
+- Rot Speed (1x real time, up to 100x).
+- Demo: `decay` (six weeks of rot in about a minute, using `/time add`).
+
 ## [2.11.0]
 
 The vanilla death, made gory, and bodies that stay until you clean them up. Butchery everyone sees.

@@ -37,6 +37,9 @@ public final class GorePart {
 	public int lifetime;
 	/** Colour multiplied into the part's texture: white, or the char of a body that burnt. */
 	public int tint = 0xFFFFFF;
+	/** How far the piece has rotted, in decay-days (see {@link dev.fluidgore.rot.Decay}), and whether it is drying out instead. */
+	public float rot;
+	public boolean arid;
 
 	public double x, y, z;
 	public double prevX, prevY, prevZ;

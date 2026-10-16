@@ -248,3 +248,15 @@ severable parts; severed heads can't blink.
   stains on a `PlayerModel`'s outer layer (hat/jacket/sleeves/pants) and on a player's armour. Also: wounds heal with
   health (`Wounds.heal`), clot (`WoundSet.quiet`, `woundClotSeconds`), `ArmorPieces` on severed parts, brutal PvP, and
   blast gore on players. Game tests: `playerGore`, `playerInjuries`. Demos: `injured`, `heal`, `armor`.
+- **2.12.0**: `rot/` package. `Decay` (owned by `GoreSystems.decay()`, active on Extreme + `bodyDecay`): every dead
+  living entity in the level gets a `Body` whose age is `max(gameTime, overworld clock)` since death (from
+  `entity.deathTime` when seen here, or the server's `net/BodyAge`, sent on `START_TRACKING` from the persistent
+  `KeptBodies.DIED` attachment stamped when a body is first kept). `Rot.days` = real days x degree-day rate (biome base
+  temperature `25t - 5` C over 20 C, halved in water, 0 when freezing) x `decaySpeed` / sqrt(volume / pig volume). Stages
+  in `Rot` (BLOAT 1.5, ACTIVE 4.5, ADVANCED 10, DRY 20 decay-days; `arid` = no precipitation and over 20 C:
+  mummifies). `Rot.KEY` render state: tint folded into `Burns.KEY`, trunk swell + rigor legs/head in
+  `ModelFeatureRendererMixin.fluidgore$rot`, `RotRenderer` patches (one per cube face, seeded by UUID, wound tiles rows
+  0/1/2/3/9/10) drawn under the wounds on the drawn body model and on `GorePart`s (`GorePart.rot`/`arid`, inherited in
+  `Dismemberment.inheritRot` and `Butchery.piece`, aged in `Decay.ageParts`). Effects: flies (dust), `BEE_LOOP` buzz,
+  maggots, ooze, stench, the burst at ACTIVE, the fluid pool decal (`STAIN`, re-placed if the decal cap took it).
+  Game test: `decay`. Demo: `decay`.

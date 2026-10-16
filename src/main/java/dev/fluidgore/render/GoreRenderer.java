@@ -11,8 +11,12 @@ import dev.fluidgore.config.BloodColor;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.ArmorPieces;
 import dev.fluidgore.dismember.GorePart;
+import dev.fluidgore.rot.Decay;
+import dev.fluidgore.rot.Rot;
+import dev.fluidgore.rot.RotRenderer;
 import dev.fluidgore.suffer.Corpse;
 import dev.fluidgore.suffer.SufferPose;
+import dev.fluidgore.wound.Burns;
 import dev.fluidgore.wound.WoundRenderer;
 import dev.fluidgore.wound.WoundSet;
 import java.util.Collection;
@@ -342,8 +346,10 @@ public final class GoreRenderer {
 		// Same flip vanilla applies to entity models, then centre the part on its pivot for tumbling.
 		poseStack.scale(-1.0F, -1.0F, 1.0F);
 		poseStack.translate(-part.localCenter.x, -part.localCenter.y, -part.localCenter.z);
+		boolean rots = part.rot > 0.0F && Decay.active();
+		int tint = rots ? Burns.apply(0xFF000000 | part.tint, Rot.tint(part.rot, part.arid)) & 0xFFFFFF : part.tint;
 		collector.submitModelPart(part.model, poseStack, RenderTypes.entityTranslucent(part.texture), part.light, OVERLAY, null,
-				argb(part.tint, alpha));
+				argb(tint, alpha));
 		if (ArmorPieces.any(part.armor)) {
 			// The armour it wore, over it; while the piece fades it fades too, without the glint.
 			for (ArmorPieces.Piece armor : part.armor) {
@@ -351,6 +357,15 @@ public final class GoreRenderer {
 						: armor.foil() ? RenderTypes.armorCutoutNoCullGlint(armor.texture()) : RenderTypes.armorCutoutNoCull(armor.texture());
 				collector.submitModelPart(armor.model(), poseStack, type, part.light, OVERLAY, null, argb(armor.color(), alpha));
 			}
+		}
+
+		if (rots && RotRenderer.shows(part.rot) && alpha >= 1.0F) {
+			int light = part.light;
+			float days = part.rot;
+			boolean arid = part.arid;
+			long seed = part.key;
+			collector.submitCustomGeometry(poseStack, WoundRenderer.renderType(),
+					(pose, buffer) -> RotRenderer.draw(part.model, days, arid, seed, pose, buffer, light, OVERLAY));
 		}
 
 		WoundSet wounds = part.wounds;

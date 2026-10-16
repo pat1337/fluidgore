@@ -127,6 +127,10 @@
 	"fluidgore.option.red_death.tooltip": "Dying bodies stay tinted red through their death throes, like the vanilla death.",
 	"fluidgore.option.burns": "Burnt Bodies",
 	"fluidgore.option.burns.tooltip": "Animals on fire char from seared through roasted brown to black and stay that way, alive or dead. They smoke and sizzle, smoulder afterwards, and leave a black scorch mark where they burn to death. Fire sears wounds shut, so burning does not bleed.",
+	"fluidgore.option.body_decay": "Bodies Rot",
+	"fluidgore.option.body_decay.tooltip": "Extreme gore level only. Kept bodies and severed pieces rot the way a real carcass does, one Minecraft day for a real day: stiff with rigor, bloated green with gas, bursting, crawling with maggots and flies in a black pool of fluid, then bones and dried hide. A chicken is bones in about ten days, a pig in a month, a cow or horse in one to two. Faster in hot biomes, half as fast in water, not at all in the snow; in deserts and the Nether bodies dry out into mummies instead. Bodies keep rotting while nobody is near and while you sleep (needs Fluid Gore on the server).",
+	"fluidgore.option.decay_speed": "Rot Speed",
+	"fluidgore.option.decay_speed.tooltip": "1x is real time: a Minecraft day of rot per Minecraft day. Turn it up to watch it happen sooner.",
 	"fluidgore.option.death_pop": "Death Pop",
 	"fluidgore.option.death_pop.tooltip": "Some bodies, when they finally go, pop in a puff of smoke and burst into their head, limbs and scraps of flesh, which you can still kick about for a while. How many: Death Pop Chance.",
 	"fluidgore.option.death_pop_chance": "Death Pop Chance",
@@ -135,6 +139,7 @@
 
 	"fluidgore.unit.seconds": "%s s",
 	"fluidgore.unit.percent": "%s%%",
+	"fluidgore.unit.times": "%sx",
 
 	"fluidgore.level.off": "Off",
 	"fluidgore.level.low": "Low",

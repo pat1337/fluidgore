@@ -305,6 +305,8 @@ public final class Butchery {
 		GorePart piece = new GorePart(model, part.texture, centre, extents, part.scale, part.bloodRgb, Math.max(part.lifetime - part.age, 400));
 		Flesh flesh = part.wounds != null ? part.wounds.flesh() : Flesh.MEAT;
 		piece.tint = part.tint;
+		piece.rot = part.rot;
+		piece.arid = part.arid;
 		piece.light = part.light;
 		piece.rawFaces = raw;
 		// Diced meat is meat through and through; only a big piece still has bone in its cut faces. Kept even with no

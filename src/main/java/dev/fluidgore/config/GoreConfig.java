@@ -118,6 +118,14 @@ public final class GoreConfig {
 	public int deathPopPercent = 5;
 	/** Animals on fire char from seared to black, smoke and smoulder, and leave a scorch mark where they burn to death. */
 	public boolean burns = true;
+	/**
+	 * Extreme gore level only: bodies that stay (kept bodies, severed pieces) rot as a real carcass does, by the
+	 * Minecraft day: rigor, bloat, rupture, maggots, bones. Faster for small bodies and in hot biomes, slower in water,
+	 * not at all in the snow; in deserts they dry out into mummies instead.
+	 */
+	public boolean bodyDecay = true;
+	/** Rot speed multiplier: 1 is real time (a Minecraft day for a day). */
+	public int decaySpeed = 1;
 	/** Version of the saved file, so changed defaults can reach configs saved by older versions. */
 	public int configVersion;
 	/**
@@ -298,6 +306,7 @@ public final class GoreConfig {
 		maxScreams = clamp(maxScreams, 1, 32);
 		corpseLingerSeconds = clamp(corpseLingerSeconds, 3, 600);
 		maxKeptBodies = clamp(maxKeptBodies, 1, 512);
+		decaySpeed = clamp(decaySpeed, 1, 100);
 		griefSeconds = clamp(griefSeconds, 0, 3600);
 		if (sufferingAnimals == null) sufferingAnimals = new ArrayList<>();
 		if (bladedItems == null) bladedItems = new ArrayList<>();

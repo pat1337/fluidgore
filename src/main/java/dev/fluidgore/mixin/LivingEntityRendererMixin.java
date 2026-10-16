@@ -8,6 +8,7 @@ import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.player.Injury;
 import dev.fluidgore.player.InjuryPose;
+import dev.fluidgore.rot.Rot;
 import dev.fluidgore.suffer.BodyPose;
 import dev.fluidgore.suffer.Corpse;
 import dev.fluidgore.suffer.Ragdoll;
@@ -55,6 +56,13 @@ public abstract class LivingEntityRendererMixin {
 		Integer tint = burnt;
 		if (plucked != null) {
 			tint = burnt == null ? plucked : Integer.valueOf(Burns.apply(0xFF000000 | burnt, plucked) & 0xFFFFFF);
+		}
+
+		// Rot discolours it on top of that.
+		Rot rot = GoreSystems.decay().of(entity.getId());
+		state.setData(Rot.KEY, rot);
+		if (rot != null) {
+			tint = tint == null ? rot.tint() : Integer.valueOf(Burns.apply(0xFF000000 | tint, rot.tint()) & 0xFFFFFF);
 		}
 
 		state.setData(Burns.KEY, tint);
@@ -132,6 +140,12 @@ public abstract class LivingEntityRendererMixin {
 			float roll = body.roll();
 			Integer id = state.getData(ModelParts.ENTITY_ID);
 			float side = id != null ? ModelParts.sideLift(id, state.boundingBoxWidth, state.scale) : state.boundingBoxWidth * 0.5F;
+			Rot rot = state.getData(Rot.KEY);
+			if (rot != null) {
+				// A bloated body is wider: lift it by what it has swollen.
+				side *= 1.0F + 0.28F * Math.max(0.0F, rot.swell());
+			}
+
 			float lift = side * Mth.abs(Mth.sin(roll)) + state.boundingBoxHeight * Math.max(0.0F, -Mth.cos(roll)) * 0.7F;
 			poseStack.translate(0.0F, lift / entityScale, 0.0F);
 			poseStack.rotateDegrees(Axis.ZP, body.roll() * Mth.RAD_TO_DEG);

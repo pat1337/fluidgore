@@ -1,6 +1,10 @@
 package dev.fluidgore.server;
 
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
+import dev.fluidgore.FluidGore;
 import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.net.BodyAge;
 import dev.fluidgore.net.GoreAction;
 import dev.fluidgore.net.PieceState;
 import java.util.HashSet;
@@ -9,8 +13,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
+import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
+import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.player.UseEntityCallback;
+import net.fabricmc.fabric.api.networking.v1.EntityTrackingEvents;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -46,6 +53,23 @@ public final class KeptBodies {
 	private static final double SHOW_RANGE = 96.0;
 	/** Vanilla's tip-over takes 20 ticks; the death clock of a kept body stops a little after. */
 	private static final int DEATH_CLOCK_MAX = 40;
+	/**
+	 * When a kept body died: the game time and the overworld's day clock then, saved with it, so it goes on rotting
+	 * while nobody is near and while players sleep (see {@code rot/Decay}).
+	 */
+	public static final AttachmentType<Died> DIED = AttachmentRegistry.create(Identifier.fromNamespaceAndPath(FluidGore.MOD_ID, "died"),
+			builder -> builder.persistent(Died.CODEC));
+
+	public record Died(long game, long clock) {
+		static final Codec<Died> CODEC = RecordCodecBuilder.create(i -> i.group(
+				Codec.LONG.fieldOf("game").forGetter(Died::game),
+				Codec.LONG.fieldOf("clock").forGetter(Died::clock)).apply(i, Died::new));
+
+		/** Ticks since, by whichever clock has gone further. */
+		long age(ServerLevel level) {
+			return Math.max(0L, Math.max(level.getGameTime() - game, level.getOverworldClockTime() - clock));
+		}
+	}
 
 	/** Per dimension, oldest first. Entries whose chunk unloaded are dropped when the next body is added. */
 	private static final Map<ServerLevel, LinkedHashSet<LivingEntity>> BODIES = new WeakHashMap<>();
@@ -60,6 +84,13 @@ public final class KeptBodies {
 		PayloadTypeRegistry.clientboundPlay().register(GoreAction.TYPE, GoreAction.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(PieceState.TYPE, PieceState.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(PieceState.TYPE, PieceState.CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(BodyAge.TYPE, BodyAge.CODEC);
+		EntityTrackingEvents.START_TRACKING.register((entity, player) -> {
+			Died died = entity.getAttached(DIED);
+			if (died != null && entity.level() instanceof ServerLevel level && ServerPlayNetworking.canSend(player, BodyAge.TYPE)) {
+				ServerPlayNetworking.send(player, new BodyAge(entity.getId(), died.age(level)));
+			}
+		});
 		ServerPlayNetworking.registerGlobalReceiver(GoreAction.TYPE, (action, context) -> receive(context.player(), action));
 		ServerPlayNetworking.registerGlobalReceiver(PieceState.TYPE, (state, context) -> relay(context.player(), state));
 		// A dead body is meat, not an animal: no milking, shearing, feeding, leashing or riding it.
@@ -81,6 +112,10 @@ public final class KeptBodies {
 		body.deathTime = Math.min(body.deathTime + 1, DEATH_CLOCK_MAX);
 		LinkedHashSet<LivingEntity> bodies = BODIES.computeIfAbsent(level, l -> new LinkedHashSet<>());
 		if (bodies.add(body)) {
+			if (!body.hasAttached(DIED)) {
+				body.setAttached(DIED, new Died(level.getGameTime() - body.deathTime, level.getOverworldClockTime() - body.deathTime));
+			}
+
 			// Whoever rode it falls off, as they would if it were gone.
 			body.ejectPassengers();
 			body.stopRiding();

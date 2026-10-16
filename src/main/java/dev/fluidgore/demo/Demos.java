@@ -27,6 +27,7 @@ import org.jspecify.annotations.Nullable;
  */
 public final class Demos {
 	public static final List<Demo> ALL = List.of(
+			new Demo("decay", "2.12.0", "A chicken, a pig and a cow left to rot (Extreme): six weeks in a minute, day by day, from bloat to bones", false, Demos::decay),
 			new Demo("kept", "2.11.0", "The vanilla death made gory: a sword kill and an axe kill keel over, stay, are chopped where they lie, and are cleaned up", false, Demos::kept),
 			new Demo("injured", "2.10.0", "Injuries: a zombie limps on a smashed leg holding its belly, then you take blows and fade near death", false, Demos::injured),
 			new Demo("armor", "2.10.0", "A zombie in armour hacked apart: the helmet flies off with the head, the boots stay on the leg", false, Demos::armor),
@@ -328,6 +329,38 @@ public final class Demos {
 				GoreSync.act(GoreAction.of(GoreAction.CLEAN, corpse.entity.getId(), 0L, mc.player.getEyePosition(), mc.player.getViewVector(1.0F), 0, 0.0F));
 			}
 		}).pause(60);
+	}
+
+	/**
+	 * Three bodies of three sizes rot side by side, a day skipped every second and a half (/time add, so this world's
+	 * day count moves on six weeks). Needs the Extreme gore level and Fluid Gore on the server (singleplayer).
+	 */
+	private static void decay(Script s, Stage st) {
+		s.summon(st, "chicken", "fgd_rot_chicken", -2.0, 0, 3.5, 90.0F, "");
+		s.summon(st, "pig", "fgd_rot_pig", 0, 0, 3.5, 90.0F, "");
+		s.summon(st, "cow", "fgd_rot_cow", 2.3, 0, 3.5, 90.0F, "");
+		s.pause(20).hold("minecraft:iron_axe").say("Three animals killed and left where they fell (Extreme gore level)");
+		s.hit("fgd_rot_chicken", 100.0F).hit("fgd_rot_pig", 100.0F).hit("fgd_rot_cow", 100.0F).pause(80);
+		String[] days = new String[43];
+		// Timed for the plains; a hotter biome is faster, a colder one slower.
+		days[0] = "Day one: stiff with rigor mortis, pale, the first flies";
+		days[2] = "Day three: the chicken bloats first; the smaller the body, the faster it goes";
+		days[3] = "Day four: the chicken has burst; the pig swells tight and green, its legs pushed out stiff";
+		days[6] = "Day seven: the pig splits open: maggots, a black pool, the flies at their worst";
+		days[8] = "Day nine: the cow bursts";
+		days[13] = "Two weeks: the chicken is bones; the pig and the cow sink into themselves";
+		days[27] = "Four weeks: the pig is bones and leather";
+		days[35] = "Five weeks: the cow is going the same way";
+		days[42] = "Six weeks: bones and dried hide. In a desert they dry into mummies instead; in the snow they keep";
+		for (int day = 0; day < days.length; day++) {
+			if (days[day] != null) {
+				s.say(days[day]).pause(50);
+			}
+
+			s.cmd("time add 24000").pause(30);
+		}
+
+		s.pause(200);
 	}
 
 	private static void butcher(Script s, Stage st) {

@@ -3,6 +3,7 @@ package dev.fluidgore;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.demo.DemoPlayer;
 import dev.fluidgore.net.Evidence;
+import dev.fluidgore.rot.Decay;
 import dev.fluidgore.net.GoreSync;
 import dev.fluidgore.net.PieceSync;
 import dev.fluidgore.player.HurtScreen;
@@ -30,6 +31,7 @@ public class FluidGoreClient implements ClientModInitializer {
 		GoreSync.register();
 		PieceSync.register();
 		Evidence.register();
+		Decay.register();
 
 		ClientTickEvents.END_CLIENT_TICK.register(GoreSystems::tick);
 		ClientTickEvents.END_CLIENT_TICK.register(DemoPlayer::tick);

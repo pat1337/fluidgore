@@ -56,6 +56,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			horsesAndFractures(context, singleplayer.getServer());
 			butchery(context, singleplayer.getServer());
 			keptBodies(context, singleplayer.getServer());
+			decay(context, singleplayer.getServer());
 			meatsAndWool(context, singleplayer.getServer());
 			playerGore(context, singleplayer.getServer());
 			playerInjuries(context, singleplayer.getServer());
@@ -1573,9 +1574,11 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 				check(context.computeOnClient(mc -> GoreSystems.suffering().corpse(cowId) == null), "the body did not unload when the player went away");
 				server.runCommand("tp @a 120.5 -60 0.5 0 15");
 				context.waitTicks(80);
+				// The server may have unloaded the chunk and loaded the body again under a new entity id.
 				String back = context.computeOnClient(mc -> {
-					var set = GoreSystems.dismemberment().wounds().get(cowId);
-					return (GoreSystems.suffering().corpse(cowId) == null ? "no body" : "body") + " wounds=" + (set == null ? 0 : set.count());
+					int id = idOf(mc, uuid);
+					var set = GoreSystems.dismemberment().wounds().get(id);
+					return (GoreSystems.suffering().corpse(id) == null ? "no body" : "body") + " wounds=" + (set == null ? 0 : set.count());
 				});
 				System.out.println("[FluidGoreTest] kept body after coming back: " + back + " (had " + woundsBefore + ")");
 				check(back.equals("body wounds=" + woundsBefore), "the chopped body did not come back as it was left: " + back + ", had " + woundsBefore + " wounds");
@@ -1585,7 +1588,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			if (run == 0) {
 				context.takeScreenshot("kept_03_chopped");
 				// Butchered apart: nothing is left to keep, and the server is asked to take it.
-				context.runOnClient(mc -> GoreSystems.dismemberment().hide(cowId));
+				context.runOnClient(mc -> GoreSystems.dismemberment().hide(idOf(mc, uuid)));
 			} else {
 				boolean cleaned = context.computeOnClient(mc -> dev.fluidgore.net.GoreSync.act(dev.fluidgore.net.GoreAction.of(dev.fluidgore.net.GoreAction.CLEAN,
 						cowId, 0L, mc.player.getEyePosition(), mc.player.getViewVector(1.0F), 0, 0.0F)));
@@ -1654,6 +1657,199 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		context.runOnClient(mc -> {
 			GoreConfig.get().deathThroes = true;
 			GoreConfig.get().keepBodies = false;
+		});
+	}
+
+	/**
+	 * Bodies rot by the day: a chicken, a pig and a cow killed side by side, days skipped with /time add. The small body
+	 * goes first, the big one last; the server keeps when each died and tells a player who comes back; a leg cut off a
+	 * rotting pig is as rotten as the pig; a pig in the desert dries out instead.
+	 */
+	private static void decay(ClientGameTestContext context, TestServerContext server) {
+		context.runOnClient(mc -> {
+			GoreConfig.get().deathThroes = false;
+			GoreConfig.get().keepBodies = true;
+			GoreConfig.get().bodyDecay = true;
+			GoreConfig.get().decaySpeed = 1;
+		});
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("time set noon");
+		server.runCommand("tp @a 200.5 -60 0.5 0 30");
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");
+		server.runCommand("summon minecraft:chicken 198.5 -60 3.5 {NoAI:1b,Rotation:[90f,0f]}");
+		server.runCommand("summon minecraft:pig 200.5 -60 3.5 {NoAI:1b,Rotation:[90f,0f],UUID:[I;9,10,11,12]}");
+		server.runCommand("summon minecraft:cow 202.8 -60 3.5 {NoAI:1b,Rotation:[90f,0f]}");
+		context.waitTicks(15);
+		server.runCommand("damage @e[type=minecraft:chicken,limit=1,sort=nearest] 100 minecraft:generic");
+		server.runCommand("damage @e[type=minecraft:pig,limit=1,sort=nearest] 100 minecraft:generic");
+		server.runCommand("damage @e[type=minecraft:cow,limit=1,sort=nearest] 100 minecraft:generic");
+		context.waitTicks(60);
+		java.util.UUID pigUuid = new java.util.UUID(9L << 32 | 10L, 11L << 32 | 12L);
+		check(server.computeOnServer(s -> s.overworld().getEntity(pigUuid) != null
+				&& s.overworld().getEntity(pigUuid).getAttached(dev.fluidgore.server.KeptBodies.DIED) != null), "the server did not keep when the pig died");
+		int[] ids = context.computeOnClient(mc -> {
+			int[] found = {-1, -1, -1};
+			for (Entity e : mc.level.entitiesForRendering()) {
+				int slot = e.getType() == net.minecraft.world.entity.EntityTypes.CHICKEN ? 0 : e.getType() == net.minecraft.world.entity.EntityTypes.PIG ? 1
+						: e.getType() == net.minecraft.world.entity.EntityTypes.COW ? 2 : -1;
+				if (slot >= 0 && e.getX() > 190.0) {
+					found[slot] = e.getId();
+				}
+			}
+
+			return found;
+		});
+		check(ids[0] >= 0 && ids[1] >= 0 && ids[2] >= 0, "decay: a body is missing " + java.util.Arrays.toString(ids));
+		float[] fresh = rotDays(context, ids);
+		System.out.println("[FluidGoreTest] decay fresh: " + java.util.Arrays.toString(fresh));
+		check(fresh[1] >= 0.0F && fresh[1] < 0.05F, "the pig is not fresh just after it died: " + fresh[1]);
+
+		// Three days on: the chicken is bursting, the pig bloated, the cow only just starting to swell.
+		server.runCommand("time add 72000");
+		context.waitTicks(10);
+		float[] three = rotDays(context, ids);
+		System.out.println("[FluidGoreTest] decay after 3 days: " + java.util.Arrays.toString(three));
+		check(three[1] > 1.0F, "three days did not rot the pig: " + three[1]);
+		check(three[0] > three[1] && three[1] > three[2], "the smallest body did not rot fastest: " + java.util.Arrays.toString(three));
+		check(three[1] > dev.fluidgore.rot.Rot.BLOAT && three[1] < dev.fluidgore.rot.Rot.ACTIVE, "the pig is not bloated after three days in the plains: " + three[1]);
+		server.runCommand("tp @a 200.5 -59 1.0 0 40");
+		context.waitTicks(5);
+		context.takeScreenshot("decay_01_three_days");
+
+		// A leg cut off the rotting pig is as rotten as the pig.
+		context.runOnClient(mc -> {
+			var corpse = GoreSystems.suffering().corpse(ids[1]);
+			var centre = dev.fluidgore.suffer.CorpseStrike.centre(corpse);
+			for (int i = 0; i < 8; i++) {
+				var eye = centre.add(Math.cos(i * 1.3) * 1.3, 1.0, Math.sin(i * 1.3) * 1.3);
+				dev.fluidgore.net.GoreSync.perform(dev.fluidgore.net.GoreAction.of(dev.fluidgore.net.GoreAction.STRIKE, ids[1], 0L, eye,
+						centre.subtract(eye).normalize(), Weapon.CHOP.ordinal(), 9.0F));
+			}
+		});
+		context.waitTicks(5);
+		float leg = context.computeOnClient(mc -> {
+			float most = 0.0F;
+			for (var part : GoreSystems.dismemberment().parts().parts()) {
+				most = Math.max(most, part.rot);
+			}
+
+			return most;
+		});
+		System.out.println("[FluidGoreTest] decay: piece cut off the pig at " + leg + " days");
+		check(Math.abs(leg - three[1]) < 0.3F, "the piece cut off the rotting pig is not as rotten as it: " + leg + " vs " + three[1]);
+
+		// Gone away and back: the server says how long the pig has been dead, so it is as rotten as it was left.
+		server.runCommand("tp @a 900.5 -60 0.5");
+		context.waitTicks(60);
+		check(context.computeOnClient(mc -> GoreSystems.decay().of(ids[1]) == null), "the pig still rots here after the player went away");
+		server.runCommand("tp @a 200.5 -59 1.0 0 40");
+		context.waitTicks(60);
+		int pigAgain = context.computeOnClient(mc -> {
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e.getUUID().equals(pigUuid)) {
+					return e.getId();
+				}
+			}
+
+			return -1;
+		});
+		check(pigAgain >= 0, "the kept pig did not come back");
+		float back = context.computeOnClient(mc -> {
+			var rot = GoreSystems.decay().of(pigAgain);
+			return rot == null ? -1.0F : rot.days;
+		});
+		System.out.println("[FluidGoreTest] decay: pig after coming back " + back + " (left at " + three[1] + ")");
+		check(Math.abs(back - three[1]) < 0.1F, "the pig did not come back as rotten as it was left: " + back + " vs " + three[1]);
+		ids[1] = pigAgain;
+
+		// Two weeks: the chicken is bones, the pig deep in active decay, the cow burst.
+		server.runCommand("time add 264000");
+		context.waitTicks(40);
+		float[] fourteen = rotDays(context, ids);
+		System.out.println("[FluidGoreTest] decay after 14 days: " + java.util.Arrays.toString(fourteen));
+		check(fourteen[0] > dev.fluidgore.rot.Rot.DRY, "the chicken is not bones after two weeks: " + fourteen[0]);
+		check(fourteen[2] > dev.fluidgore.rot.Rot.ACTIVE, "the cow has not burst after two weeks: " + fourteen[2]);
+		check(context.computeOnClient(mc -> {
+			var rot = GoreSystems.decay().of(ids[1]);
+			return rot != null && rot.swell() < 0.0F && rot.maggots() > 0.5F;
+		}), "the pig is not sunken and crawling with maggots after two weeks");
+		context.takeScreenshot("decay_02_two_weeks");
+
+		// Six weeks: all three are bones and dried hide.
+		server.runCommand("time add 672000");
+		context.waitTicks(40);
+		float[] six = rotDays(context, ids);
+		System.out.println("[FluidGoreTest] decay after 6 weeks: " + java.util.Arrays.toString(six));
+		check(six[2] > dev.fluidgore.rot.Rot.DRY, "the cow is not down to bones and hide after six weeks: " + six[2]);
+		context.takeScreenshot("decay_03_six_weeks");
+
+		// Dry heat: a pig killed in the desert mummifies instead.
+		server.runCommand("fillbiome 220 -64 -8 236 -50 8 minecraft:desert");
+		server.runCommand("tp @a 228.5 -60 0.5 0 30");
+		server.runCommand("summon minecraft:pig 228.5 -60 3.5 {NoAI:1b,Rotation:[90f,0f]}");
+		context.waitTicks(30);
+		server.runCommand("damage @e[type=minecraft:pig,x=228,y=-60,z=3,distance=..3] 100 minecraft:generic");
+		context.waitTicks(40);
+		server.runCommand("time add 240000");
+		context.waitTicks(30);
+		String desert = context.computeOnClient(mc -> {
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e.getType() == net.minecraft.world.entity.EntityTypes.PIG && e.getX() > 220.0) {
+					var rot = GoreSystems.decay().of(e.getId());
+					return rot == null ? "not rotting" : "arid=" + rot.arid + " days=" + rot.days + " maggots=" + rot.maggots();
+				}
+			}
+
+			return "no pig";
+		});
+		System.out.println("[FluidGoreTest] decay in the desert: " + desert);
+		check(desert.startsWith("arid=true") && desert.endsWith("maggots=0.0"), "the desert pig did not dry out: " + desert);
+		context.takeScreenshot("decay_04_desert_mummy");
+
+		// Off below Extreme.
+		context.runOnClient(mc -> GoreConfig.get().goreLevel = GoreLevel.HIGH);
+		context.waitTicks(2);
+		check(context.computeOnClient(mc -> GoreSystems.decay().of(ids[0]) == null), "bodies rot below Extreme");
+		context.runOnClient(mc -> GoreConfig.get().goreLevel = GoreLevel.EXTREME);
+
+		context.runOnClient(mc -> {
+			for (var corpse : new java.util.ArrayList<>(GoreSystems.suffering().corpses())) {
+				dev.fluidgore.net.GoreSync.act(dev.fluidgore.net.GoreAction.of(dev.fluidgore.net.GoreAction.CLEAN, corpse.entity.getId(), 0L,
+						mc.player.getEyePosition(), mc.player.getViewVector(1.0F), 0, 0.0F));
+			}
+
+			GoreSystems.dismemberment().parts().clear();
+		});
+		context.waitTicks(10);
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("time set noon");
+		context.runOnClient(mc -> {
+			GoreConfig.get().deathThroes = true;
+			GoreConfig.get().keepBodies = false;
+		});
+	}
+
+	/** The client's entity id for {@code uuid}, or -1. */
+	private static int idOf(net.minecraft.client.Minecraft mc, java.util.UUID uuid) {
+		for (Entity e : mc.level.entitiesForRendering()) {
+			if (e.getUUID().equals(uuid)) {
+				return e.getId();
+			}
+		}
+
+		return -1;
+	}
+
+	/** Decay-days of each body, -1 if it is not rotting. */
+	private static float[] rotDays(ClientGameTestContext context, int[] ids) {
+		return context.computeOnClient(mc -> {
+			float[] days = new float[ids.length];
+			for (int i = 0; i < ids.length; i++) {
+				var rot = GoreSystems.decay().of(ids[i]);
+				days[i] = rot == null ? -1.0F : rot.days;
+			}
+
+			return days;
 		});
 	}
 

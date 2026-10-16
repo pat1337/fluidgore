@@ -1,7 +1,9 @@
 package dev.fluidgore.dismember;
 
 import java.util.HashMap;
+import dev.fluidgore.GoreSystems;
 import dev.fluidgore.mixin.ModelPartAccessor;
+import dev.fluidgore.rot.Rot;
 import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.blood.BoneEmitter;
@@ -254,6 +256,7 @@ public final class Dismemberment {
 		Identifier texture = ((LivingEntityRenderer) posed.renderer()).getTextureLocation(state);
 		int lifetime = Math.max(400, Math.round(GoreConfig.get().partLifetimeSeconds * 20 * GoreConfig.get().goreLevel.duration));
 		GorePart part = new GorePart(model, texture, localCenter, half, scale, EntityFilter.bloodColor(entity), lifetime);
+		inheritRot(part, entity);
 		Vec3 base = origin.get();
 		part.x = part.prevX = base.x + offset.x;
 		part.y = part.prevY = base.y + offset.y;
@@ -403,6 +406,7 @@ public final class Dismemberment {
 		int lifetime = Math.max(100, Math.round(GoreConfig.get().partLifetimeSeconds * 20 * preset.duration));
 
 		GorePart part = new GorePart(piece, texture, localCenter, half, scale, rgb, lifetime);
+		inheritRot(part, entity);
 		part.wounds = pieceWounds;
 		part.armor = ArmorPieces.of(entity, posed, bodyPart);
 		Integer plucked = butchery.tint(entity.getId());
@@ -502,5 +506,14 @@ public final class Dismemberment {
 		wool.clear();
 		butchery.clear();
 		parts.clear();
+	}
+
+	/** A piece cut off a rotting body is as rotten as the body, and rots on from there by itself. */
+	private static void inheritRot(GorePart part, LivingEntity entity) {
+		Rot rot = GoreSystems.decay().of(entity.getId());
+		if (rot != null) {
+			part.rot = rot.days;
+			part.arid = rot.arid;
+		}
 	}
 }

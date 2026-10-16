@@ -119,6 +119,17 @@ with a blade. Cut through the carcass to the bone and it splits in two, and a bl
 two again, raw on the cut face, until it is diced. The body stays on the ground as long as you keep working on it.
 On a server with the mod, the other players see each cut as you make it.
 
+### Bodies rot (Extreme)
+On the Extreme gore level a body left lying rots the way a real carcass does, one Minecraft day for a real day. Within
+hours it is pale and stiff with rigor mortis and the first flies find it. Then it bloats green and tight with gas, its
+legs pushed out stiff, until it splits open with a wet rip: maggots, a black pool of fluid spreading under it, the
+flies and their buzzing at their worst. It sinks into itself, the bones come through, and what is left is bones and
+dried hide, bleaching. The timing follows the pig carcass studies forensic science uses: in the plains a chicken is
+bones in about ten days, a pig in four weeks, a cow or horse in five to eight. Heat speeds it up, water halves it,
+snow stops it, and in deserts and the Nether a body dries into a leathery mummy instead. Severed pieces rot too, at
+their own size's pace. Kept bodies go on rotting while nobody is near and while you sleep, and everyone with the
+mod sees the same rot. Rot Speed turns it up if you would rather not wait.
+
 ### Inventory sorting
 A small extra, the way 1.7.10 did it: a tiny sort button in the top right of every chest, barrel, ender chest and
 shulker box and one next to your inventory, or middle-click over either part. Stacks are merged and ordered by item
@@ -198,6 +209,8 @@ Tested alongside Sodium, Iris (without a shader pack), Lithium, FerriteCore, Ent
 | Death Throes | Off | Off: the vanilla death, made gory (red, over onto its side, bleeding out, still). On: the realistic death throes. |
 | Keep Bodies | On | Server side (singleplayer, LAN host, a server with the mod): bodies stay until cleaned up or butchered apart. |
 | Most Kept Bodies | 64 | Server side: kept bodies per dimension; the oldest goes up in smoke. |
+| Bodies Rot | On | Extreme only: kept bodies and severed pieces rot by the day, from rigor and bloat to maggots and bones. |
+| Rot Speed | 1x | 1x is real time (a Minecraft day of rot per day); up to 100x. |
 | Body Lingers | 10 s | How long a body stays after it dies when the server does not keep bodies. |
 | Red Death | On | Dying bodies stay red until they are gone, like the vanilla death. |
 | Death Pop | On | Some bodies, when they finally go, pop into their head, limbs and scraps of flesh, which you can kick about. |
