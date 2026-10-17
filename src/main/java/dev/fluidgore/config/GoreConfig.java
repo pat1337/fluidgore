@@ -109,6 +109,8 @@ public final class GoreConfig {
 	 * until it lies on the flat. Kept bodies are moved by the server, so everyone sees them where they end up.
 	 */
 	public boolean bodySlide = true;
+	/** How much each body you walk through slows you, in percent: wading through a pile of carcasses is hard going. */
+	public int wadeSlowPercent = 35;
 	/** Dying bodies stay tinted red, like vanilla's death, until they are gone. */
 	public boolean redDeath = true;
 	/**
@@ -329,6 +331,7 @@ public final class GoreConfig {
 		maxScreams = clamp(maxScreams, 1, 32);
 		corpseLingerSeconds = clamp(corpseLingerSeconds, 3, 600);
 		maxKeptBodies = clamp(maxKeptBodies, 1, 512);
+		wadeSlowPercent = clamp(wadeSlowPercent, 0, 80);
 		decaySpeed = clamp(decaySpeed, 1, 100);
 		griefSeconds = clamp(griefSeconds, 0, 3600);
 		if (sufferingAnimals == null) sufferingAnimals = new ArrayList<>();

@@ -120,6 +120,7 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 						c.keepBodies, v -> c.keepBodies = v),
 				OptionInstance.createBoolean("fluidgore.option.body_slide", OptionInstance.cachedConstantTooltip(Component.translatable("fluidgore.option.body_slide.tooltip")),
 						c.bodySlide, v -> c.bodySlide = v),
+				scaledSlider("fluidgore.option.wade_slow", 0, 16, 5, c.wadeSlowPercent, "fluidgore.unit.percent", v -> c.wadeSlowPercent = v),
 				scaledSlider("fluidgore.option.max_kept_bodies", 1, 64, 8, c.maxKeptBodies, null, v -> c.maxKeptBodies = v),
 				scaledSlider("fluidgore.option.corpse_linger", 1, 120, 5, c.corpseLingerSeconds, "fluidgore.unit.seconds", v -> c.corpseLingerSeconds = v),
 				OptionInstance.createBoolean("fluidgore.option.red_death", c.redDeath, v -> c.redDeath = v),

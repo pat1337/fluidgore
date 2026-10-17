@@ -6,6 +6,7 @@ import dev.fluidgore.dismember.GorePartManager;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.BlockPos;
 import org.joml.Quaternionf;
 
 /**
@@ -98,6 +99,13 @@ public final class PieceSync {
 
 		GorePart p = GoreSystems.dismemberment().parts().byKey(s.key());
 		if (p == null) {
+			if (!level.isLoaded(BlockPos.containing(s.x(), s.y(), s.z()))) {
+				// The server sends what lies here as soon as the player is near; the ground under it may not be loaded
+				// yet, and a piece in an unloaded chunk is dropped at once. It waits, and is put down when the ground is.
+				Evidence.waitForGround(s);
+				return;
+			}
+
 			// One the server kept, for a player who was not there when it came off.
 			p = Evidence.place(s.key());
 		}

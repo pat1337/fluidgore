@@ -631,6 +631,8 @@ public final class Suffering {
 		Ragdoll body = c.body;
 		body.beginTick();
 		LivingEntity entity = c.entity;
+		// A carcass is no wall: the game here lets blocks be placed where it lies, as the server does (see KeptBodies).
+		entity.blocksBuilding = false;
 		GoreConfig config = GoreConfig.get();
 		boolean gore = config.goreLevel.enabled() && !EntityFilter.isBloodless(entity);
 		int color = EntityFilter.bloodColor(entity);
@@ -738,12 +740,8 @@ public final class Suffering {
 	private static void slide(ClientLevel level, Corpse c, int color, boolean gore) {
 		Ragdoll body = c.body;
 		LivingEntity entity = c.entity;
-		boolean down = c.toppled && (!c.vanilla || c.landed) && c.age > Corpse.VANILLA_TICKS + c.fallDelay;
-		if (!down || !GoreConfig.get().bodySlide) {
-			return;
-		}
-
-		if (c.held && !c.unloaded) {
+		if (c.held && !c.unloaded && c.toppled) {
+			// The server moves a kept body (down a drop, punched, shoved): this one goes where it goes.
 			double moved = entity.position().distanceToSqr(entity.xo, entity.yo, entity.zo);
 			if (moved > 1.0E-6) {
 				body.x += (entity.getX() - body.x) * 0.5;
@@ -751,7 +749,14 @@ public final class Suffering {
 				body.z += (entity.getZ() - body.z) * 0.5;
 				body.onGround = entity.onGround();
 			}
-		} else if (body.onGround) {
+		}
+
+		boolean down = c.toppled && (!c.vanilla || c.landed) && c.age > Corpse.VANILLA_TICKS + c.fallDelay;
+		if (!down || !GoreConfig.get().bodySlide) {
+			return;
+		}
+
+		if (!(c.held && !c.unloaded) && body.onGround) {
 			AABB box = entity.getBoundingBox().move(body.x - entity.getX(), body.y - entity.getY(), body.z - entity.getZ());
 			Vec3 pull = BodySlide.pull(level, box);
 			body.vx += pull.x;
@@ -813,6 +818,16 @@ public final class Suffering {
 		body.vz += motion.z * 0.5 * body.heft;
 		if (c.random.nextFloat() < 0.3F) {
 			body.spasm(c.random, 0.2F);
+		}
+
+		// Wading through dead weight: every body underfoot drags at the legs, a pile of them more so.
+		float slow = GoreConfig.get().wadeSlowPercent / 100.0F / Math.max(0.8F, body.heft);
+		if (slow > 0.0F) {
+			player.setDeltaMovement(motion.x * (1.0F - slow), motion.y, motion.z * (1.0F - slow));
+			if (c.random.nextInt(8) == 0 && GoreConfig.get().goreSounds) {
+				player.level().playLocalSound(player.getX(), player.getY(), player.getZ(), SoundEvents.MUD_STEP, SoundSource.PLAYERS, 0.5F,
+						0.6F + c.random.nextFloat() * 0.2F, false);
+			}
 		}
 
 		c.keepFor(40);

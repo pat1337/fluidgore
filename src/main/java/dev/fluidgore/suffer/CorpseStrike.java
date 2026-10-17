@@ -114,7 +114,9 @@ public final class CorpseStrike {
 		boolean blade = weapon.cuts();
 		// Butchering: a blade opens a dead body at the same pace whatever its size, so a horse is jointed and split in a
 		// few chops, like a chicken, instead of dozens.
-		float cutting = blade && GoreConfig.get().butchery ? Math.max(damage, entity.getMaxHealth() * BUTCHER_SHARE) : damage;
+		// An axe on a dead body goes straight in to the bone: a carcass is cleared in two chops.
+		float share = weapon == Weapon.CHOP && corpse.lifeless() ? 1.0F : BUTCHER_SHARE;
+		float cutting = blade && GoreConfig.get().butchery ? Math.max(damage, entity.getMaxHealth() * share) : damage;
 		Wounds.Strike wound = GoreSystems.dismemberment().wounds().strike(entity, eye, look, REACH + 2.0, weapon, cutting);
 		Vec3 point = wound != null ? wound.hit().point() : box(corpse).clip(eye, eye.add(look.scale(REACH + 2.0))).orElse(centre(corpse));
 		int rgb = EntityFilter.bloodColor(entity);
@@ -163,7 +165,7 @@ public final class CorpseStrike {
 				GoreSystems.dismemberment().severPart(blood, level, entity, struck, () -> new Vec3(body.x, body.y, body.z), body.yaw, body.roll, away);
 			} else if (struck == null && wound.cut() && blade && GoreConfig.get().butchery) {
 				// Through the carcass, already cut to the bone: a few chops through the backbone and it splits.
-				GoreSystems.dismemberment().butchery().chopThrough(blood, level, corpse, wound.hit().part(), look);
+				GoreSystems.dismemberment().butchery().chopThrough(blood, level, corpse, wound.hit().part(), look, weapon == Weapon.CHOP);
 			}
 		} else if (blade && RANDOM.nextFloat() < 0.4F * GoreConfig.get().goreLevel.partChance + 0.15F) {
 			// Wounds are off for this body, so the spot is unknown: a random part.

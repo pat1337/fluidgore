@@ -2,6 +2,28 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.13.1]
+
+Clearing a killing floor.
+
+### Fixed
+- A kept body stopped blocks being placed where it lay, even after it was punched away (the server still had it where
+  it died). Bodies never get in the way of building now: build right on one and it is shoved aside out of the way (up
+  on top only if there is no room to the side). Loose pieces in the way are pushed out too.
+- Cut-up pieces could be missing when you came back to them: the server sent them a moment before the ground under them
+  had loaded, and they were dropped. They now wait for the ground. (This was the butchery test that failed now and
+  then.)
+- Punching or kicking a kept body only moved it on your own screen. The server moves it now, so it really goes where
+  you knocked it, for every player, and stays there. Walking into a body shoves it along too.
+
+### Changed
+- Wading Through Bodies (35% by default): every body you walk through drags at your legs and squelches, and a pile of
+  them is hard going, while you shove them along.
+- An axe clears a carcass in two chops: the first goes in to the bone, the second through the backbone, and the body
+  splits apart and is gone. A knife still takes a few.
+- Butchering is wetter and more disgusting: every chop into a carcass squelches, and splitting it spills the guts
+  out of the belly in a gush of blood that pools where it lay. Sheep throw clumps of bloody, matted wool with every cut.
+
 ## [2.13.0]
 
 Chickens die like chickens, and bodies go down stairs.

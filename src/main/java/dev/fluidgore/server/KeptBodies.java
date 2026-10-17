@@ -8,6 +8,7 @@ import dev.fluidgore.net.BodyAge;
 import dev.fluidgore.net.GoreAction;
 import dev.fluidgore.net.PieceState;
 import dev.fluidgore.physics.BodySlide;
+import dev.fluidgore.wound.Weapon;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -33,6 +34,8 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -62,6 +65,8 @@ public final class KeptBodies {
 	private static final double GRAVITY = 0.08;
 	private static final double GROUND_FRICTION = 0.546;
 	private static final double AIR_FRICTION = 0.91;
+	/** Bounding-box volume of an adult cow, the reference body for {@link #heft}. */
+	private static final float COW_VOLUME = 0.9F * 0.9F * 1.4F;
 	/**
 	 * When a kept body died: the game time and the overworld's day clock then, saved with it, so it goes on rotting
 	 * while nobody is near and while players sleep (see {@code rot/Decay}).
@@ -156,22 +161,100 @@ public final class KeptBodies {
 			}
 		}
 
-		if (config.bodySlide && body.deathTime >= TIPPED) {
-			// Lying over a drop it slumps down it; vanilla's own movement (gravity, friction) carries it from there, and
-			// every client is sent where it goes.
-			Vec3 pull = body.onGround() ? BodySlide.pull(level, body.getBoundingBox()) : Vec3.ZERO;
-			if (body instanceof Mob mob && mob.isNoAi()) {
-				// Vanilla never moves a mob without AI, not even to fall: a dead weight falls all the same.
-				Vec3 v = body.getDeltaMovement().add(pull).add(0.0, -GRAVITY, 0.0);
-				body.move(MoverType.SELF, v);
-				double friction = body.onGround() ? GROUND_FRICTION : AIR_FRICTION;
-				body.setDeltaMovement(v.x * friction, body.onGround() ? 0.0 : v.y * 0.98, v.z * friction);
-			} else if (pull != Vec3.ZERO) {
-				body.setDeltaMovement(body.getDeltaMovement().add(pull));
-			}
+		// A carcass is no wall: blocks can be placed where it lies (it is pushed up out of them, below).
+		body.blocksBuilding = false;
+		unstick(level, body);
+		// Lying over a drop it slumps down it, and players walking into it shove it along. Vanilla's own movement
+		// (gravity, friction) carries it from there, and every client is sent where it goes.
+		Vec3 push = shoved(level, body);
+		if (config.bodySlide && body.deathTime >= TIPPED && body.onGround()) {
+			push = push.add(BodySlide.pull(level, body.getBoundingBox()));
+		}
+
+		if (body instanceof Mob mob && mob.isNoAi()) {
+			// Vanilla never moves a mob without AI, not even to fall: a dead weight falls all the same.
+			Vec3 v = body.getDeltaMovement().add(push).add(0.0, -GRAVITY, 0.0);
+			body.move(MoverType.SELF, v);
+			double friction = body.onGround() ? GROUND_FRICTION : AIR_FRICTION;
+			body.setDeltaMovement(v.x * friction, body.onGround() ? 0.0 : v.y * 0.98, v.z * friction);
+		} else if (push != Vec3.ZERO) {
+			body.setDeltaMovement(body.getDeltaMovement().add(push));
 		}
 
 		return true;
+	}
+
+	/** How readily a body moves, from its size: 1 for a cow, more for a chicken, less for a horse (as the clients' ragdoll). */
+	private static double heft(LivingEntity body) {
+		float width = body.getBbWidth();
+		float volume = width * width * body.getBbHeight();
+		return Mth.clamp(1.0F / Mth.sqrt(Math.max(0.01F, volume) / COW_VOLUME), 0.55F, 1.8F);
+	}
+
+	/** Players walking into a body push it along, as they would a box: the push this tick. */
+	private static Vec3 shoved(ServerLevel level, LivingEntity body) {
+		AABB box = body.getBoundingBox();
+		Vec3 push = Vec3.ZERO;
+		for (Player player : level.getEntitiesOfClass(Player.class, box.inflate(0.05), p -> !p.isSpectator())) {
+			// Standing on top of it is not walking into it.
+			if (player.getY() > box.maxY - 0.2) {
+				continue;
+			}
+
+			Vec3 stride = player.getKnownMovement();
+			if (stride.horizontalDistanceSqr() > 0.0025) {
+				push = push.add(stride.x * 0.4 * heft(body), 0.0, stride.z * 0.4 * heft(body));
+			}
+		}
+
+		return push;
+	}
+
+	/**
+	 * A block was placed where the body lies: the body is shoved out of its way, to the nearest place it fits, sideways
+	 * along the ground if it can be, up onto the block if not. Build straight through a pile of carcasses and they are
+	 * pushed aside.
+	 */
+	private static void unstick(ServerLevel level, LivingEntity body) {
+		AABB box = body.getBoundingBox().deflate(0.01);
+		if (level.noBlockCollision(body, box)) {
+			return;
+		}
+
+		for (double step = 0.1; step <= 1.6; step += 0.1) {
+			// Sideways first, in eight directions; then up.
+			for (int k = 0; k < 9; k++) {
+				double dx = k < 8 ? Math.round(Math.cos(k * Math.PI / 4.0) * 100.0) / 100.0 * step : 0.0;
+				double dz = k < 8 ? Math.round(Math.sin(k * Math.PI / 4.0) * 100.0) / 100.0 * step : 0.0;
+				double dy = k < 8 ? 0.0 : step;
+				AABB moved = box.move(dx, dy, dz);
+				// Sideways only onto something it can lie on, not out over a drop into a wall's far side.
+				if (level.noBlockCollision(body, moved) && (k == 8 || !level.noBlockCollision(body, moved.move(0.0, -0.2, 0.0)))) {
+					body.setPos(body.getX() + dx, body.getY() + dy, body.getZ() + dz);
+					return;
+				}
+			}
+		}
+	}
+
+	/**
+	 * A blow on a kept body moves it on the server, so it is where every player sees it and does not lie, unseen, where
+	 * it was: knocked along the swing with a hop, as the clients' ragdoll is (see {@code CorpseStrike}). A blade cuts
+	 * rather than bats, so a carcass being butchered stays where it lies.
+	 */
+	private static void knock(LivingEntity body, GoreAction action) {
+		Weapon weapon = action.weapon() >= 0 && action.weapon() < Weapon.values().length ? Weapon.values()[action.weapon()] : Weapon.BLUNT;
+		double knock = weapon.cuts() ? 0.05 : 1.0;
+		double heft = heft(body);
+		double push = (weapon.cuts() ? 0.25 : 0.32) * (0.8 + Math.min(action.damage(), 10.0F) * 0.05) * heft * knock;
+		Vec3 look = new Vec3(action.dx(), 0.0, action.dz());
+		if (look.lengthSqr() < 1.0E-6) {
+			return;
+		}
+
+		look = look.normalize();
+		Vec3 v = body.getDeltaMovement();
+		body.setDeltaMovement(Mth.clamp(v.x + look.x * push, -0.8, 0.8), Math.min(0.5, v.y + 0.18 * heft * knock), Mth.clamp(v.z + look.z * push, -0.8, 0.8));
 	}
 
 	/** True if a body is kept for now: one being kept, or one that will be when it next ticks. */
@@ -264,6 +347,10 @@ public final class KeptBodies {
 
 		if (action.kind() == GoreAction.CLEAN && body != null) {
 			clean(body);
+		}
+
+		if (action.kind() == GoreAction.STRIKE && body != null && isKept(body)) {
+			knock(body, action);
 		}
 
 		if (action.kind() == GoreAction.CUT) {

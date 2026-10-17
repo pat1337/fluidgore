@@ -11,6 +11,7 @@ import dev.fluidgore.suffer.Corpse;
 import dev.fluidgore.suffer.CorpseStrike;
 import dev.fluidgore.suffer.Ragdoll;
 import dev.fluidgore.trigger.Fate;
+import dev.fluidgore.wound.BloodyWool;
 import dev.fluidgore.wound.Flesh;
 import dev.fluidgore.wound.Wounds;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
@@ -164,17 +165,29 @@ public final class Butchery {
 	 * A blade through the carcass where it is already cut to the bone. The backbone gives on the last of
 	 * {@link #CHOPS_TO_SPLIT} such chops and the carcass splits; until then each one crunches into the bone.
 	 */
-	public void chopThrough(BloodWorld blood, ClientLevel level, Corpse corpse, ModelPart torso, Vec3 look) {
+	public void chopThrough(BloodWorld blood, ClientLevel level, Corpse corpse, ModelPart torso, Vec3 look, boolean axe) {
 		int id = corpse.entity.getId();
 		int n = chops.get(id) + 1;
 		chops.put(id, n);
 		corpse.keepFor(KEEP_TICKS);
-		if (n >= CHOPS_TO_SPLIT) {
+		// An axe goes through the backbone in one; a knife has to work at it.
+		if (n >= (axe ? 1 : CHOPS_TO_SPLIT)) {
 			split(blood, level, corpse, torso, look);
 		} else {
 			Vec3 at = corpse.position();
 			level.playLocalSound(at.x, at.y, at.z, SoundEvents.BONE_BLOCK_HIT, SoundSource.NEUTRAL, 0.7F, 0.8F + RANDOM.nextFloat() * 0.2F, false);
+			squelch(level, at, 0.6F);
 		}
+	}
+
+	/** The wet, sucking sound of a blade going into and out of a carcass. */
+	private static void squelch(ClientLevel level, Vec3 at, float volume) {
+		if (!GoreConfig.get().goreSounds) {
+			return;
+		}
+
+		level.playLocalSound(at.x, at.y, at.z, SoundEvents.HONEY_BLOCK_BREAK, SoundSource.NEUTRAL, volume, 0.6F + RANDOM.nextFloat() * 0.2F, false);
+		level.playLocalSound(at.x, at.y, at.z, SoundEvents.SLIME_BLOCK_BREAK, SoundSource.NEUTRAL, volume * 0.8F, 0.5F + RANDOM.nextFloat() * 0.2F, false);
 	}
 
 	/**
@@ -205,6 +218,23 @@ public final class Butchery {
 		dismemberment.parts().add(carcass);
 		if (!cut(blood, level, carcass, look)) {
 			carcass.vy += 0.15;
+		}
+
+		// Opened up: the guts slide out of the belly in a gush of blood that pools where it lay, with a wet, heavy
+		// slop. The fleece or feathers come away in bloody clumps.
+		Vec3 centre = new Vec3(body.x(1.0F), body.y(1.0F) + entity.getBbHeight() * 0.3, body.z(1.0F));
+		if (GoreConfig.get().goreLevel.enabled() && Flesh.of(entity).bleeds()) {
+			int rgb = dev.fluidgore.trigger.EntityFilter.bloodColor(entity);
+			float size = entity.getBbWidth() * entity.getBbHeight();
+			dismemberment.giblets().spill(level, blood, entity, centre.subtract(look.scale(0.5)), 0.6F);
+			BloodEmitter.burst(blood, level, centre, rgb, 0.12F * size, Math.round(24 * size) + 8);
+			BloodEmitter.drip(blood, new Vec3(centre.x, body.y(1.0F) + 0.1, centre.z), rgb, 0.4F * size);
+			squelch(level, centre, 1.0F);
+			BloodEmitter.burstSound(level, centre, 0.6F);
+			if (BloodyWool.woolly(entity) || Feathers.feathered(entity)) {
+				dismemberment.feathers().tuft(entity, centre, new Vec3(0.0, 1.0, 0.0), 10, 0.1,
+						Math.max(0.6F, dismemberment.wool().soak(entity.getId())), rgb);
+			}
 		}
 
 		corpse.keepFor(KEEP_TICKS);

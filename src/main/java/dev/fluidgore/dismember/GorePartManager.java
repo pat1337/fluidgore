@@ -152,6 +152,25 @@ public final class GorePartManager {
 		}
 	}
 
+	/** Moves a piece inside a block to the nearest open spot, sideways first, then up, and lets it fall from there. */
+	private static void pushOut(Level level, GorePart p) {
+		for (double step = 0.25; step <= 1.5; step += 0.25) {
+			for (int k = 0; k < 5; k++) {
+				double dx = k == 0 ? step : k == 1 ? -step : 0.0;
+				double dz = k == 2 ? step : k == 3 ? -step : 0.0;
+				double dy = k == 4 ? step : 0.0;
+				if (SurfaceProbe.isOpen(level, p.x + dx, p.y + dy, p.z + dz)) {
+					p.x = p.prevX = p.x + dx;
+					p.y = p.prevY = p.y + dy;
+					p.z = p.prevZ = p.z + dz;
+					p.resting = false;
+					p.landed = false;
+					return;
+				}
+			}
+		}
+	}
+
 	private boolean step(Level level, BloodWorld blood, GorePart p) {
 		p.prevX = p.x;
 		p.prevY = p.y;
@@ -163,6 +182,11 @@ public final class GorePartManager {
 
 		if (p.age % 10 == 1) {
 			p.light = LightCoordsUtil.getLightCoords(level, BlockPos.containing(p.x, p.y, p.z));
+		}
+
+		if (p.age % 5 == 0 && !SurfaceProbe.isOpen(level, p.x, p.y, p.z)) {
+			// A block was placed on it: shoved out of the way.
+			pushOut(level, p);
 		}
 
 		if (p.held) {

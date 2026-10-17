@@ -17,6 +17,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.animal.chicken.Chicken;
 import net.minecraft.world.entity.animal.chicken.ChickenVariants;
+import net.minecraft.world.entity.animal.sheep.Sheep;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
@@ -82,8 +83,12 @@ public final class Feathers {
 		return entity instanceof Chicken;
 	}
 
-	/** The colour of {@code entity}'s feathers. */
+	/** The colour of {@code entity}'s feathers, or of a sheep's fleece (clumps of it come away the same way). */
 	public static int plumage(Entity entity) {
+		if (entity instanceof Sheep sheep) {
+			return sheep.getColor().getTextureDiffuseColor() & 0xFFFFFF;
+		}
+
 		if (entity instanceof Chicken chicken) {
 			if (chicken.getVariant().is(ChickenVariants.WARM)) {
 				return WARM;

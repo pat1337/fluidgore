@@ -61,6 +61,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			hardening(context, singleplayer.getServer());
 			stairs(context, singleplayer.getServer());
 			chickens(context, singleplayer.getServer());
+			clearingBodies(context, singleplayer.getServer());
 			decay(context, singleplayer.getServer());
 			meatsAndWool(context, singleplayer.getServer());
 			playerGore(context, singleplayer.getServer());
@@ -2054,6 +2055,102 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			GoreSystems.dismemberment().clear();
 			GoreConfig.get().deathThroes = true;
 			GoreConfig.get().chickenDeaths = false;
+		});
+	}
+
+	/**
+	 * Clearing a killing floor: a kept body does not stop blocks being placed where it lies; a punch moves it on the
+	 * server (not only on this screen), and the screen keeps it there; two axe chops split it and it is gone.
+	 */
+	private static void clearingBodies(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("fill 160 -60 -50 180 -55 -30 minecraft:air");
+		server.runCommand("tp @a 170.5 -60 -41.5 0 20");
+		context.runOnClient(mc -> {
+			GoreConfig.get().deathThroes = false;
+			GoreConfig.get().keepBodies = true;
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+		java.util.UUID sheep = new java.util.UUID(41L << 32 | 42L, 43L << 32 | 44L);
+		server.runCommand("summon minecraft:sheep 170.5 -60 -39.5 {NoAI:1b,UUID:[I;41,42,43,44]}");
+		context.waitTicks(10);
+		int id = context.computeOnClient(mc -> idOf(mc, sheep));
+		server.runCommand("damage @e[type=minecraft:sheep,limit=1] 100 minecraft:generic");
+		context.waitTicks(50);
+		java.util.function.Function<net.minecraft.server.MinecraftServer, double[]> where = s -> {
+			Entity e = s.overworld().getEntity(sheep);
+			return e == null || e.isRemoved() ? null : new double[] {e.getX(), e.getZ()};
+		};
+
+		// A block can go where it lies.
+		boolean free = server.computeOnServer(s -> s.overworld().isUnobstructed(null,
+				net.minecraft.world.phys.shapes.Shapes.create(new net.minecraft.world.phys.AABB(170, -60, -40, 171, -59, -39))));
+		System.out.println("[FluidGoreTest] building where a kept body lies: " + (free ? "allowed" : "blocked"));
+		check(free, "a kept body still blocks blocks being placed where it lies");
+		// Built right on top of it: it is shoved out of the way, not left inside the block.
+		server.runCommand("setblock 170 -60 -40 minecraft:stone");
+		context.waitTicks(5);
+		String shoved = server.computeOnServer(s -> {
+			Entity e = s.overworld().getEntity(sheep);
+			return e == null ? "gone" : String.format(java.util.Locale.ROOT, "%.2f %.2f %.2f clear=%s", e.getX(), e.getY(), e.getZ(),
+					s.overworld().noBlockCollision(e, e.getBoundingBox().deflate(0.01)));
+		});
+		System.out.println("[FluidGoreTest] block built on a kept body: body now " + shoved);
+		check(shoved.endsWith("clear=true"), "a block built on a kept body left it inside the block: " + shoved);
+		server.runCommand("setblock 170 -60 -40 minecraft:air");
+		context.waitTicks(5);
+
+		// A punch moves it on the server.
+		double[] before = server.computeOnServer(where::apply);
+		context.runOnClient(mc -> {
+			var corpse = GoreSystems.suffering().corpse(id);
+			var centre = dev.fluidgore.suffer.CorpseStrike.centre(corpse);
+			var eye = centre.add(0.0, 0.4, -1.6);
+			dev.fluidgore.net.GoreSync.act(dev.fluidgore.net.GoreAction.of(dev.fluidgore.net.GoreAction.STRIKE, id, 0L, eye, centre.subtract(eye).normalize(),
+					Weapon.BLUNT.ordinal(), 1.0F));
+		});
+		context.waitTicks(30);
+		double[] after = server.computeOnServer(where::apply);
+		double[] drawn = context.computeOnClient(mc -> {
+			var corpse = GoreSystems.suffering().corpse(id);
+			return new double[] {corpse.body.x(1.0F), corpse.body.z(1.0F)};
+		});
+		System.out.println("[FluidGoreTest] punched body: server " + java.util.Arrays.toString(before) + " -> " + java.util.Arrays.toString(after)
+				+ ", drawn at " + java.util.Arrays.toString(drawn));
+		check(before != null && after != null && after[1] - before[1] > 0.2, "a punch did not move the kept body on the server");
+		check(Math.hypot(drawn[0] - after[0], drawn[1] - after[1]) < 0.5, "the punched body is drawn away from where the server has it");
+
+		// Two axe chops through the middle, and it is gone.
+		int chops = 0;
+		for (int i = 0; i < 6 && context.computeOnClient(mc -> GoreSystems.suffering().corpse(id) != null
+				&& !GoreSystems.dismemberment().vaporized(id)); i++) {
+			context.runOnClient(mc -> {
+				var corpse = GoreSystems.suffering().corpse(id);
+				var posed = ModelParts.pose(corpse.entity);
+				var centre = ModelHit.centre(corpse.entity, posed, ModelParts.torso(posed.model()));
+				var eye = centre.add(0.0, 1.2, 0.0);
+				dev.fluidgore.net.GoreSync.act(dev.fluidgore.net.GoreAction.of(dev.fluidgore.net.GoreAction.STRIKE, id, 0L, eye, centre.subtract(eye).normalize(),
+						Weapon.CHOP.ordinal(), 9.0F));
+			});
+			chops++;
+			context.waitTicks(8);
+		}
+
+		context.waitTicks(20);
+		boolean gone = server.computeOnServer(where::apply) == null;
+		int guts = context.computeOnClient(mc -> GoreSystems.dismemberment().giblets().count());
+		context.takeScreenshot("clearing_01_chopped");
+		System.out.println("[FluidGoreTest] chopped body: " + chops + " chops, gone from the server " + gone + ", guts out " + guts);
+		check(chops <= 2, "an axe took " + chops + " chops to split a kept sheep");
+		check(gone, "the split body is still on the server");
+		check(guts > 0, "nothing spilled out of the split carcass");
+		context.runOnClient(mc -> {
+			GoreSystems.suffering().clear();
+			GoreSystems.dismemberment().clear();
+			GoreConfig.get().deathThroes = true;
+			GoreConfig.get().keepBodies = false;
 		});
 	}
 

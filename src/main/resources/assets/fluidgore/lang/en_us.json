@@ -129,6 +129,8 @@
 	"fluidgore.option.keep_bodies.tooltip": "Slaughtered animals stay where they fell, with everything done to them, until someone cleans them up with a sponge or butchers them apart. Needs Fluid Gore on the server (in singleplayer and on a LAN world you host, that is you). Everyone with the mod sees the same butchery.",
 	"fluidgore.option.body_slide": "Bodies Slide Down",
 	"fluidgore.option.body_slide.tooltip": "A body that falls across stairs, a ledge or a slope slumps over the edge and slides and tumbles down step by step until it lies flat.",
+	"fluidgore.option.wade_slow": "Wading Through Bodies",
+	"fluidgore.option.wade_slow.tooltip": "How much each body you walk through slows you down. A pile of carcasses is hard going. 0% turns it off.",
 	"fluidgore.option.max_kept_bodies":"Most Kept Bodies",
 	"fluidgore.option.max_kept_bodies.tooltip": "How many bodies the server keeps in each dimension. When another falls, the oldest goes up in smoke.",
 	"fluidgore.option.corpse_linger": "Body Lingers",

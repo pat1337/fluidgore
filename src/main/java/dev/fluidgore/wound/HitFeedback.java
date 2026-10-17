@@ -77,6 +77,12 @@ public final class HitFeedback {
 		// Into the fleece, its own and its neighbours'.
 		GoreSystems.dismemberment().wool().hit(level, entity, at, depth);
 
+		// A blade in a sheep cuts clumps of fleece loose, matted with the blood of the wound.
+		if (BloodyWool.woolly(entity) && weapon.cuts() && depth >= 0.25F) {
+			GoreSystems.dismemberment().feathers().tuft(entity, at, away.lengthSqr() > 1.0E-6 ? away.normalize() : strike.hit().normal(),
+					2 + Math.round(4 * depth), 0.06, Math.max(depth, GoreSystems.dismemberment().wool().soak(entity.getId())), rgb);
+		}
+
 		// A blow on a bird knocks feathers out of it: a burst from a club or a bite, a few cut loose by a blade, wet with
 		// the blood of the wound under them. A bird already plucked bare has none left to lose.
 		if (Feathers.feathered(entity)) {

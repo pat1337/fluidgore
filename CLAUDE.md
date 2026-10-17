@@ -286,3 +286,13 @@ severable parts; severed heads can't blink.
   `fluidgore$flap` (wings are the "front legs" of the kick loop, skipped for birds); `Corpse.wrung` = killed by BLUNT.
   `Corpse.done` waits for `flapEnd`. The rest of the game test runs with `chickenDeaths` off. Game test: `chickens`. Demo:
   `chickens`.
+- **2.13.1**: dead bodies have `blocksBuilding = false` (server in `KeptBodies.keep`, client in `Suffering.tickCorpse`);
+  `KeptBodies.unstick` lifts a body out of a block placed into it, `shoved` pushes it from players walking into it
+  (`getKnownMovement`), `knock` applies a STRIKE's knockback on the server (mirrors `CorpseStrike`). `Suffering.slide`
+  follows the server's moves of any kept body once toppled. An axe on a lifeless body cuts with its whole health and
+  `chopThrough(..., axe)` splits on the first chop through the bone; `split` spills giblets, gushes and squelches;
+  `Feathers.tuft` also throws sheep's wool (`plumage` = dye colour). `unstick` shoves sideways first (8 directions, onto
+  ground), then up; `GorePartManager.pushOut` does the same for pieces. `Suffering.shove` slows the local player by
+  `wadeSlowPercent` per body. `Evidence.waitForGround`: a server-sent piece whose chunk is not loaded on the client waits
+  (it used to be dropped at once by `GorePartManager.step`: the old flaky "diced piece was not there" test). Game test:
+  `clearingBodies`. No demo (`kept` shows it).

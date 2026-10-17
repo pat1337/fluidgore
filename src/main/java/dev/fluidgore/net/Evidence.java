@@ -20,6 +20,7 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import java.util.Iterator;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import org.jspecify.annotations.Nullable;
@@ -46,6 +47,8 @@ public final class Evidence {
 	private static final Long2ObjectOpenHashMap<GorePart> UNPLACED = new Long2ObjectOpenHashMap<>();
 	/** When each unplaced piece came; one whose pose never follows is dropped after {@link #WAIT}. */
 	private static final Long2IntOpenHashMap UNPLACED_AT = new Long2IntOpenHashMap();
+	/** Poses of unplaced pieces whose ground is not loaded yet: they are put down once it is. */
+	private static final Long2ObjectOpenHashMap<PieceState> GROUND = new Long2ObjectOpenHashMap<>();
 	private static int tick;
 
 	private Evidence() {
@@ -90,11 +93,25 @@ public final class Evidence {
 			DIRTY.clear();
 		}
 
+		if (!GROUND.isEmpty()) {
+			Iterator<PieceState> waiting = GROUND.values().iterator();
+			while (waiting.hasNext()) {
+				PieceState pose = waiting.next();
+				if (!UNPLACED.containsKey(pose.key())) {
+					waiting.remove();
+				} else if (level.isLoaded(BlockPos.containing(pose.x(), pose.y(), pose.z()))) {
+					waiting.remove();
+					PieceSync.apply(pose);
+				}
+			}
+		}
+
 		if (tick % 20 == 0 && !UNPLACED_AT.isEmpty()) {
 			UNPLACED_AT.long2IntEntrySet().removeIf(entry -> {
 				boolean stale = tick - entry.getIntValue() > WAIT;
 				if (stale) {
 					UNPLACED.remove(entry.getLongKey());
+					GROUND.remove(entry.getLongKey());
 				}
 
 				return stale;
@@ -203,6 +220,13 @@ public final class Evidence {
 		}
 	}
 
+	/** A pose for a piece the server sent, arrived before the ground it lies on: it is put down when that loads. */
+	static void waitForGround(PieceState pose) {
+		if (UNPLACED.containsKey(pose.key())) {
+			GROUND.put(pose.key(), pose);
+		}
+	}
+
 	/** The piece named {@code key} the server sent, now put down among the others; null if there is none. */
 	static @Nullable GorePart place(long key) {
 		GorePart part = UNPLACED.remove(key);
@@ -223,6 +247,7 @@ public final class Evidence {
 	public static void clear() {
 		UNPLACED.clear();
 		UNPLACED_AT.clear();
+		GROUND.clear();
 		DIRTY.clear();
 		PENDING.clear();
 		WAITED.clear();

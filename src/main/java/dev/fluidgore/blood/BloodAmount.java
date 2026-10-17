@@ -20,8 +20,8 @@ public final class BloodAmount {
 			Map.entry("panda", 1.4F), Map.entry("ravager", 1.9F), Map.entry("hoglin", 1.6F), Map.entry("zoglin", 1.5F),
 			Map.entry("player", 1.2F), Map.entry("villager", 1.2F), Map.entry("pillager", 1.2F), Map.entry("vindicator", 1.2F),
 			Map.entry("evoker", 1.2F), Map.entry("wolf", 0.9F), Map.entry("fox", 0.7F), Map.entry("cat", 0.6F),
-			Map.entry("ocelot", 0.6F), Map.entry("chicken", 0.45F), Map.entry("rabbit", 0.4F), Map.entry("parrot", 0.3F),
-			Map.entry("bat", 0.2F), Map.entry("turtle", 0.6F), Map.entry("cod", 0.3F), Map.entry("salmon", 0.3F),
+			Map.entry("ocelot", 0.6F), Map.entry("chicken", 0.45F), Map.entry("rabbit", 0.4F), Map.entry("parrot", 0.1F),
+			Map.entry("bat", 0.2F), Map.entry("turtle", 0.6F), Map.entry("cod", 0.1F), Map.entry("salmon", 0.1F),
 			Map.entry("tropical_fish", 0.2F), Map.entry("pufferfish", 0.2F), Map.entry("squid", 0.9F), Map.entry("spider", 0.7F),
 			Map.entry("cave_spider", 0.4F), Map.entry("bee", 0.05F), Map.entry("silverfish", 0.1F), Map.entry("endermite", 0.1F)
 	);
