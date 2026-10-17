@@ -62,6 +62,17 @@ public record GoreAction(byte kind, int entityId, long partKey, float x, float y
 		return new Vec3(dx, dy, dz);
 	}
 
+	/** False for an action no game of ours writes: a point or a look that is not a number, or out of the world. */
+	public boolean finite() {
+		return inWorld(x) && inWorld(y) && inWorld(z) && Math.abs(dx) <= 2.0F && Math.abs(dy) <= 2.0F && Math.abs(dz) <= 2.0F
+				&& damage >= 0.0F && damage <= 1.0E6F;
+	}
+
+	/** Finite and within the world border's farthest reach. Not-a-number fails, as every comparison with it does. */
+	static boolean inWorld(float f) {
+		return Math.abs(f) <= 3.0E7F;
+	}
+
 	/**
 	 * The dice for this action, from its own fields (and the body's UUID, mixed in by {@link GoreSync}): the player who
 	 * did it and everyone who is shown it roll the same.

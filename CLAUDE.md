@@ -260,3 +260,13 @@ severable parts; severed heads can't blink.
   `Dismemberment.inheritRot` and `Butchery.piece`, aged in `Decay.ageParts`). Effects: flies (dust), `BEE_LOOP` buzz,
   maggots, ooze, stench, the burst at ACTIVE, the fluid pool decal (`STAIN`, re-placed if the decal cap took it).
   Game test: `decay`. Demo: `decay`.
+- **2.12.1**: server half hardened. **Treat every packet as hostile.** `KeptBodies.isKept(entity)` (in the `BODIES` set)
+  gates CLEAN (never a vanilla-dying body: dragon/wither deaths do things at their end) and is left out of the mob cap by
+  `mixin/NaturalSpawnerMixin` (common; `@ModifyVariable` on the stored entity list, because Lithium already
+  `@Redirect`s `getAllEntities` there). Dead players are refused for every action. `GoreAction.finite()` /
+  `PieceState.finite()` (NaN passes `>` distance checks) on server and client. `server/Throttle` per-player token
+  buckets (actions 64/20 s, poses 400/200 s, evidence 1 MB / 256 KB s). Entity evidence only for
+  `getLastHurtByPlayer() == sender` or kept bodies. `EvidenceStore.cut` needs the cutter near the piece; unplaced pieces
+  expire after 600 ticks (server) / `Evidence.WAIT` (client). `PieceCodec.read` checks numbers, quads only, depth 16,
+  256 parts, 64 cubes; `WoundCodec.read` drops absurd wounds (ox/oy/oz may be NaN: "no spot"). Game test: `hardening`.
+  No demo: nothing new to see.

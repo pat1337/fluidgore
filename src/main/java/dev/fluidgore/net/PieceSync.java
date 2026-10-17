@@ -92,7 +92,7 @@ public final class PieceSync {
 
 	/** Another player's game moved a piece: this one follows. */
 	public static void apply(PieceState s) {
-		if (!(Minecraft.getInstance().level instanceof ClientLevel level)) {
+		if (!(Minecraft.getInstance().level instanceof ClientLevel level) || !s.finite()) {
 			return;
 		}
 

@@ -45,11 +45,16 @@ public final class EvidenceStore {
 	private static final double REPORT_SQ = 64.0 * 64.0;
 	private static final int MAX_PIECES = 512;
 	private static final int MAX_LIFETIME = 72000;
+	/** Ticks a piece may wait for where it lies (its first pose comes within a few ticks) before it is forgotten. */
+	private static final int UNPLACED_TICKS = 600;
+	/** Bytes a player may upload: a whole carcass diced at once, then a steady trickle. */
+	private static final Throttle BYTES = new Throttle(1 << 20, 256 << 10);
 
 	private static final class Piece {
 		byte[] data;
 		@Nullable PieceState pose;
 		long expires;
+		long created;
 		final Set<UUID> shown = new HashSet<>();
 	}
 
@@ -69,14 +74,24 @@ public final class EvidenceStore {
 			}
 		});
 		ServerTickEvents.END_LEVEL_TICK.register(EvidenceStore::deliver);
-		ServerLifecycleEvents.SERVER_STOPPED.register(server -> PIECES.clear());
+		ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+			PIECES.clear();
+			BYTES.clear();
+		});
 	}
 
 	private static void receive(ServerPlayer player, EvidenceRecord record) {
 		ServerLevel level = player.level();
+		if (!BYTES.take(player, record.data().length + 16)) {
+			return;
+		}
+
 		if (!record.piece()) {
+			// Only what this player really did: a creature they hurt (the game remembers for five seconds; the picture
+			// comes half a second after the blow), or a body being kept. Never a stranger's pet or a villager across
+			// the room, which would carry whatever was written on it in the world save for good.
 			if (level.getEntity((int) record.id()) instanceof LivingEntity entity && !(entity instanceof Player)
-					&& player.distanceToSqr(entity) < REPORT_SQ) {
+					&& player.distanceToSqr(entity) < REPORT_SQ && (entity.getLastHurtByPlayer() == player || KeptBodies.isKept(entity))) {
 				entity.setAttached(GORE, record.data());
 			}
 
@@ -84,7 +99,11 @@ public final class EvidenceStore {
 		}
 
 		Map<Long, Piece> pieces = PIECES.computeIfAbsent(level, l -> new HashMap<>());
-		Piece piece = pieces.computeIfAbsent(record.id(), k -> new Piece());
+		Piece piece = pieces.computeIfAbsent(record.id(), k -> {
+			Piece made = new Piece();
+			made.created = level.getGameTime();
+			return made;
+		});
 		piece.data = record.data();
 		piece.expires = level.getGameTime() + Math.max(0, Math.min(record.lifetime(), MAX_LIFETIME));
 		// It is on the sender's screen already.
@@ -119,9 +138,11 @@ public final class EvidenceStore {
 	}
 
 	/** A piece was cut in two: it is gone, and its halves come in their own records. */
-	static void cut(ServerLevel level, long key) {
-		Map<Long, Piece> pieces = PIECES.get(level);
-		if (pieces != null) {
+	static void cut(ServerPlayer player, long key) {
+		Map<Long, Piece> pieces = PIECES.get(player.level());
+		Piece piece = pieces == null ? null : pieces.get(key);
+		// Only by someone near it (where it last lay); one never put down is the cutter's own, just made.
+		if (piece != null && (piece.pose == null || player.distanceToSqr(piece.pose.at()) < REPORT_SQ)) {
 			pieces.remove(key);
 		}
 	}
@@ -133,7 +154,7 @@ public final class EvidenceStore {
 			return;
 		}
 
-		pieces.values().removeIf(piece -> piece.expires <= now);
+		pieces.values().removeIf(piece -> piece.expires <= now || piece.pose == null && now - piece.created > UNPLACED_TICKS);
 		for (ServerPlayer player : level.players()) {
 			if (!ServerPlayNetworking.canSend(player, EvidenceRecord.TYPE)) {
 				continue;

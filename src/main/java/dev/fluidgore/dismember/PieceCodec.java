@@ -25,6 +25,11 @@ import org.jspecify.annotations.Nullable;
  */
 public final class PieceCodec {
 	private static final int VERSION = 1;
+	/** A horse is four parts deep and a few dozen big; diced pieces are smaller. */
+	private static final int MAX_DEPTH = 16;
+	private static final int MAX_PARTS = 256;
+	private static final int MAX_CUBES = 64;
+	private static final float MAX_NUMBER = 4096.0F;
 
 	private PieceCodec() {
 	}
@@ -59,11 +64,11 @@ public final class PieceCodec {
 			Identifier texture = Identifier.tryParse(string(buf));
 			Vector3f centre = vector(buf);
 			Vector3f half = vector(buf);
-			float scale = buf.readFloat();
+			float scale = number(buf);
 			int blood = buf.readInt();
 			int tint = buf.readInt();
 			int rawFaces = buf.readInt();
-			ModelPart model = model(buf);
+			ModelPart model = model(buf, 0, new int[1]);
 			if (texture == null) {
 				return null;
 			}
@@ -121,23 +126,36 @@ public final class PieceCodec {
 		}
 	}
 
-	private static ModelPart model(ByteBuf buf) {
+	/**
+	 * Reads a part and its children. Bytes from the server are not trusted to be one of ours: every number must be one,
+	 * every face a quad (all a model ever has, and all the renderer draws), and the tree no deeper or bigger than a
+	 * real one, or the piece is dropped instead of crashing the renderer.
+	 */
+	private static ModelPart model(ByteBuf buf, int depth, int[] parts) {
+		if (depth > MAX_DEPTH || ++parts[0] > MAX_PARTS) {
+			throw new IllegalArgumentException("Fluid Gore piece too deep or too big");
+		}
+
 		float[] pose = new float[9];
 		for (int i = 0; i < pose.length; i++) {
-			pose[i] = buf.readFloat();
+			pose[i] = number(buf);
 		}
 
 		boolean visible = buf.readBoolean();
 		int cubeCount = buf.readShort();
+		if (cubeCount < 0 || cubeCount > MAX_CUBES) {
+			throw new IllegalArgumentException("Fluid Gore piece with " + cubeCount + " cubes");
+		}
+
 		List<ModelPart.Cube> cubes = new ArrayList<>(cubeCount);
 		Direction[] directions = Direction.values();
 		for (int c = 0; c < cubeCount; c++) {
-			float minX = buf.readFloat();
-			float minY = buf.readFloat();
-			float minZ = buf.readFloat();
-			float maxX = buf.readFloat();
-			float maxY = buf.readFloat();
-			float maxZ = buf.readFloat();
+			float minX = number(buf);
+			float minY = number(buf);
+			float minZ = number(buf);
+			float maxX = number(buf);
+			float maxY = number(buf);
+			float maxZ = number(buf);
 			int polygons = Math.min(buf.readUnsignedByte(), directions.length);
 			// A cube with as many faces as the original; its faces are then replaced by the original ones, exactly.
 			EnumSet<Direction> faces = EnumSet.noneOf(Direction.class);
@@ -149,12 +167,16 @@ public final class PieceCodec {
 					64.0F, faces);
 			for (int i = 0; i < polygons; i++) {
 				int count = buf.readUnsignedByte();
-				ModelPart.Vertex[] vertices = new ModelPart.Vertex[count];
-				for (int k = 0; k < count; k++) {
-					vertices[k] = new ModelPart.Vertex(buf.readFloat(), buf.readFloat(), buf.readFloat(), buf.readFloat(), buf.readFloat());
+				if (count != 4) {
+					throw new IllegalArgumentException("Fluid Gore face with " + count + " corners");
 				}
 
-				cube.polygons[i] = new ModelPart.Polygon(vertices, new Vector3f(buf.readFloat(), buf.readFloat(), buf.readFloat()));
+				ModelPart.Vertex[] vertices = new ModelPart.Vertex[count];
+				for (int k = 0; k < count; k++) {
+					vertices[k] = new ModelPart.Vertex(number(buf), number(buf), number(buf), number(buf), number(buf));
+				}
+
+				cube.polygons[i] = new ModelPart.Polygon(vertices, new Vector3f(number(buf), number(buf), number(buf)));
 			}
 
 			cubes.add(cube);
@@ -164,7 +186,7 @@ public final class PieceCodec {
 		Map<String, ModelPart> children = new HashMap<>();
 		for (int c = 0; c < childCount; c++) {
 			String name = string(buf);
-			children.put(name, model(buf));
+			children.put(name, model(buf, depth + 1, parts));
 		}
 
 		ModelPart part = new ModelPart(cubes, children);
@@ -188,7 +210,17 @@ public final class PieceCodec {
 	}
 
 	private static Vector3f vector(ByteBuf buf) {
-		return new Vector3f(buf.readFloat(), buf.readFloat(), buf.readFloat());
+		return new Vector3f(number(buf), number(buf), number(buf));
+	}
+
+	/** A float that is a number, and not an absurd one: pixels, radians, scales and texture coordinates all are small. */
+	private static float number(ByteBuf buf) {
+		float f = buf.readFloat();
+		if (!(Math.abs(f) <= MAX_NUMBER)) {
+			throw new IllegalArgumentException("Fluid Gore piece number " + f);
+		}
+
+		return f;
 	}
 
 	private static void string(ByteBuf buf, String s) {

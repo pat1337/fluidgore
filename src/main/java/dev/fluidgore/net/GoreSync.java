@@ -38,7 +38,12 @@ public final class GoreSync {
 	}
 
 	public static void register() {
-		ClientPlayNetworking.registerGlobalReceiver(GoreAction.TYPE, (action, context) -> perform(action));
+		ClientPlayNetworking.registerGlobalReceiver(GoreAction.TYPE, (action, context) -> {
+			// Our server checks this too; a server we do not know might pass anything on.
+			if (action.finite()) {
+				perform(action);
+			}
+		});
 	}
 
 	/** The server runs Fluid Gore: it keeps slaughtered animals' bodies and passes butchery on to the other players. */

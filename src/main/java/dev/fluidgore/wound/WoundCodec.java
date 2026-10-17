@@ -66,12 +66,12 @@ public final class WoundCodec {
 		Flesh flesh = fleshes[Math.floorMod(buf.readByte(), fleshes.length)];
 		int blood = buf.readInt();
 		WoundSet set = model != null ? new WoundSet(model, flesh, blood) : new WoundSet(root, flesh, blood);
-		set.trauma = buf.readFloat();
+		set.trauma = small(buf.readFloat());
 		set.broken = buf.readInt();
 		set.smashed = buf.readInt();
 		set.quiet = buf.readInt();
 		for (int i = 0; i < set.bone.length; i++) {
-			set.bone[i] = buf.readFloat();
+			set.bone[i] = small(buf.readFloat());
 		}
 
 		List<ModelPart> parts = parts(set.root);
@@ -90,7 +90,7 @@ public final class WoundCodec {
 				f[k] = buf.readFloat();
 			}
 
-			if (part < 0 || part >= parts.size() || set.count >= WoundSet.MAX) {
+			if (part < 0 || part >= parts.size() || set.count >= WoundSet.MAX || !plausible(f)) {
 				continue;
 			}
 
@@ -111,7 +111,7 @@ public final class WoundCodec {
 			set.u[i] = f[0];
 			set.v[i] = f[1];
 			set.radius[i] = f[2];
-			set.severity[i] = f[3];
+			set.severity[i] = Math.clamp(f[3], 0.0F, 1.0F);
 			set.ox[i] = f[4];
 			set.oy[i] = f[5];
 			set.oz[i] = f[6];
@@ -119,6 +119,23 @@ public final class WoundCodec {
 		}
 
 		return set;
+	}
+
+	/** A wound's floats (u, v, radius, severity, the spot ox/oy/oz, yaw) as one of ours writes them; else it is dropped. */
+	private static boolean plausible(float[] f) {
+		for (int k = 0; k < f.length; k++) {
+			// The spot is not-a-number for a wound that has none.
+			if (!(Math.abs(f[k]) <= 4096.0F) && !(k >= 4 && k <= 6 && Float.isNaN(f[k]))) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/** Not-a-number or an absurd value from bytes we did not write becomes nothing. */
+	private static float small(float f) {
+		return Math.abs(f) <= 4096.0F ? f : 0.0F;
 	}
 
 	/** Every part under {@code root}, root first, depth first, children in name order. */

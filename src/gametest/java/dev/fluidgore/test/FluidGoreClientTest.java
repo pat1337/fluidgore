@@ -56,6 +56,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			horsesAndFractures(context, singleplayer.getServer());
 			butchery(context, singleplayer.getServer());
 			keptBodies(context, singleplayer.getServer());
+			hardening(context, singleplayer.getServer());
 			decay(context, singleplayer.getServer());
 			meatsAndWool(context, singleplayer.getServer());
 			playerGore(context, singleplayer.getServer());
@@ -1661,6 +1662,149 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 	}
 
 	/**
+	 * The server half against what a client should not be able to do (2.12.1): kept bodies leave the mob cap; a body
+	 * dying the vanilla way (the dragon, the wither) cannot be cleaned away early; actions and poses that are not numbers
+	 * are refused; a piece read back from bytes is checked, and real pieces still read.
+	 */
+	private static void hardening(ClientGameTestContext context, TestServerContext server) {
+		context.runOnClient(mc -> {
+			GoreConfig.get().deathThroes = false;
+			GoreConfig.get().keepBodies = true;
+		});
+		server.runCommand("kill @e[type=!minecraft:player]");
+		context.waitTicks(40);
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+		server.runCommand("tp @a 150.5 -60 0.5 0 15");
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");
+		for (int i = 0; i < 3; i++) {
+			server.runCommand("summon minecraft:cow " + (148.5 + i * 2) + " -60 3.5 {NoAI:1b,Tags:[\"fluidgore_cap\"]}");
+		}
+
+		context.waitTicks(10);
+		int alive = server.computeOnServer(FluidGoreClientTest::creatures);
+		// One at a time: /damage takes a single target, and selectors never pick the dead.
+		for (int i = 0; i < 3; i++) {
+			server.runCommand("damage @e[type=minecraft:cow,tag=fluidgore_cap,limit=1] 100 minecraft:generic");
+		}
+		context.waitTicks(60);
+		int dead = server.computeOnServer(FluidGoreClientTest::creatures);
+		long kept = server.computeOnServer(s -> {
+			long n = 0;
+			for (Entity e : s.overworld().getAllEntities()) {
+				if (e.entityTags().contains("fluidgore_cap") && dev.fluidgore.server.KeptBodies.isKept(e)) {
+					n++;
+				}
+			}
+
+			return n;
+		});
+		System.out.println("[FluidGoreTest] mob cap: " + alive + " creatures counted alive, " + dead + " once " + kept + " lie kept");
+		check(kept == 3, "the three dead cows are not kept bodies: " + kept);
+		check(dead <= alive - 3, "kept bodies still count against the mob cap: " + alive + " alive, " + dead + " dead");
+
+		// A zombie is not kept: it dies the vanilla way, and no client may take it away before its death is over.
+		java.util.UUID zombie = new java.util.UUID(21L << 32 | 22L, 23L << 32 | 24L);
+		server.runCommand("summon minecraft:zombie 150.5 -60 6.5 {NoAI:1b,UUID:[I;21,22,23,24]}");
+		context.waitTicks(10);
+		server.runCommand("damage @e[type=minecraft:zombie,limit=1] 100 minecraft:generic");
+		context.waitTicks(2);
+		context.runOnClient(mc -> {
+			int id = idOf(mc, zombie);
+			Entity e = mc.level.getEntity(id);
+			net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(new dev.fluidgore.net.GoreAction(dev.fluidgore.net.GoreAction.CLEAN, id, 0L,
+					(float) e.getX(), (float) e.getY(), (float) e.getZ(), 0.0F, 0.0F, 0.0F, (byte) 0, 0.0F));
+		});
+		context.waitTicks(3);
+		boolean stillDying = server.computeOnServer(s -> s.overworld().getEntity(zombie) instanceof net.minecraft.world.entity.LivingEntity z && !z.isRemoved());
+		check(stillDying, "a client cleaned away a body the server does not keep, before its vanilla death was over");
+
+		// Not-a-number slips past distance checks, so it is refused outright.
+		check(!new dev.fluidgore.net.GoreAction(dev.fluidgore.net.GoreAction.CUT, -1, 1L, Float.NaN, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, (byte) 0, 0.0F).finite(),
+				"an action at NaN is taken as real");
+		check(!new dev.fluidgore.net.PieceState(1L, 0.0F, 0.0F, 0.0F, Float.POSITIVE_INFINITY, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 1.0F, 0.0F, 0.0F,
+				(byte) 0).finite(), "a piece moving infinitely fast is taken as real");
+		check(context.computeOnClient(mc -> dev.fluidgore.net.GoreAction.of(dev.fluidgore.net.GoreAction.STRIKE, 1, 0L, mc.player.getEyePosition(),
+				mc.player.getViewVector(1.0F), Weapon.CHOP.ordinal(), 9.0F).finite()), "a real blow is refused");
+
+		// Chop a kept cow until pieces come off, then read every piece back from its bytes, whole and spoilt.
+		int cowId = context.computeOnClient(mc -> {
+			for (var corpse : GoreSystems.suffering().corpses()) {
+				if (corpse.entity instanceof net.minecraft.world.entity.animal.cow.Cow) {
+					return corpse.entity.getId();
+				}
+			}
+
+			return -1;
+		});
+		check(cowId >= 0, "no kept cow on screen to chop");
+		String pieces = context.computeOnClient(mc -> {
+			var corpse = GoreSystems.suffering().corpse(cowId);
+			var centre = dev.fluidgore.suffer.CorpseStrike.centre(corpse);
+			for (int i = 0; i < 24 && GoreSystems.dismemberment().parts().parts().isEmpty(); i++) {
+				var eye = centre.add(Math.cos(i * 1.3) * 1.3, 1.0, Math.sin(i * 1.3) * 1.3);
+				dev.fluidgore.net.GoreSync.perform(dev.fluidgore.net.GoreAction.of(dev.fluidgore.net.GoreAction.STRIKE, cowId, 0L, eye,
+						centre.subtract(eye).normalize(), Weapon.CHOP.ordinal(), 9.0F));
+			}
+
+			int whole = 0;
+			int spoilt = 0;
+			int total = 0;
+			for (var part : GoreSystems.dismemberment().parts().parts()) {
+				total++;
+				byte[] data = dev.fluidgore.dismember.PieceCodec.write(part);
+				if (dev.fluidgore.dismember.PieceCodec.read(data, part.key, 200) != null) {
+					whole++;
+				}
+
+				// The piece's scale, after the version, the texture name and two vectors.
+				int at = 1 + 2 + part.texture.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8).length + 24;
+				java.nio.ByteBuffer.wrap(data).putFloat(at, Float.NaN);
+				if (dev.fluidgore.dismember.PieceCodec.read(data, part.key, 200) == null) {
+					spoilt++;
+				}
+			}
+
+			return total + " " + whole + " " + spoilt;
+		});
+		System.out.println("[FluidGoreTest] pieces read back (total, whole, refused when spoilt): " + pieces);
+		String[] n = pieces.split(" ");
+		check(Integer.parseInt(n[0]) > 0, "chopping the kept cow cut nothing off");
+		check(n[1].equals(n[0]), "real pieces no longer read back from their bytes: " + pieces);
+		check(n[2].equals(n[0]), "a piece with a NaN in it was read as real: " + pieces);
+
+		context.runOnClient(mc -> {
+			for (var corpse : new java.util.ArrayList<>(GoreSystems.suffering().corpses())) {
+				dev.fluidgore.net.GoreSync.act(dev.fluidgore.net.GoreAction.of(dev.fluidgore.net.GoreAction.CLEAN, corpse.entity.getId(), 0L,
+						mc.player.getEyePosition(), mc.player.getViewVector(1.0F), 0, 0.0F));
+			}
+
+			GoreSystems.dismemberment().clear();
+		});
+		context.waitTicks(10);
+		server.runCommand("kill @e[type=!minecraft:player]");
+		context.runOnClient(mc -> {
+			GoreConfig.get().deathThroes = true;
+			GoreConfig.get().keepBodies = false;
+		});
+	}
+
+	/** The overworld's creatures as the natural spawner counts them against the mob cap. */
+	private static int creatures(net.minecraft.server.MinecraftServer s) {
+		net.minecraft.server.level.ServerLevel level = s.overworld();
+		var state = net.minecraft.world.level.NaturalSpawner.createState(1, level, (key, out) -> {
+			var chunk = level.getChunkSource().getChunkNow(net.minecraft.world.level.ChunkPos.getX(key), net.minecraft.world.level.ChunkPos.getZ(key));
+			if (chunk != null) {
+				out.accept(chunk);
+			}
+		}, new net.minecraft.world.level.LocalMobCapCalculator(level.getChunkSource().chunkMap));
+		return state.getMobCategoryCounts().getInt(net.minecraft.world.entity.MobCategory.CREATURE);
+	}
+
+	/**
 	 * Bodies rot by the day: a chicken, a pig and a cow killed side by side, days skipped with /time add. The small body
 	 * goes first, the big one last; the server keeps when each died and tells a player who comes back; a leg cut off a
 	 * rotting pig is as rotten as the pig; a pig in the desert dries out instead.
@@ -1761,6 +1905,18 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		System.out.println("[FluidGoreTest] decay: pig after coming back " + back + " (left at " + three[1] + ")");
 		check(Math.abs(back - three[1]) < 0.1F, "the pig did not come back as rotten as it was left: " + back + " vs " + three[1]);
 		ids[1] = pigAgain;
+		// The chicken and the cow came back under new entity ids too.
+		context.runOnClient(mc -> {
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e.getX() > 190.0 && e.getX() < 210.0) {
+					if (e.getType() == net.minecraft.world.entity.EntityTypes.CHICKEN) {
+						ids[0] = e.getId();
+					} else if (e.getType() == net.minecraft.world.entity.EntityTypes.COW) {
+						ids[2] = e.getId();
+					}
+				}
+			}
+		});
 
 		// Two weeks: the chicken is bones, the pig deep in active decay, the cow burst.
 		server.runCommand("time add 264000");
@@ -1788,7 +1944,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		server.runCommand("tp @a 228.5 -60 0.5 0 30");
 		server.runCommand("summon minecraft:pig 228.5 -60 3.5 {NoAI:1b,Rotation:[90f,0f]}");
 		context.waitTicks(30);
-		server.runCommand("damage @e[type=minecraft:pig,x=228,y=-60,z=3,distance=..3] 100 minecraft:generic");
+		server.runCommand("execute positioned 228.5 -60 3.5 run damage @e[type=minecraft:pig,limit=1,sort=nearest] 100 minecraft:generic");
 		context.waitTicks(40);
 		server.runCommand("time add 240000");
 		context.waitTicks(30);

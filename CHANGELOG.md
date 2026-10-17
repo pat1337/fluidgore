@@ -2,6 +2,26 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.12.1]
+
+The server half, hardened.
+
+### Fixed
+- A client could clean away any dead creature, not only bodies the server keeps: the Ender Dragon during its death
+  (no exit portal, no egg), the Wither, other mods' bosses, even a dead player waiting to respawn. Only kept bodies
+  can be cleaned now; everything else dies the vanilla way.
+- Kept bodies counted against the mob cap, so a field of slaughtered animals stopped new ones from spawning. They are
+  left out of the count now (works alongside Lithium, which changes the same spot).
+- A client could store gore pictures on any creature near it (a villager, someone's pet), saved in the world for
+  good. Only creatures that player hurt in the last five seconds, or kept bodies, take a picture now.
+- Packets with not-a-number positions slipped past every distance check (a client could delete any stored piece).
+  Actions and piece moves that are not real numbers are refused, on the server and on the client.
+- No limit on how much a client could send: actions, piece moves and evidence uploads now have per-player rate limits,
+  far above what the game itself sends.
+- A loose piece sent by the server is checked as it is read (real numbers, four-cornered faces, a model of a real
+  size) so a spoilt one is dropped instead of crashing the renderer. Pieces that never get a position are forgotten
+  after 30 seconds, on the server and the client.
+
 ## [2.12.0]
 
 Bodies rot.

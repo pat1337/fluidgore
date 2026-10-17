@@ -39,6 +39,27 @@ public record PieceState(long key, float x, float y, float z, float vx, float vy
 		return new Vec3(x, y, z);
 	}
 
+	/** False for a state no game of ours writes: not a number, out of the world, or moving impossibly fast. */
+	public boolean finite() {
+		if (!GoreAction.inWorld(x) || !GoreAction.inWorld(y) || !GoreAction.inWorld(z)) {
+			return false;
+		}
+
+		for (float f : new float[]{vx, vy, vz, spin}) {
+			if (!(Math.abs(f) <= 100.0F)) {
+				return false;
+			}
+		}
+
+		for (float f : new float[]{qx, qy, qz, qw, ax, ay, az}) {
+			if (!(Math.abs(f) <= 2.0F)) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
 	public boolean has(byte flag) {
 		return (flags & flag) != 0;
 	}

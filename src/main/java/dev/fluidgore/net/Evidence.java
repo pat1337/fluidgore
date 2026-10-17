@@ -15,6 +15,7 @@ import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.ints.IntIterator;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
+import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import java.util.Iterator;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
@@ -43,6 +44,8 @@ public final class Evidence {
 	private static final Int2IntOpenHashMap WAITED = new Int2IntOpenHashMap();
 	/** Pieces sent by the server, waiting for where they lie. */
 	private static final Long2ObjectOpenHashMap<GorePart> UNPLACED = new Long2ObjectOpenHashMap<>();
+	/** When each unplaced piece came; one whose pose never follows is dropped after {@link #WAIT}. */
+	private static final Long2IntOpenHashMap UNPLACED_AT = new Long2IntOpenHashMap();
 	private static int tick;
 
 	private Evidence() {
@@ -85,6 +88,17 @@ public final class Evidence {
 			}
 
 			DIRTY.clear();
+		}
+
+		if (tick % 20 == 0 && !UNPLACED_AT.isEmpty()) {
+			UNPLACED_AT.long2IntEntrySet().removeIf(entry -> {
+				boolean stale = tick - entry.getIntValue() > WAIT;
+				if (stale) {
+					UNPLACED.remove(entry.getLongKey());
+				}
+
+				return stale;
+			});
 		}
 
 		Iterator<Int2ObjectMap.Entry<byte[]>> pending = PENDING.int2ObjectEntrySet().iterator();
@@ -138,6 +152,10 @@ public final class Evidence {
 			int missing = buf.readInt();
 			boolean gone = buf.readBoolean();
 			float charred = buf.readFloat();
+			if (!(charred >= 0.0F && charred <= 1.0F)) {
+				charred = 0.0F;
+			}
+
 			int plucks = buf.readInt();
 			int chops = buf.readInt();
 			WoundSet wounds = null;
@@ -181,12 +199,14 @@ public final class Evidence {
 			part.resting = true;
 			part.landed = true;
 			UNPLACED.put(record.id(), part);
+			UNPLACED_AT.put(record.id(), tick);
 		}
 	}
 
 	/** The piece named {@code key} the server sent, now put down among the others; null if there is none. */
 	static @Nullable GorePart place(long key) {
 		GorePart part = UNPLACED.remove(key);
+		UNPLACED_AT.remove(key);
 		if (part != null) {
 			GoreSystems.dismemberment().parts().add(part);
 		}
@@ -202,6 +222,7 @@ public final class Evidence {
 
 	public static void clear() {
 		UNPLACED.clear();
+		UNPLACED_AT.clear();
 		DIRTY.clear();
 		PENDING.clear();
 		WAITED.clear();

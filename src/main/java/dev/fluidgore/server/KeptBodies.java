@@ -75,6 +75,10 @@ public final class KeptBodies {
 	private static final Map<ServerLevel, LinkedHashSet<LivingEntity>> BODIES = new WeakHashMap<>();
 	private static final Set<Identifier> TYPES = new HashSet<>();
 	private static List<String> cachedSource;
+	/** A blow, pluck or cut per click at most, and a burst of clean-ups when a blast takes many bodies at once. */
+	private static final Throttle ACTIONS = new Throttle(64, 20);
+	/** Every moving piece streams ten states a second; twenty pieces of a diced carcass at once is plenty. */
+	private static final Throttle POSES = new Throttle(400, 200);
 
 	private KeptBodies() {
 	}
@@ -96,7 +100,24 @@ public final class KeptBodies {
 		// A dead body is meat, not an animal: no milking, shearing, feeding, leashing or riding it.
 		UseEntityCallback.EVENT.register((player, level, hand, entity, hit) ->
 				entity instanceof LivingEntity living && !(entity instanceof Player) && living.isDeadOrDying() ? InteractionResult.FAIL : InteractionResult.PASS);
-		ServerLifecycleEvents.SERVER_STOPPED.register(server -> BODIES.clear());
+		ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+			BODIES.clear();
+			ACTIONS.clear();
+			POSES.clear();
+		});
+	}
+
+	/**
+	 * True if {@code entity} is a body the server is keeping right now. Only these can be cleaned away by a player, and
+	 * they do not count against the mob cap (see {@code NaturalSpawnerMixin}): a lying carcass is not an animal.
+	 */
+	public static boolean isKept(Entity entity) {
+		if (!(entity instanceof LivingEntity body) || body instanceof Player || !body.isDeadOrDying() || !(body.level() instanceof ServerLevel level)) {
+			return false;
+		}
+
+		LinkedHashSet<LivingEntity> bodies = BODIES.get(level);
+		return bodies != null && bodies.contains(body);
 	}
 
 	/**
@@ -168,7 +189,8 @@ public final class KeptBodies {
 
 	/** A loose piece moved on one player's screen: shown to the others near it. The server keeps nothing of it. */
 	private static void relay(ServerPlayer player, PieceState state) {
-		if (player.distanceToSqr(state.at()) > GONE_RANGE_SQ) {
+		// Not a number would slip past every distance check below (NaN compares false).
+		if (!state.finite() || !(player.distanceToSqr(state.at()) <= GONE_RANGE_SQ) || !POSES.take(player, 1)) {
 			return;
 		}
 
@@ -183,10 +205,20 @@ public final class KeptBodies {
 
 	private static void receive(ServerPlayer player, GoreAction action) {
 		ServerLevel level = player.level();
+		if (!action.finite()) {
+			return;
+		}
+
 		LivingEntity body = null;
 		if (action.entityId() >= 0 && level.getEntity(action.entityId()) instanceof LivingEntity entity) {
-			if (entity.isAlive()) {
-				// Only the dead are butchered; a living animal's gore comes from real hits.
+			if (entity.isAlive() || entity instanceof Player) {
+				// Only the dead are butchered; a living animal's gore comes from real hits. A dead player is respawning.
+				return;
+			}
+
+			if (action.kind() == GoreAction.CLEAN && !isKept(entity)) {
+				// Dying the vanilla way (or the dragon, the wither, another mod's boss, in a death that does something at
+				// its end): it goes when its own death says, never because a client asked.
 				return;
 			}
 
@@ -196,7 +228,7 @@ public final class KeptBodies {
 		// A body the server no longer has (a mob that vanished the vanilla way) may still lie on the clients' screens.
 		Vec3 where = body != null ? body.position() : action.at();
 		// A body blown apart is reported by every client that saw it go, from wherever they stood.
-		if (player.distanceToSqr(where) > (action.kind() == GoreAction.CLEAN ? GONE_RANGE_SQ : REACH_SQ)) {
+		if (!(player.distanceToSqr(where) <= (action.kind() == GoreAction.CLEAN ? GONE_RANGE_SQ : REACH_SQ)) || !ACTIONS.take(player, 1)) {
 			return;
 		}
 
@@ -211,7 +243,7 @@ public final class KeptBodies {
 		}
 
 		if (action.kind() == GoreAction.CUT) {
-			EvidenceStore.cut(level, action.partKey());
+			EvidenceStore.cut(player, action.partKey());
 		}
 	}
 }
