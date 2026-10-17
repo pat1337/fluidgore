@@ -26,10 +26,13 @@ import net.minecraft.util.Mth;
  * @param legSeed   gives each body its own leg rhythm: every leg kicks with its own phase and strength
  * @param gaspAt    clock time the last agonal gasp began (very negative for none)
  * @param gasp      strength of that gasp, 0..1: the chest heaves and the head lifts, then sinks back
+ * @param flap      a bird's wings beating, 0..1 (the death flapping of a chicken)
+ * @param flapRate  wing-beat speed in radians per tick
+ * @param neckLimp  the head hangs loose on a broken neck, 0..1
  */
 public record SufferPose(float tremble, float thrash, float kick, float kickRate, float tiltX, float tiltZ, float drop, float stagger,
 		float headDip, float lookYaw, float foldFront, float foldHind, float stiff, float headTilt, float hindLimp, float legSeed,
-		float gaspAt, float gasp) {
+		float gaspAt, float gasp, float flap, float flapRate, float neckLimp) {
 	public static final RenderStateDataKey<SufferPose> KEY = RenderStateDataKey.create(() -> "fluidgore:suffer_pose");
 	/**
 	 * Ticks since death, with the partial tick, for a dying body. A body the server has removed is no longer ticked by
@@ -42,13 +45,13 @@ public record SufferPose(float tremble, float thrash, float kick, float kickRate
 
 	public SufferPose(float tremble, float thrash, float kick, float kickRate, float tiltX, float tiltZ, float drop, float stagger,
 			float headDip, float lookYaw) {
-		this(tremble, thrash, kick, kickRate, tiltX, tiltZ, drop, stagger, headDip, lookYaw, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, -1000.0F, 0.0F);
+		this(tremble, thrash, kick, kickRate, tiltX, tiltZ, drop, stagger, headDip, lookYaw, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, -1000.0F, 0.0F, 0.0F, 0.0F, 0.0F);
 	}
 
 	public boolean isIdle() {
 		return tremble < 0.01F && thrash < 0.01F && kick < 0.01F && tiltX == 0.0F && tiltZ == 0.0F && drop == 0.0F && stagger == 0.0F
 				&& headDip == 0.0F && lookYaw == 0.0F && foldFront == 0.0F && foldHind == 0.0F && stiff == 0.0F && headTilt == 0.0F
-				&& gasp == 0.0F;
+				&& gasp == 0.0F && flap < 0.01F && neckLimp == 0.0F;
 	}
 
 	/** How far into its gasp the body is at clock time {@code t}, 0..1: a quick heave in, a slow sag out. */

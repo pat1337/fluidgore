@@ -64,7 +64,8 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 		this.list.addSmall(
 				scaledSlider("fluidgore.option.cells_per_tick", 1, 64, 8, c.maxActiveCellsPerTick, null, v -> c.maxActiveCellsPerTick = v),
 				scaledSlider("fluidgore.option.max_droplets", 1, 100, 50, c.maxDroplets, null, v -> c.maxDroplets = v),
-				scaledSlider("fluidgore.option.max_giblets", 0, 80, 50, c.maxGiblets, null, v -> c.maxGiblets = v)
+				scaledSlider("fluidgore.option.max_giblets", 0, 80, 50, c.maxGiblets, null, v -> c.maxGiblets = v),
+				scaledSlider("fluidgore.option.max_feathers", 0, 60, 50, c.maxFeathers, null, v -> c.maxFeathers = v)
 		);
 
 		this.list.addHeader(Component.translatable("fluidgore.header.dismemberment"));
@@ -79,6 +80,12 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 				OptionInstance.createBoolean("fluidgore.option.inventory_sorting", c.inventorySorting, v -> c.inventorySorting = v),
 				OptionInstance.createBoolean("fluidgore.option.butchery", c.butchery, v -> c.butchery = v),
 				OptionInstance.createBoolean("fluidgore.option.bloody_wool", c.bloodyWool, v -> c.bloodyWool = v),
+				OptionInstance.createBoolean("fluidgore.option.feathers", OptionInstance.cachedConstantTooltip(Component.translatable("fluidgore.option.feathers.tooltip")),
+						c.feathers, v -> c.feathers = v),
+				OptionInstance.createBoolean("fluidgore.option.bloody_feathers", OptionInstance.cachedConstantTooltip(Component.translatable("fluidgore.option.bloody_feathers.tooltip")),
+						c.bloodyFeathers, v -> c.bloodyFeathers = v),
+				OptionInstance.createBoolean("fluidgore.option.chicken_deaths", OptionInstance.cachedConstantTooltip(Component.translatable("fluidgore.option.chicken_deaths.tooltip")),
+						c.chickenDeaths, v -> c.chickenDeaths = v),
 				OptionInstance.createBoolean("fluidgore.option.glowing_ender_blood", c.glowingEnderBlood, v -> c.glowingEnderBlood = v),
 				OptionInstance.createBoolean("fluidgore.option.fractures", c.fractures, v -> c.fractures = v),
 				OptionInstance.createBoolean("fluidgore.option.wound_players", c.woundPlayers, v -> c.woundPlayers = v),
@@ -111,6 +118,8 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 						c.deathThroes, v -> c.deathThroes = v),
 				OptionInstance.createBoolean("fluidgore.option.keep_bodies", OptionInstance.cachedConstantTooltip(Component.translatable("fluidgore.option.keep_bodies.tooltip")),
 						c.keepBodies, v -> c.keepBodies = v),
+				OptionInstance.createBoolean("fluidgore.option.body_slide", OptionInstance.cachedConstantTooltip(Component.translatable("fluidgore.option.body_slide.tooltip")),
+						c.bodySlide, v -> c.bodySlide = v),
 				scaledSlider("fluidgore.option.max_kept_bodies", 1, 64, 8, c.maxKeptBodies, null, v -> c.maxKeptBodies = v),
 				scaledSlider("fluidgore.option.corpse_linger", 1, 120, 5, c.corpseLingerSeconds, "fluidgore.unit.seconds", v -> c.corpseLingerSeconds = v),
 				OptionInstance.createBoolean("fluidgore.option.red_death", c.redDeath, v -> c.redDeath = v),

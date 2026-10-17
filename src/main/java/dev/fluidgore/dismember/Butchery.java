@@ -139,12 +139,21 @@ public final class Butchery {
 		boolean bare = plucks.get(id) >= PLUCKS_TO_BARE;
 		plucks.put(id, Math.min(PLUCKS_TO_BARE * 3, plucks.get(id) + 1));
 		corpse.keepFor(KEEP_TICKS);
-		// The feathers come away in a tuft and drift down; a bare bird only gives up the odd stray one.
-		ItemParticleOption feather = new ItemParticleOption(ParticleTypes.ITEM, Items.FEATHER);
+		// The feathers come away in a tuft and drift down; a bare bird only gives up the odd stray one. Those from round a
+		// wound, or off a bird soaked in its own blood, come away wet with it.
 		int n = bare ? 1 : 5 + RANDOM.nextInt(5);
-		for (int i = 0; i < n; i++) {
-			level.addParticle(feather, at.x, at.y, at.z, (RANDOM.nextDouble() - 0.5) * 0.12 - look.x * 0.05, 0.08 + RANDOM.nextDouble() * 0.1,
-					(RANDOM.nextDouble() - 0.5) * 0.12 - look.z * 0.05);
+		float soaked = GoreSystems.dismemberment().wool().soak(id);
+		Vec3 wound = GoreSystems.dismemberment().wounds().deepest(id, corpse.position(), corpse.yaw());
+		float bloody = Math.max(soaked, wound != null && wound.distanceToSqr(at) < 0.35 * 0.35 ? 0.8F : 0.0F);
+		Vec3 away = new Vec3(-look.x, 0.4, -look.z).normalize();
+		if (GoreConfig.get().feathers) {
+			GoreSystems.dismemberment().feathers().tuft(entity, at, away, n, 0.06, bloody, dev.fluidgore.trigger.EntityFilter.bloodColor(entity));
+		} else {
+			ItemParticleOption feather = new ItemParticleOption(ParticleTypes.ITEM, Items.FEATHER);
+			for (int i = 0; i < n; i++) {
+				level.addParticle(feather, at.x, at.y, at.z, (RANDOM.nextDouble() - 0.5) * 0.12 - look.x * 0.05, 0.08 + RANDOM.nextDouble() * 0.1,
+						(RANDOM.nextDouble() - 0.5) * 0.12 - look.z * 0.05);
+			}
 		}
 
 		level.playLocalSound(at.x, at.y, at.z, SoundEvents.WOOL_HIT, SoundSource.NEUTRAL, 0.5F, 1.3F + RANDOM.nextFloat() * 0.3F, false);

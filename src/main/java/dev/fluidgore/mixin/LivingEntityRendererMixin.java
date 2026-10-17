@@ -24,6 +24,7 @@ import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.animal.chicken.Chicken;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -57,6 +58,23 @@ public abstract class LivingEntityRendererMixin {
 		if (plucked != null) {
 			tint = burnt == null ? plucked : Integer.valueOf(Burns.apply(0xFF000000 | burnt, plucked) & 0xFFFFFF);
 		}
+
+		// A bird's feathers redden with its blood and darken in the rain (not the bare skin where it is plucked).
+		BloodyWool.Plumage plumage = null;
+		if (entity instanceof Chicken && GoreConfig.get().bloodyFeathers) {
+			float bare = GoreSystems.dismemberment().butchery().plucked(entity.getId());
+			Integer feathers = GoreSystems.dismemberment().wool().featherTint(entity.getId(), bare);
+			if (feathers != null) {
+				tint = tint == null ? feathers : Integer.valueOf(Burns.apply(0xFF000000 | tint, feathers) & 0xFFFFFF);
+			}
+
+			float wet = GoreSystems.dismemberment().wool().wet(entity.getId());
+			if (bare > 0.0F || wet > 0.0F) {
+				plumage = new BloodyWool.Plumage(bare, wet);
+			}
+		}
+
+		state.setData(BloodyWool.PLUMAGE, plumage);
 
 		// Rot discolours it on top of that.
 		Rot rot = GoreSystems.decay().of(entity.getId());

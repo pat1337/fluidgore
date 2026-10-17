@@ -89,6 +89,23 @@ public final class Corpse {
 	/** This body's own dice for its death, seeded by the killing blow: the same on every client (see Fate). */
 	public final RandomSource random;
 	boolean toppled;
+	/** How far it has dropped since it last lay on something, sliding down a drop (see {@code Suffering.slide}). */
+	float drop;
+	/** A chicken dying as chickens do (see {@code Deaths.bird}): in a frenzy of wing-beats. */
+	public boolean bird;
+	/** Killed by a blunt blow: the neck is broken (a wrung neck) and the head hangs loose. */
+	boolean wrung;
+	/** The flapping: from and to (ground ticks), how hard at its height, how fast the beats. */
+	public int flapStart;
+	public int flapEnd;
+	float flapPeak;
+	float flapRate;
+	/** How loose the head hangs, 0..1. */
+	float neckLimp;
+	float flapNow;
+	boolean flapBurst;
+	int flapUntil;
+	int nextFlapSound;
 	int nextFly;
 	/** Ticks left of the red flash from a blow, as vanilla flashes a mob when it is hurt. */
 	public int flash;
@@ -181,7 +198,8 @@ public final class Corpse {
 			return unloaded;
 		}
 
-		return groundTicks() > throeTicks + stillTicks + extraTicks;
+		// A bird still flapping is not gone, however short the linger.
+		return groundTicks() > Math.max(throeTicks + stillTicks + extraTicks, bird ? flapEnd + 40 : 0);
 	}
 
 	/** Keeps the body on screen for at least {@code ticks} more. */

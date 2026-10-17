@@ -9,6 +9,8 @@ import dev.fluidgore.trigger.DamageTracker;
 import dev.fluidgore.wound.Weapon;
 import java.util.function.Supplier;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.EntityTypes;
@@ -38,11 +40,11 @@ public final class Deaths {
 	/** The pose being built up for one body this tick. */
 	static final class Posture {
 		float tremble, thrash, kick, kickRate, tiltX, tiltZ, drop, stagger, headDip, lookYaw, foldFront, foldHind, stiff, headTilt, hindLimp,
-				legSeed, gaspAt, gasp;
+				legSeed, gaspAt, gasp, flap, flapRate, neckLimp;
 
 		Posture reset() {
 			tremble = thrash = kick = tiltX = tiltZ = drop = stagger = headDip = lookYaw = foldFront = foldHind = stiff = headTilt = hindLimp = 0.0F;
-			legSeed = gasp = 0.0F;
+			legSeed = gasp = flap = flapRate = neckLimp = 0.0F;
 			gaspAt = -1000.0F;
 			kickRate = 0.6F;
 			return this;
@@ -50,7 +52,7 @@ public final class Deaths {
 
 		SufferPose build() {
 			return new SufferPose(tremble, thrash, kick, kickRate, tiltX, tiltZ, drop, stagger, headDip, lookYaw, foldFront, foldHind, stiff,
-					headTilt, hindLimp, legSeed, gaspAt, gasp);
+					headTilt, hindLimp, legSeed, gaspAt, gasp, flap, flapRate, neckLimp);
 		}
 	}
 
@@ -305,6 +307,163 @@ public final class Deaths {
 		c.throeTicks = c.fasciculationEnd;
 		c.nextBeat = 0;
 		c.burstUntil = c.collapseAt + c.clonicStart;
+		if (c.bird) {
+			planBird(c);
+		}
+	}
+
+	/**
+	 * How a chicken dies, from what killed it. A bird's death is all wings: the spinal cord, cut off from the brain,
+	 * fires the flapping on its own, in wild bursts that throw the body about and can go on long after the bird is
+	 * gone (the headless chicken). Timings are those of a real slaughter, squeezed:
+	 * <ul>
+	 * <li>A head off (axe, blade to the neck): the longest and hardest flapping, the neck jetting blood with it.</li>
+	 * <li>A blunt blow, or bare hands (a wrung neck): the head hangs loose at once and the wings go, strong, then fade.</li>
+	 * <li>A cut (the throat, or the body): it lies quiet, bleeding, then flaps as the brain runs out of blood.</li>
+	 * <li>A stab to the chest, a broken back, fire, a beating: shorter and weaker, each in its own way.</li>
+	 * </ul>
+	 */
+	private static void planBird(Corpse c) {
+		RandomSource r = c.random;
+		switch (c.kind) {
+			case DECAPITATION -> {
+				c.flapStart = 2;
+				c.flapEnd = 150 + r.nextInt(70);
+				c.flapPeak = 1.0F;
+				c.flapRate = 1.7F + 0.3F * r.nextFloat();
+			}
+			case CONCUSSION -> {
+				if (c.wrung) {
+					c.flapStart = 3 + r.nextInt(4);
+					c.flapEnd = c.flapStart + 90 + r.nextInt(60);
+					c.flapPeak = 0.9F;
+					c.neckLimp = 1.0F;
+				} else {
+					// Stunned: a short, weak flutter.
+					c.flapStart = 10 + r.nextInt(10);
+					c.flapEnd = c.flapStart + 40 + r.nextInt(30);
+					c.flapPeak = 0.6F;
+					c.neckLimp = 0.35F;
+				}
+
+				c.flapRate = 1.4F + 0.3F * r.nextFloat();
+			}
+			case EXSANGUINATION -> {
+				// Bleeding out, still for a moment, then the flapping as the brain dies.
+				c.flapStart = 20 + r.nextInt(25);
+				c.flapEnd = c.flapStart + 80 + r.nextInt(50);
+				c.flapPeak = 0.85F;
+				c.flapRate = 1.5F + 0.3F * r.nextFloat();
+				c.neckLimp = 0.5F;
+			}
+			case BEATEN -> {
+				c.flapStart = 2;
+				c.flapEnd = 70 + r.nextInt(40);
+				c.flapPeak = 0.8F;
+				c.flapRate = 1.5F + 0.3F * r.nextFloat();
+				c.neckLimp = 0.6F;
+			}
+			case BURN -> {
+				c.flapStart = 0;
+				c.flapEnd = 50 + r.nextInt(30);
+				c.flapPeak = 0.8F;
+				c.flapRate = 1.8F;
+			}
+			case TRAUMA -> {
+				c.flapStart = 0;
+				c.flapEnd = 20 + r.nextInt(20);
+				c.flapPeak = 0.4F;
+				c.flapRate = 1.3F;
+				c.neckLimp = 0.5F;
+			}
+			default -> {
+				// A stab to the chest, a broken back.
+				c.flapStart = 4 + r.nextInt(6);
+				c.flapEnd = c.flapStart + 50 + r.nextInt(40);
+				c.flapPeak = 0.7F;
+				c.flapRate = 1.5F + 0.2F * r.nextFloat();
+			}
+		}
+
+		if (c.wrung && c.kind != Corpse.Kind.DECAPITATION) {
+			c.neckLimp = Math.max(c.neckLimp, 0.8F);
+		}
+
+		// A frantic bird flaps harder.
+		c.flapPeak = Math.min(1.0F, c.flapPeak * (0.85F + 0.3F * c.self().frantic()));
+		c.flapUntil = 0;
+	}
+
+	/**
+	 * One tick of a dying bird: its wings beat in bursts with pauses, fading and slowing; the hard bursts bounce it
+	 * along the ground and spin it round, shed feathers, and throw blood from an open neck. A kept body is held near
+	 * where the server has it, so it does not end up somewhere else for every other player.
+	 */
+	private void bird(ClientLevel level, Corpse c, Posture p, int color, boolean gore, int ground) {
+		RandomSource r = c.random;
+		Ragdoll body = c.body;
+		p.neckLimp = c.neckLimp * ramp(ground, 0, 6);
+		float target = 0.0F;
+		float x = 1.0F;
+		if (ground >= c.flapStart && ground < c.flapEnd) {
+			x = (ground - c.flapStart) / (float) Math.max(1, c.flapEnd - c.flapStart);
+			float envelope = (float) Math.pow(1.0F - x, 1.2) * ramp(ground, c.flapStart, c.flapStart + 4);
+			if (c.age >= c.flapUntil) {
+				c.flapBurst = !c.flapBurst;
+				c.flapUntil = c.age + (c.flapBurst ? 10 + r.nextInt(16) : 3 + r.nextInt(6) + Math.round(16 * x));
+			}
+
+			target = c.flapPeak * envelope * (c.flapBurst ? 1.0F : 0.12F);
+		}
+
+		c.flapNow += (target - c.flapNow) * 0.5F;
+		float flap = c.flapNow;
+		p.flap = flap;
+		p.flapRate = c.flapRate * (1.0F - 0.35F * x);
+		if (flap < 0.05F) {
+			return;
+		}
+
+		// The legs scrabble with the wings.
+		p.kick = Math.max(p.kick, 0.6F * flap);
+		p.kickRate = Math.max(p.kickRate, 0.9F);
+		Vec3 middle = Suffering.centre(c);
+		boolean headless = c.kind == Corpse.Kind.DECAPITATION;
+		if (body.onGround && flap > 0.3F && r.nextFloat() < 0.22F * flap) {
+			// A hard beat against the ground: the body bounces up, skids off some way and turns.
+			double angle = r.nextDouble() * Mth.TWO_PI;
+			double push = (0.05 + 0.07 * r.nextDouble()) * flap * (headless ? 1.4 : 1.0);
+			body.vx += Math.cos(angle) * push;
+			body.vz += Math.sin(angle) * push;
+			body.vy += (0.08 + 0.1 * r.nextDouble()) * flap * (headless ? 1.3 : 1.0) * body.heft;
+			body.yaw += (r.nextFloat() - 0.5F) * 70.0F * flap;
+			body.spasm(r, 0.3F * flap);
+			if (gore && headless) {
+				// The open neck throws blood round with every bounce.
+				Vec3 neck = Suffering.neck(c);
+				BloodEmitter.cut(GoreSystems.blood(), level, neck, new Vec3(Math.cos(angle + Math.PI), 0.3, Math.sin(angle + Math.PI)), color,
+						0.012F * flap, 3 + Math.round(4 * flap));
+			}
+		}
+
+		if (c.held && !c.unloaded) {
+			// Tethered, softly, to where the server keeps the body.
+			body.vx += (c.entity.getX() - body.x) * 0.03;
+			body.vz += (c.entity.getZ() - body.z) * 0.03;
+		}
+
+		if (r.nextFloat() < 0.12F * flap) {
+			// Feathers come loose with the beating, bloodied if it is.
+			GoreSystems.dismemberment().feathers().tuft(c.entity, middle, new Vec3(0.0, 1.0, 0.0), 1 + r.nextInt(2), 0.06,
+					GoreSystems.dismemberment().wool().soak(c.entity.getId()), color);
+		}
+
+		if (c.age >= c.nextFlapSound && GoreConfig.get().goreSounds) {
+			// Wings beating on the ground: a dry, frantic clatter.
+			level.playLocalSound(middle.x, middle.y, middle.z, SoundEvents.PARROT_FLY, SoundSource.NEUTRAL, 0.25F + 0.4F * flap,
+					0.75F + 0.25F * r.nextFloat(), false);
+			c.nextFlapSound = c.age + 5 + r.nextInt(5) + Math.round(8 * (1.0F - flap));
+		}
 	}
 
 	/** The moment of death: an opened throat or neck starts to jet with the heartbeat. */
@@ -323,15 +482,24 @@ public final class Deaths {
 		blood.spurts().ooze(wound, c::position, c.entity.getBbWidth() * 0.5, color, life + 20, 0.7F);
 	}
 
-	/** One tick of dying, from the moment of death until the body is still. */
+	/** One tick of dying, from the moment of death until the body is still. A bird flaps on top of it all. */
 	void tick(ClientLevel level, Corpse c, Posture p, int color, boolean gore) {
-		RandomSource r = c.random;
-		Ragdoll body = c.body;
 		int ground = c.groundTicks();
 		if (c.vanilla) {
 			vanillaTick(level, c, p, color, gore, ground);
-			return;
+		} else {
+			throes(level, c, p, color, gore, ground);
 		}
+
+		if (c.bird) {
+			bird(level, c, p, color, gore, ground);
+		}
+	}
+
+	/** The death throes (see the class comment), when they are on. */
+	private void throes(ClientLevel level, Corpse c, Posture p, int color, boolean gore, int ground) {
+		RandomSource r = c.random;
+		Ragdoll body = c.body;
 
 		p.legSeed = c.legSeed;
 		p.hindLimp = c.hindLimp;
@@ -522,6 +690,13 @@ public final class Deaths {
 
 	/** Struck while it dies: a blow breaks the rigid phase and sets it kicking, and a conscious one cries out. */
 	void struck(Corpse c) {
+		int since = c.groundTicks();
+		if (c.bird && since < c.flapEnd) {
+			// A blow sets a dying bird's wings going again.
+			c.flapBurst = true;
+			c.flapUntil = c.age + 8 + c.random.nextInt(8);
+		}
+
 		if (c.lifeless()) {
 			return;
 		}

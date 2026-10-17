@@ -29,11 +29,13 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 	@Override
 	public void runTest(ClientGameTestContext context) {
 		// The tests below were written for the death throes and for bodies that go when the throes are over; keptBodies
-		// tests the vanilla death and the server keeping bodies.
+		// tests the vanilla death and the server keeping bodies. Chickens die flapping only in chickens and the demos: a
+		// bird bouncing about would move the targets of the older tests.
 		context.runOnClient(mc -> {
 			GoreConfig.get().goreLevel = GoreLevel.EXTREME;
 			GoreConfig.get().deathThroes = true;
 			GoreConfig.get().keepBodies = false;
+			GoreConfig.get().chickenDeaths = false;
 		});
 
 		try (TestSingleplayerContext singleplayer = context.worldBuilder().create()) {
@@ -57,6 +59,8 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			butchery(context, singleplayer.getServer());
 			keptBodies(context, singleplayer.getServer());
 			hardening(context, singleplayer.getServer());
+			stairs(context, singleplayer.getServer());
+			chickens(context, singleplayer.getServer());
 			decay(context, singleplayer.getServer());
 			meatsAndWool(context, singleplayer.getServer());
 			playerGore(context, singleplayer.getServer());
@@ -82,7 +86,9 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		try (TestSingleplayerContext singleplayer = context.worldBuilder().adjustSettings(s -> s.setAllowCommands(true)).create()) {
 			singleplayer.getConnection().waitForChunksRender();
 			sorting(context, singleplayer.getServer());
+			context.runOnClient(mc -> GoreConfig.get().chickenDeaths = true);
 			demos(context, singleplayer.getServer());
+			context.runOnClient(mc -> GoreConfig.get().chickenDeaths = false);
 		}
 
 		screens(context);
@@ -103,6 +109,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			GoreConfig.get().goreLevel = GoreLevel.MEDIUM;
 			GoreConfig.get().deathThroes = false;
 			GoreConfig.get().keepBodies = true;
+			GoreConfig.get().chickenDeaths = true;
 		});
 	}
 
@@ -1792,6 +1799,276 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		});
 	}
 
+	/**
+	 * A sheep killed at the top of a one-block-wide flight of stairs slides and tumbles down to the bottom, kept by the
+	 * server (which moves it, so every player sees it there) and not kept (this client moves the body it draws). One
+	 * killed on the flat stays where it fell.
+	 */
+	private static void stairs(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		// The corridor runs east, down four stairs from a landing to the floor.
+		server.runCommand("fill 144 -60 -21 162 -52 -19 minecraft:stone");
+		server.runCommand("fill 144 -60 -20 162 -54 -20 minecraft:air");
+		server.runCommand("fill 144 -60 -20 149 -57 -20 minecraft:stone");
+		for (int i = 0; i < 4; i++) {
+			int x = 150 + i;
+			int y = -57 - i;
+			if (y > -60) {
+				server.runCommand("fill " + x + " -60 -20 " + x + " " + (y - 1) + " -20 minecraft:stone");
+			}
+
+			server.runCommand("setblock " + x + " " + y + " -20 minecraft:oak_stairs[facing=west]");
+		}
+
+		server.runCommand("tp @a 146.5 -56 -19.5 -90 25");
+		context.waitTicks(20);
+		context.runOnClient(mc -> {
+			GoreConfig.get().deathThroes = false;
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+
+		for (boolean kept : new boolean[] {true, false}) {
+			context.runOnClient(mc -> GoreConfig.get().keepBodies = kept);
+			int n = kept ? 31 : 35;
+			java.util.UUID sheep = new java.util.UUID((long) n << 32 | n + 1, (long) (n + 2) << 32 | n + 3);
+			server.runCommand("summon minecraft:sheep 150.55 -56 -19.5 {NoAI:1b,UUID:[I;" + n + "," + (n + 1) + "," + (n + 2) + "," + (n + 3)
+					+ "],Tags:[\"fluidgore_stairs\"]}");
+			context.waitTicks(10);
+			int id = context.computeOnClient(mc -> idOf(mc, sheep));
+			server.runCommand("damage @e[type=minecraft:sheep,tag=fluidgore_stairs,limit=1] 100 minecraft:generic");
+			context.waitTicks(30);
+			if (kept) {
+				context.takeScreenshot("stairs_01_falling");
+			}
+
+			context.waitTicks(150);
+			double[] body = context.computeOnClient(mc -> {
+				var corpse = GoreSystems.suffering().corpse(id);
+				return corpse == null ? null : new double[] {corpse.body.x(1.0F), corpse.body.y(1.0F)};
+			});
+			double[] entity = kept ? server.computeOnServer(s -> {
+				for (Entity e : s.overworld().getAllEntities()) {
+					if (e.getUUID().equals(sheep)) {
+						return new double[] {e.getX(), e.getY()};
+					}
+				}
+
+				return null;
+			}) : null;
+			if (kept) {
+				context.takeScreenshot("stairs_02_at_the_bottom");
+			}
+
+			System.out.println("[FluidGoreTest] sheep down the stairs, kept " + kept + ": body " + java.util.Arrays.toString(body)
+					+ ", server " + java.util.Arrays.toString(entity));
+			check(body != null, "the sheep that died on the stairs has no body (kept " + kept + ")");
+			check(body[1] < -59.4 && body[0] > 153.0, "the sheep's body did not slide down the stairs (kept " + kept + "): "
+					+ java.util.Arrays.toString(body));
+			if (kept) {
+				check(entity != null && entity[1] < -59.4 && entity[0] > 153.0, "the server did not move the kept body down the stairs: "
+						+ java.util.Arrays.toString(entity));
+				check(Math.abs(entity[0] - body[0]) < 0.6, "the body is drawn away from where the server has it: " + java.util.Arrays.toString(body)
+						+ " " + java.util.Arrays.toString(entity));
+			}
+
+			cleanAway(context);
+		}
+
+		// On the flat, it stays where it fell.
+		context.runOnClient(mc -> GoreConfig.get().keepBodies = true);
+		server.runCommand("summon minecraft:sheep 158.5 -60 -19.5 {NoAI:1b,Tags:[\"fluidgore_stairs\"]}");
+		context.waitTicks(10);
+		server.runCommand("damage @e[type=minecraft:sheep,tag=fluidgore_stairs,limit=1] 100 minecraft:generic");
+		context.waitTicks(120);
+		double flatX = server.computeOnServer(s -> {
+			for (Entity e : s.overworld().getAllEntities()) {
+				if (e.entityTags().contains("fluidgore_stairs")) {
+					return e.getX();
+				}
+			}
+
+			return Double.NaN;
+		});
+		System.out.println("[FluidGoreTest] sheep on the flat: x " + flatX);
+		check(Math.abs(flatX - 158.5) < 0.05, "a body on the flat slid: x " + flatX);
+		cleanAway(context);
+		server.runCommand("kill @e[type=!minecraft:player]");
+		context.runOnClient(mc -> {
+			GoreConfig.get().deathThroes = true;
+			GoreConfig.get().keepBodies = false;
+		});
+	}
+
+	/**
+	 * Chickens: a cut knocks out feathers wet with blood and reddens the bird's own; the feathers drift down and lie on
+	 * the ground; a chicken in the rain gets wet through. Killed, each dies flapping: by bare hands with its neck wrung
+	 * (the head hangs), by a sword, and beheaded (the longest flapping, which throws the body about).
+	 */
+	private static void chickens(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("fill -160 -60 30 -140 -50 50 minecraft:air");
+		server.runCommand("tp @a -150.5 -60 38.5 0 30");
+		context.runOnClient(mc -> {
+			GoreConfig.get().deathThroes = false;
+			GoreConfig.get().keepBodies = false;
+			GoreConfig.get().chickenDeaths = true;
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+		context.waitTicks(20);
+
+		// A cut that does not kill: feathers out, bloody, and blood in its own.
+		server.runCommand("summon minecraft:chicken -150.5 -60 40.5 {NoAI:1b,Tags:[\"fluidgore_hen\"]}");
+		context.waitTicks(10);
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:iron_sword");
+		server.runCommand("execute as @p run damage @e[type=minecraft:chicken,tag=fluidgore_hen,limit=1] 1.5 minecraft:player_attack by @s");
+		context.waitTicks(4);
+		float[] tuft = context.computeOnClient(mc -> {
+			var f = GoreSystems.dismemberment().feathers();
+			float bloodiest = 0.0F;
+			for (int i = 0; i < f.count(); i++) {
+				bloodiest = Math.max(bloodiest, f.blood[i]);
+			}
+
+			int hen = -1;
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e instanceof net.minecraft.world.entity.animal.chicken.Chicken) {
+					hen = e.getId();
+				}
+			}
+
+			return new float[] {f.count(), bloodiest, hen < 0 ? -1.0F : GoreSystems.dismemberment().wool().soak(hen)};
+		});
+		System.out.println("[FluidGoreTest] cut chicken: " + (int) tuft[0] + " feathers out, bloodiest " + tuft[1] + ", plumage soaked " + tuft[2]);
+		check(tuft[0] >= 2, "a cut knocked no feathers out of the chicken: " + tuft[0]);
+		check(tuft[1] > 0.1F, "the feathers out of a cut are not bloody: " + tuft[1]);
+		check(tuft[2] > 0.0F, "the cut chicken's feathers took up no blood: " + tuft[2]);
+		context.waitTicks(80);
+		int down = context.computeOnClient(mc -> {
+			var f = GoreSystems.dismemberment().feathers();
+			int n = 0;
+			for (int i = 0; i < f.count(); i++) {
+				if (f.y[i] < -59.9 && f.y[i] > -60.05) {
+					n++;
+				}
+			}
+
+			return n;
+		});
+		context.takeScreenshot("chicken_01_feathers");
+		System.out.println("[FluidGoreTest] feathers on the ground: " + down + " of " + (int) tuft[0]);
+		check(down >= tuft[0] / 2, "the feathers did not come down and lie on the ground: " + down);
+
+		// Rain soaks a chicken.
+		server.runCommand("kill @e[type=minecraft:chicken]");
+		server.runCommand("summon minecraft:chicken -146.5 -60 42.5 {NoAI:1b,Tags:[\"fluidgore_wet\"]}");
+		server.runCommand("setblock -147 -60 42 minecraft:water");
+		context.waitTicks(60);
+		float wet = context.computeOnClient(mc -> {
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e instanceof net.minecraft.world.entity.animal.chicken.Chicken) {
+					return GoreSystems.dismemberment().wool().wet(e.getId());
+				}
+			}
+
+			return -1.0F;
+		});
+		System.out.println("[FluidGoreTest] chicken in water: wet " + wet);
+		check(wet > 0.5F, "a chicken standing in water is not wet: " + wet);
+		server.runCommand("setblock -147 -60 42 minecraft:air");
+		server.runCommand("kill @e[type=minecraft:chicken]");
+		context.waitTicks(5);
+
+		// Three deaths: a wrung neck (bare hands), a sword, a head off.
+		String[] ways = {"minecraft:air", "minecraft:iron_sword", "beheaded"};
+		for (int k = 0; k < ways.length; k++) {
+			String way = ways[k];
+			double x = -153.5 + k * 3;
+			context.runOnClient(mc -> {
+				GoreSystems.suffering().clear();
+				if (way.equals("beheaded")) {
+					GoreSystems.suffering().forceNextDeath(dev.fluidgore.suffer.Corpse.Kind.DECAPITATION, false);
+				}
+			});
+			server.runCommand("summon minecraft:chicken " + x + " -60 42.5 {NoAI:1b,Tags:[\"fluidgore_die\"]}");
+			context.waitTicks(10);
+			if (way.equals("beheaded")) {
+				server.runCommand("damage @e[type=minecraft:chicken,tag=fluidgore_die,limit=1] 100 minecraft:generic");
+			} else {
+				server.runCommand("item replace entity @a weapon.mainhand with " + way);
+				server.runCommand("execute as @p run damage @e[type=minecraft:chicken,tag=fluidgore_die,limit=1] 100 minecraft:player_attack by @s");
+			}
+
+			float flap = 0.0F;
+			float limp = 0.0F;
+			double moved = 0.0;
+			int end = 0;
+			double[] start = null;
+			for (int t = 0; t < 140; t++) {
+				context.waitTicks(1);
+				float[] now = context.computeOnClient(mc -> {
+					for (var c : GoreSystems.suffering().corpses()) {
+						var p = c.pose();
+						return new float[] {p.flap(), p.neckLimp(), (float) c.body.x(1.0F), (float) c.body.z(1.0F), c.flapEnd, 1.0F};
+					}
+
+					return new float[] {0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F};
+				});
+				if (now[5] == 0.0F) {
+					continue;
+				}
+
+				if (start == null) {
+					start = new double[] {now[2], now[3]};
+				}
+
+				flap = Math.max(flap, now[0]);
+				limp = Math.max(limp, now[1]);
+				moved = Math.max(moved, Math.hypot(now[2] - start[0], now[3] - start[1]));
+				end = Math.max(end, (int) now[4]);
+				if (t == 30 && k == 2) {
+					context.takeScreenshot("chicken_02_beheaded_flapping");
+				}
+			}
+
+			System.out.println("[FluidGoreTest] chicken killed " + way + ": flapped " + flap + ", neck limp " + limp + ", thrown " + moved + ", flapping until " + end);
+			check(flap > 0.4F, "the chicken killed " + way + " did not flap: " + flap);
+			if (k == 0) {
+				check(limp > 0.7F, "a chicken killed with bare hands has no wrung neck: " + limp);
+			}
+
+			if (k == 2) {
+				check(end >= 150, "a headless chicken flapped too short a while: " + end);
+				check(moved > 0.3, "the headless chicken's flapping did not throw it about: " + moved);
+			}
+
+			server.runCommand("kill @e[type=minecraft:chicken]");
+		}
+
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");
+		context.runOnClient(mc -> {
+			GoreSystems.suffering().clear();
+			GoreSystems.dismemberment().clear();
+			GoreConfig.get().deathThroes = true;
+			GoreConfig.get().chickenDeaths = false;
+		});
+	}
+
+	/** Every body on screen cleaned away with the sponge, as a player would (kill selectors never pick the dead). */
+	private static void cleanAway(ClientGameTestContext context) {
+		context.runOnClient(mc -> {
+			for (var corpse : new java.util.ArrayList<>(GoreSystems.suffering().corpses())) {
+				dev.fluidgore.net.GoreSync.act(dev.fluidgore.net.GoreAction.of(dev.fluidgore.net.GoreAction.CLEAN, corpse.entity.getId(), 0L,
+						mc.player.getEyePosition(), mc.player.getViewVector(1.0F), 0, 0.0F));
+			}
+		});
+		context.waitTicks(10);
+		context.runOnClient(mc -> GoreSystems.suffering().clear());
+	}
+
 	/** The overworld's creatures as the natural spawner counts them against the mob cap. */
 	private static int creatures(net.minecraft.server.MinecraftServer s) {
 		net.minecraft.server.level.ServerLevel level = s.overworld();
@@ -2535,7 +2812,8 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			check(onSide[i], kinds[i] + ": not lying on its side within a second and a half");
 			check(stillAt[i] >= 60 && stillAt[i] <= 110, kinds[i] + ": did not die out in three to five and a half seconds: " + stillAt[i]);
 			check(moved >= 0.0 && moved < 0.8, kinds[i] + ": did not lie where it dropped, moved " + moved);
-			check(kick[i] > 0.1F, kinds[i] + ": never paddled: " + kick[i]);
+			// Torn open by a blast, it only twitches a few times, weakly (its peak is rolled as low as a quarter).
+			check(kick[i] > (kinds[i] == dev.fluidgore.suffer.Corpse.Kind.TRAUMA ? 0.04F : 0.1F), kinds[i] + ": never paddled: " + kick[i]);
 		}
 
 		int concussion = dev.fluidgore.suffer.Corpse.Kind.CONCUSSION.ordinal();

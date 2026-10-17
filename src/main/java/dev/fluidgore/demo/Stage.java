@@ -53,6 +53,11 @@ public final class Stage {
 		return p.getX() + " " + p.getY() + " " + p.getZ();
 	}
 
+	/** The direction back towards the player, as a block state value ({@code north}...): a stair's facing that climbs to them. */
+	public String back() {
+		return fx == 1 ? "west" : fx == -1 ? "east" : fz == 1 ? "north" : "south";
+	}
+
 	/** Yaw (degrees) for a mob turned {@code turn} degrees clockwise from the way the player faces; 180 faces the player. */
 	public float yaw(float turn) {
 		return Mth.wrapDegrees(yaw + turn);

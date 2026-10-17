@@ -54,6 +54,7 @@ public final class Dismemberment {
 	private final PartInteraction interaction = new PartInteraction(parts);
 	private final Wounds wounds = new Wounds();
 	private final Giblets giblets = new Giblets();
+	private final Feathers feathers = new Feathers();
 	private final Burns burns = new Burns();
 	private final BloodyWool wool = new BloodyWool();
 	private final Butchery butchery = new Butchery();
@@ -85,6 +86,10 @@ public final class Dismemberment {
 		return giblets;
 	}
 
+	public Feathers feathers() {
+		return feathers;
+	}
+
 	/** True if this entity was torn apart by a blast; its renderer is skipped. */
 	public boolean vaporized(int entityId) {
 		return vaporized.contains(entityId);
@@ -112,6 +117,7 @@ public final class Dismemberment {
 		giblets.burst(level, blood, entity, from);
 		int rgb = EntityFilter.bloodColor(entity);
 		Vec3 centre = entity.position().add(0.0, entity.getBbHeight() * 0.5, 0.0);
+		featherCloud(entity, centre, from, 1.0F, rgb);
 		BloodEmitter.burst(blood, level, centre, rgb, 0.6F * entity.getBbWidth() * entity.getBbHeight(), Math.round(40 * entity.getBbWidth()));
 		Vec3 out = centre.subtract(from);
 		// A red mist: fine blood driven out hard in every direction, painting the walls and floor around.
@@ -121,6 +127,17 @@ public final class Dismemberment {
 		if (GoreConfig.get().goreSounds) {
 			BloodEmitter.burstSound(level, centre, 1.0F);
 		}
+	}
+
+	/** A bird caught in a blast: a cloud of feathers blown out, half of them bloody, that snows down for seconds after. */
+	private void featherCloud(LivingEntity entity, Vec3 centre, Vec3 from, float share, int rgb) {
+		if (!Feathers.feathered(entity)) {
+			return;
+		}
+
+		float left = 1.0F - butchery.plucked(entity.getId());
+		Vec3 out = centre.subtract(from);
+		feathers.tuft(entity, centre, out.lengthSqr() > 1.0E-6 ? out.normalize() : new Vec3(0.0, 1.0, 0.0), Math.round(90 * share * left), 0.3, 0.6F, rgb);
 	}
 
 	/**
@@ -144,6 +161,7 @@ public final class Dismemberment {
 
 		giblets.spill(level, blood, entity, from, force);
 		int rgb = EntityFilter.bloodColor(entity);
+		featherCloud(entity, centre, from, 0.4F + 0.4F * force, rgb);
 		BloodEmitter.blast(blood, level, centre, out.lengthSqr() > 1.0E-6 ? out.normalize() : null, rgb,
 				0.25F * entity.getBbWidth() * entity.getBbHeight(), Math.round(30 * entity.getBbWidth()));
 		if (GoreConfig.get().goreSounds) {
@@ -456,6 +474,7 @@ public final class Dismemberment {
 		parts.tick(level, blood);
 		wounds.tick(level, blood);
 		giblets.tick(level, blood);
+		feathers.tick(level, blood);
 		burns.tick(level, blood);
 		wool.tick(level);
 		if (tick % 8 != 0 || missing.isEmpty()) {
@@ -501,6 +520,7 @@ public final class Dismemberment {
 		missing.clear();
 		wounds.clear();
 		giblets.clear();
+		feathers.clear();
 		vaporized.clear();
 		burns.clear();
 		wool.clear();

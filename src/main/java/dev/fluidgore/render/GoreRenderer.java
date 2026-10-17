@@ -104,6 +104,7 @@ public final class GoreRenderer {
 		}
 
 		GibletRenderer.submit(GoreSystems.dismemberment().giblets(), collector, poseStack, cam, frustum, partialTick);
+		FeatherRenderer.submit(GoreSystems.dismemberment().feathers(), collector, poseStack, cam, frustum, partialTick);
 	}
 
 	/**

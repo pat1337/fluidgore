@@ -2,6 +2,35 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.13.0]
+
+Chickens die like chickens, and bodies go down stairs.
+
+### Added
+- Chicken Deaths (on by default): a chicken dies in a frenzy of wing-beats that bounces it along the ground and spins
+  it round, shedding feathers, in bursts that fade. What killed it shapes it: bare hands or a club wring the neck (the
+  head hangs loose and swings with every beat), a cut throat lies bleeding a moment before the flapping starts, and a
+  head off gives the headless chicken: the hardest, longest flapping, the open neck throwing blood. A blow on a dying
+  bird sets its wings going again.
+- Feathers: blows knock feathers out of a bird (a burst from a club or a bite, a few from a blade), wet with the blood
+  of the wound under them. Plucking, the death flapping and blasts (a cloud of them) throw them too. A dry feather
+  sails and rocks as it drifts down; a soaked one clumps into strands, goes dark and drops. They lie where they land,
+  drink up any pool of blood or rain, and the dry ones lift and scatter when you walk through them. Max Feathers caps
+  them.
+- Bloody Feathers: a chicken's plumage soaks up blood like a sheep's fleece, matted round each wound and reddening all
+  over as it bleeds, and chickens next to one being cut up get spattered. In the rain or in water the feathers go dark
+  and slick, and the bird looks half its size until it dries. A plucked chicken shows how skinny it is under its
+  feathers: a narrow body and bony wings.
+- Demo: `chickens`.
+- Bodies Slide Down (on by default): a body that falls across stairs, a ledge or the lip of a pit no longer hangs
+  there like a box. With more than a fifth of it over the drop it slumps over the edge, drops onto the next step with a
+  soft thud and a jolt of its limbs, and goes on down until it lies flat, turning a little and smearing blood as it
+  drags. Kept bodies are moved by the server, so every player sees them where they end up, and they are saved there.
+- Demo: `stairs`.
+
+### Changed
+- Plucking throws real feathers (see above) instead of item crumbs.
+
 ## [2.12.1]
 
 The server half, hardened.

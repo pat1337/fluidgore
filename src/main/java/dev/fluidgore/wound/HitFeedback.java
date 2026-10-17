@@ -5,6 +5,7 @@ import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.blood.BoneEmitter;
 import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.dismember.Feathers;
 import dev.fluidgore.trigger.EntityFilter;
 import dev.fluidgore.trigger.Fate;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -75,6 +76,23 @@ public final class HitFeedback {
 
 		// Into the fleece, its own and its neighbours'.
 		GoreSystems.dismemberment().wool().hit(level, entity, at, depth);
+
+		// A blow on a bird knocks feathers out of it: a burst from a club or a bite, a few cut loose by a blade, wet with
+		// the blood of the wound under them. A bird already plucked bare has none left to lose.
+		if (Feathers.feathered(entity)) {
+			float left = 1.0F - GoreSystems.dismemberment().butchery().plucked(entity.getId());
+			float puff = switch (weapon) {
+				case BLUNT -> 6.0F + 8.0F * depth;
+				case BITE -> 9.0F + 10.0F * depth;
+				case CHOP -> 5.0F + 9.0F * depth;
+				case BLAST -> 30.0F;
+				case PIERCE -> 2.0F + 3.0F * depth;
+				default -> 3.0F + 6.0F * depth;
+			};
+			float bloody = flesh.bleeds() ? depth * (weapon.cuts() ? 1.2F : 0.5F) : 0.0F;
+			GoreSystems.dismemberment().feathers().tuft(entity, at, away.lengthSqr() > 1.0E-6 ? away.normalize() : strike.hit().normal(),
+					Math.round(puff * left), weapon == Weapon.BLUNT || weapon == Weapon.BLAST ? 0.12 : 0.07, bloody, rgb);
+		}
 
 		// A pick or an axe knocks bits out of the wound once it is past the skin.
 		if (weapon.chips > 0 && depth >= 0.35F) {

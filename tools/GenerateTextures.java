@@ -50,6 +50,7 @@ public final class GenerateTextures {
 		ImageIO.write(wounds(), "png", new File(misc, "wounds.png"));
 		ImageIO.write(flesh(), "png", new File(misc, "flesh.png"));
 		ImageIO.write(hurt(), "png", new File(misc, "hurt.png"));
+		ImageIO.write(feathers(), "png", new File(misc, "feather.png"));
 
 		ImageIO.write(icon(), "png", new File(root, "icon.png"));
 		System.out.println("Wrote textures to " + root.getAbsolutePath());
@@ -981,6 +982,72 @@ public final class GenerateTextures {
 				image.setRGB(ox + x, oy + y, argb(1.0, shine ? 1.0 : shades[shade]));
 			}
 		}
+	}
+
+	/**
+	 * feather.png, 64x32: loose feathers as 16x16 pixel art, a quill up the middle and the vanes either side, curving a
+	 * little. Top row, four dry feathers: full, soft vanes and down at the foot. Bottom row, the same four wet (with blood
+	 * or water): the vanes clumped into a few thin strands. All white/grey; the game tints them.
+	 */
+	private static BufferedImage feathers() {
+		BufferedImage image = new BufferedImage(64, 32, BufferedImage.TYPE_INT_ARGB);
+		for (int variant = 0; variant < 4; variant++) {
+			for (int wet = 0; wet < 2; wet++) {
+				Random random = new Random(16000 + variant);
+				int length = 13 + random.nextInt(3);
+				double width = 1.9 + random.nextDouble() * 0.9;
+				double bend = (random.nextDouble() - 0.5) * 3.0;
+				Random strands = new Random(16100 + variant);
+				int ox = variant * 16;
+				int oy = wet * 16;
+				for (int row = 0; row < length; row++) {
+					// t runs from the foot of the quill (0) to the tip (1).
+					double t = row / (double) (length - 1);
+					int y = oy + 15 - row;
+					double centre = 7.5 + bend * t * t;
+					double half = width * Math.pow(Math.sin(Math.PI * Math.min(1.0, 0.1 + t * 0.92)), 0.5) * (wet == 1 ? 0.65 : 1.0);
+					for (int dx = -5; dx <= 5; dx++) {
+						int x = (int) Math.round(centre) + dx;
+						if (x < 0 || x > 15) {
+							continue;
+						}
+
+						double d = Math.abs(x - centre);
+						if (d < 0.6) {
+							// The quill, a little greyer, to the tip.
+							image.setRGB(ox + x, y, argb(1.0, 0.62 + 0.2 * t));
+							continue;
+						}
+
+						double noise = strands.nextDouble();
+						if (t < 0.2) {
+							// The bare quill at the foot, with a few loose wisps of down.
+							if (wet == 0 && t > 0.08 && d < 2.2 && noise > 0.55) {
+								image.setRGB(ox + x, y, argb(0.7, 0.97));
+							}
+
+							continue;
+						}
+
+						if (d > half + 0.4) {
+							continue;
+						}
+
+						// Wet vanes stick together into a few strands with gaps between.
+						if (wet == 1 && ((row + (x > centre ? 1 : 0)) % 3 == 0 || noise > 0.8)) {
+							continue;
+						}
+
+						// The barbs run up and out from the quill: faint slanting lines.
+						boolean barb = (row + (int) Math.round(d)) % 3 == 0;
+						double light = 0.92 + 0.08 * noise - 0.1 * (d / Math.max(1.0, half)) - (barb ? 0.08 : 0.0);
+						image.setRGB(ox + x, y, argb(1.0, light));
+					}
+				}
+			}
+		}
+
+		return image;
 	}
 
 	private static int argb(double alpha, double light) {

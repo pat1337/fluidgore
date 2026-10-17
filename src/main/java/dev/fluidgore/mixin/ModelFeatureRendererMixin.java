@@ -21,6 +21,8 @@ import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.Model;
+import net.minecraft.client.model.animal.chicken.AdultChickenModel;
+import net.minecraft.client.model.animal.chicken.ChickenModel;
 import net.minecraft.client.model.animal.sheep.SheepFurModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.player.PlayerModel;
@@ -81,12 +83,18 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 		WoundSet wounds = state.getData(Wounds.KEY);
 		Injury injury = submit.model() instanceof HumanoidModel<?> ? state.getData(Injury.KEY) : null;
 		Rot rot = state.getData(Rot.KEY);
-		if ((mask == null || mask == 0) && pose == null && body == null && (wounds == null || wounds.brokenMask() == 0) && injury == null && rot == null) {
+		BloodyWool.Plumage plumage = submit.model() instanceof AdultChickenModel ? state.getData(BloodyWool.PLUMAGE) : null;
+		if ((mask == null || mask == 0) && pose == null && body == null && (wounds == null || wounds.brokenMask() == 0) && injury == null && rot == null
+				&& plumage == null) {
 			return;
 		}
 
 		Model<?> model = submit.model();
 		ModelPart[] parts = ModelParts.index(model);
+		if (plumage != null) {
+			fluidgore$skinny(model, parts, plumage);
+		}
+
 		if (mask != null && mask != 0) {
 			for (BodyPart part : BodyPart.values()) {
 				ModelPart modelPart = parts[part.ordinal()];
@@ -99,7 +107,7 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 
 		if (pose != null) {
 			Float clock = state.getData(SufferPose.CLOCK);
-			fluidgore$animate(parts, pose, clock != null ? clock : state.ageInTicks);
+			fluidgore$animate(parts, pose, clock != null ? clock : state.ageInTicks, model instanceof ChickenModel);
 		}
 
 		if (injury != null) {
@@ -117,6 +125,72 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 
 		if (rot != null) {
 			fluidgore$rot(model, parts, rot);
+		}
+	}
+
+	/**
+	 * A dying bird's wings: they beat in frantic bursts, up and out, never quite together, and the head on a broken (or
+	 * cut) neck hangs and swings loose with every beat.
+	 */
+	@Unique
+	private void fluidgore$flap(ModelPart[] parts, ModelPart head, SufferPose pose, float t) {
+		float flap = pose.flap();
+		if (flap > 0.01F) {
+			for (int i = 0; i < 2; i++) {
+				ModelPart wing = parts[i == 0 ? BodyPart.RIGHT_ARM.ordinal() : BodyPart.LEFT_ARM.ordinal()];
+				if (wing == null) {
+					continue;
+				}
+
+				fluidgore$save(wing);
+				// Each wing a little out of step with the other; vanilla's own flap opens the right wing at +z, the left at -z.
+				float phase = t * pose.flapRate() + i * 0.7F + SufferPose.noise(t * 0.5F, pose.legSeed() + i) * 0.8F;
+				float open = (Mth.sin(phase) + 1.0F) * 0.5F;
+				float angle = flap * (0.25F + 1.15F * open);
+				wing.zRot += i == 0 ? angle : -angle;
+				wing.xRot += Mth.sin(phase * 0.5F) * 0.25F * flap;
+			}
+		}
+
+		float limp = pose.neckLimp();
+		if (head != null && limp > 0.0F) {
+			fluidgore$save(head);
+			float swing = flap * Mth.sin(t * pose.flapRate() * 1.3F);
+			head.xRot += limp * (1.2F + 0.35F * swing);
+			head.zRot += limp * (0.6F * Mth.sin(pose.legSeed()) + 0.4F * swing);
+		}
+	}
+
+	/**
+	 * A chicken is mostly feathers: plucked, the bird under them is a skinny thing, the body narrow and the wings bony;
+	 * soaked in the rain, the feathers lie flat and slick and it looks half the size it did.
+	 */
+	@Unique
+	private void fluidgore$skinny(Model<?> model, ModelPart[] parts, BloodyWool.Plumage plumage) {
+		float thin = Math.min(0.4F, 0.32F * plumage.plucked() + 0.14F * plumage.wet());
+		if (thin <= 0.0F || !model.root().hasChild("body")) {
+			return;
+		}
+
+		ModelPart body = model.root().getChild("body");
+		fluidgore$save(body);
+		// The body is turned on its side in the model: x is its width, z its depth, y its length.
+		body.xScale *= 1.0F - thin;
+		body.zScale *= 1.0F - 0.8F * thin;
+		body.yScale *= 1.0F - 0.25F * thin;
+		// The wings close in on the narrower body and sit lower on its back, thin and bony without their feathers.
+		float bony = 0.35F * plumage.plucked();
+		for (BodyPart wing : new BodyPart[] {BodyPart.RIGHT_ARM, BodyPart.LEFT_ARM}) {
+			ModelPart part = parts[wing.ordinal()];
+			if (part == null) {
+				continue;
+			}
+
+			fluidgore$save(part);
+			part.x -= Math.signum(part.x) * 3.0F * thin;
+			part.y += 2.4F * thin;
+			part.yScale *= 1.0F - bony;
+			part.zScale *= 1.0F - 0.7F * bony;
 		}
 	}
 
@@ -174,6 +248,12 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 
 			WoundSet wounds = state.getData(Wounds.KEY);
 			if (wounds != null && wounds.count() > 0 && wounds.drawsOn(submit.model())) {
+				if (submit.model() instanceof AdultChickenModel && GoreConfig.get().bloodyFeathers) {
+					// The feathers round each wound are matted with its blood (under the wound itself).
+					WoundRenderer.drawStains(wounds, submit.model(), false, poseStack, getVertexBuilder(WoundRenderer.renderType()), submit.lightCoords(),
+							submit.overlayCoords());
+				}
+
 				WoundRenderer.draw(wounds, poseStack, getVertexBuilder(WoundRenderer.renderType()), submit.lightCoords(), submit.overlayCoords());
 				if (submit.model() instanceof PlayerModel && GoreConfig.get().bloodyClothes) {
 					// Blood soaks through the jacket, sleeves and trousers over the wounds.
@@ -226,8 +306,12 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 	 * limp, and an agonal gasp lifts the head.
 	 */
 	@Unique
-	private void fluidgore$animate(ModelPart[] parts, SufferPose pose, float t) {
+	private void fluidgore$animate(ModelPart[] parts, SufferPose pose, float t, boolean bird) {
 		ModelPart head = parts[BodyPart.HEAD.ordinal()];
+		if (bird && (pose.flap() > 0.01F || pose.neckLimp() > 0.0F)) {
+			fluidgore$flap(parts, head, pose, t);
+		}
+
 		float gasp = pose.gaspAmount(t);
 		if (head != null && (pose.thrash() > 0.01F || pose.tremble() > 0.01F || pose.headDip() != 0.0F || pose.lookYaw() != 0.0F
 				|| pose.stiff() > 0.0F || pose.headTilt() != 0.0F || gasp > 0.0F)) {
@@ -243,7 +327,8 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 			BodyPart[] legs = {BodyPart.RIGHT_ARM, BodyPart.LEFT_ARM, BodyPart.RIGHT_LEG, BodyPart.LEFT_LEG};
 			for (int i = 0; i < legs.length; i++) {
 				ModelPart leg = parts[legs[i].ordinal()];
-				if (leg == null) {
+				// A bird's "front legs" are its wings: they beat (see fluidgore$flap), they do not paddle.
+				if (leg == null || bird && i < 2) {
 					continue;
 				}
 
@@ -263,7 +348,7 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 	@Unique
 	private void fluidgore$save(ModelPart part) {
 		fluidgore$moved.add(part);
-		fluidgore$savedRotations.add(new float[]{part.xRot, part.yRot, part.zRot, part.xScale, part.yScale, part.zScale});
+		fluidgore$savedRotations.add(new float[]{part.xRot, part.yRot, part.zRot, part.xScale, part.yScale, part.zScale, part.x, part.y, part.z});
 	}
 
 	@Unique
@@ -283,6 +368,9 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 			part.xScale = saved[3];
 			part.yScale = saved[4];
 			part.zScale = saved[5];
+			part.x = saved[6];
+			part.y = saved[7];
+			part.z = saved[8];
 		}
 
 		fluidgore$moved.clear();

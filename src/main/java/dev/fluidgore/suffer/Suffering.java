@@ -3,6 +3,7 @@ package dev.fluidgore.suffer;
 import dev.fluidgore.GoreSystems;
 import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.physics.BodySlide;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.dismember.GorePart;
@@ -36,6 +37,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.animal.chicken.Chicken;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
@@ -269,6 +271,8 @@ public final class Suffering {
 		corpse.vanilla = vanilla;
 		corpse.held = GoreSync.serverKeepsBodies();
 		corpse.pops = pops;
+		corpse.bird = entity instanceof Chicken && GoreConfig.get().chickenDeaths;
+		corpse.wrung = weapon == Weapon.BLUNT;
 		deaths.plan(corpse);
 		if (vanilla) {
 			Deaths.vanillaFall(corpse, weapon, strike);
@@ -286,7 +290,8 @@ public final class Suffering {
 		if (launch > 0 && strike != null) {
 			float share = Math.min(1.0F, blowShare);
 			// A blast throws a body far harder than any blow: up and out, over walls and out of pits.
-			double speed = blast > 0.0F ? 0.15 + 0.85 * blast : 0.1 + 0.3 * share;
+			// A blow throws a small body no further than a cow's (a punched chicken does not sail off across the field).
+			double speed = blast > 0.0F ? 0.15 + 0.85 * blast : (0.1 + 0.3 * share) / Math.max(1.0F, corpse.body.heft);
 			corpse.body.launch(strike, speed * launch / 100.0);
 		}
 
@@ -647,6 +652,8 @@ public final class Suffering {
 			slam(level, c, landing, color, gore);
 		}
 
+		slide(level, c, color, gore);
+
 		Deaths.Posture p = posture.reset();
 		deaths.tick(level, c, p, color, gore);
 		if (config.ecology && c.lifeless()) {
@@ -721,6 +728,72 @@ public final class Suffering {
 		}
 
 		c.body.spasm(c.random, 0.4F);
+	}
+
+	/**
+	 * A body lying over a drop (stairs, a ledge) slumps over the edge and goes down it step by step (see
+	 * {@link BodySlide}): a soft thud and a jolt of the limbs at every step it drops, a smear of blood where it drags.
+	 * A body the server keeps is moved by the server, so every player sees it in the same place: this one follows it.
+	 */
+	private static void slide(ClientLevel level, Corpse c, int color, boolean gore) {
+		Ragdoll body = c.body;
+		LivingEntity entity = c.entity;
+		boolean down = c.toppled && (!c.vanilla || c.landed) && c.age > Corpse.VANILLA_TICKS + c.fallDelay;
+		if (!down || !GoreConfig.get().bodySlide) {
+			return;
+		}
+
+		if (c.held && !c.unloaded) {
+			double moved = entity.position().distanceToSqr(entity.xo, entity.yo, entity.zo);
+			if (moved > 1.0E-6) {
+				body.x += (entity.getX() - body.x) * 0.5;
+				body.y += (entity.getY() - body.y) * 0.5;
+				body.z += (entity.getZ() - body.z) * 0.5;
+				body.onGround = entity.onGround();
+			}
+		} else if (body.onGround) {
+			AABB box = entity.getBoundingBox().move(body.x - entity.getX(), body.y - entity.getY(), body.z - entity.getZ());
+			Vec3 pull = BodySlide.pull(level, box);
+			body.vx += pull.x;
+			body.vz += pull.z;
+		}
+
+		double fell = body.py - body.y;
+		if (fell > 0.02) {
+			c.drop += (float) fell;
+		} else {
+			if (c.drop > 0.3F) {
+				bump(level, c, c.drop, color, gore);
+			}
+
+			c.drop = 0.0F;
+		}
+
+		double dx = body.x - body.px;
+		double dz = body.z - body.pz;
+		double speed = Math.sqrt(dx * dx + dz * dz);
+		if (speed > 0.03) {
+			// It turns a little as it goes, dragged unevenly over the edges.
+			body.yaw += (float) ((c.random.nextFloat() - 0.5F) * speed * 40.0);
+			if (gore && c.random.nextInt(3) == 0) {
+				BloodEmitter.drip(GoreSystems.blood(), new Vec3(body.x, body.y + 0.1, body.z), color, 0.015F);
+			}
+		}
+	}
+
+	/** The body drops onto the next step: a dull, soft thud, a little blood knocked out of it, the limbs flop. */
+	private static void bump(ClientLevel level, Corpse c, float drop, int color, boolean gore) {
+		Vec3 middle = centre(c);
+		float volume = Math.min(0.8F, 0.25F + drop * 0.4F);
+		level.playLocalSound(middle.x, middle.y, middle.z, SoundEvents.MUD_BREAK, SoundSource.NEUTRAL, volume * 0.6F,
+				0.5F + 0.15F * c.body.heft + c.random.nextFloat() * 0.1F, false);
+		level.playLocalSound(middle.x, middle.y, middle.z, SoundEvents.WOOL_FALL, SoundSource.NEUTRAL, volume * 0.5F,
+				0.6F + c.random.nextFloat() * 0.15F, false);
+		if (gore) {
+			BloodEmitter.burst(GoreSystems.blood(), level, middle, color, 0.01F + drop * 0.03F, 2 + Math.round(drop * 6.0F));
+		}
+
+		c.body.spasm(c.random, 0.15F + Math.min(0.3F, drop * 0.2F));
 	}
 
 	/** Walking into a body that is down shoves it along and jostles its limbs. */

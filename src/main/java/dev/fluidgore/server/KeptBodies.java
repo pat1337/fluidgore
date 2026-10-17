@@ -7,6 +7,7 @@ import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.net.BodyAge;
 import dev.fluidgore.net.GoreAction;
 import dev.fluidgore.net.PieceState;
+import dev.fluidgore.physics.BodySlide;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -29,6 +30,8 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 
@@ -53,6 +56,12 @@ public final class KeptBodies {
 	private static final double SHOW_RANGE = 96.0;
 	/** Vanilla's tip-over takes 20 ticks; the death clock of a kept body stops a little after. */
 	private static final int DEATH_CLOCK_MAX = 40;
+	/** Death ticks before a body lies on its side (vanilla's tip-over), and may slide down a drop. */
+	private static final int TIPPED = 20;
+	/** Vanilla's gravity and friction (ground: a plain block's 0.6 times 0.91), for a body vanilla does not move. */
+	private static final double GRAVITY = 0.08;
+	private static final double GROUND_FRICTION = 0.546;
+	private static final double AIR_FRICTION = 0.91;
 	/**
 	 * When a kept body died: the game time and the overworld's day clock then, saved with it, so it goes on rotting
 	 * while nobody is near and while players sleep (see {@code rot/Decay}).
@@ -144,6 +153,21 @@ public final class KeptBodies {
 			while (bodies.size() > config.maxKeptBodies) {
 				LivingEntity oldest = bodies.removeFirst();
 				vanish(oldest);
+			}
+		}
+
+		if (config.bodySlide && body.deathTime >= TIPPED) {
+			// Lying over a drop it slumps down it; vanilla's own movement (gravity, friction) carries it from there, and
+			// every client is sent where it goes.
+			Vec3 pull = body.onGround() ? BodySlide.pull(level, body.getBoundingBox()) : Vec3.ZERO;
+			if (body instanceof Mob mob && mob.isNoAi()) {
+				// Vanilla never moves a mob without AI, not even to fall: a dead weight falls all the same.
+				Vec3 v = body.getDeltaMovement().add(pull).add(0.0, -GRAVITY, 0.0);
+				body.move(MoverType.SELF, v);
+				double friction = body.onGround() ? GROUND_FRICTION : AIR_FRICTION;
+				body.setDeltaMovement(v.x * friction, body.onGround() ? 0.0 : v.y * 0.98, v.z * friction);
+			} else if (pull != Vec3.ZERO) {
+				body.setDeltaMovement(body.getDeltaMovement().add(pull));
 			}
 		}
 

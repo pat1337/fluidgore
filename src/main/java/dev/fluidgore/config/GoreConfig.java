@@ -104,6 +104,11 @@ public final class GoreConfig {
 	public boolean keepBodies = true;
 	/** Server side: most kept bodies per dimension. The oldest goes up in smoke when another one falls. */
 	public int maxKeptBodies = 64;
+	/**
+	 * A dead body lying over a drop (stairs, a ledge, the lip of a pit) slumps over the edge and slides and tumbles down
+	 * until it lies on the flat. Kept bodies are moved by the server, so everyone sees them where they end up.
+	 */
+	public boolean bodySlide = true;
 	/** Dying bodies stay tinted red, like vanilla's death, until they are gone. */
 	public boolean redDeath = true;
 	/**
@@ -146,6 +151,23 @@ public final class GoreConfig {
 	public boolean butchery = true;
 	/** Sheep's wool soaks up blood: stains round wounds, the coat reddening as it bleeds, the herd round it spattered. */
 	public boolean bloodyWool = true;
+	/**
+	 * Birds are feathered: blows knock feathers out (wet with blood from a wound), dying birds shed them in their
+	 * wing-beats, and they drift down and lie where they land, soaking up blood and rain.
+	 */
+	public boolean feathers = true;
+	/** Cap on loose feathers in the world. */
+	public int maxFeathers = 1500;
+	/**
+	 * A chicken's feathers soak up blood round its wounds and redden as it bleeds, go dark and slick in the rain, and a
+	 * plucked or soaked bird shows how skinny it is under them.
+	 */
+	public boolean bloodyFeathers = true;
+	/**
+	 * Chickens die as chickens do: in a frenzy of wing-beats that throws the body about, shaped by what killed it (a
+	 * head off, a cut throat, a wrung neck, a blow to the head).
+	 */
+	public boolean chickenDeaths = true;
 	/** Ender blood (and the raw cuts in an enderman) drawn at full brightness: it glows in the dark and with shaders. */
 	public boolean glowingEnderBlood = true;
 	/** Blunt blows add up on the bone they land on until it breaks: skulls cave in, ribs stove in, limbs snap and come off. */
@@ -300,6 +322,7 @@ public final class GoreConfig {
 		staggerPercent = clamp(staggerPercent, 0, 200);
 		maxDetachedParts = clamp(maxDetachedParts, 1, 256);
 		maxGiblets = clamp(maxGiblets, 0, Giblets.CAPACITY);
+		maxFeathers = clamp(maxFeathers, 0, dev.fluidgore.dismember.Feathers.CAPACITY);
 		if (!(heavyHitDamage > 0.0F)) heavyHitDamage = 6.0F;
 		if (sufferingLevel == null) sufferingLevel = GoreLevel.MEDIUM;
 		screamVolume = clamp(screamVolume, 0, 200);

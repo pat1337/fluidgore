@@ -270,3 +270,19 @@ severable parts; severed heads can't blink.
   expire after 600 ticks (server) / `Evidence.WAIT` (client). `PieceCodec.read` checks numbers, quads only, depth 16,
   256 parts, 64 cubes; `WoundCodec.read` drops absurd wounds (ox/oy/oz may be NaN: "no spot"). Game test: `hardening`.
   No demo: nothing new to see.
+- **2.13.0**: bodies slide down stairs and off ledges (`bodySlide`). `physics/BodySlide.pull` (common) samples a 4x4 grid
+  under the collision box; over `HOLDS` (a fifth) hanging, it pulls towards the drop. The server adds it to a kept
+  body's motion in `KeptBodies.keep` (vanilla `travel` still runs for the dead, so gravity, friction and position sync
+  come free); `Suffering.slide` adds it to the `Ragdoll` of bodies only this client has, and for a kept body eases the
+  ragdoll onto the entity while the server moves it. `Corpse.drop` gives a thud (`bump`) per step. Game test: `stairs`.
+  Demo: `stairs` (`Stage.back()` for a stair's facing).
+- **2.13.0 chickens**: `dismember/Feathers` (flat arrays, cap `maxFeathers`, owned by `Dismemberment`; `tuft` from
+  `HitFeedback.hit`, `Butchery.pluck`, `Dismemberment.featherCloud` on shred/tear, `Deaths.bird`), drawn by
+  `render/FeatherRenderer` from `feather.png` (64x32 from the generator: dry row, clumped row). `BloodyWool` covers
+  chickens too (`soaks(entity)`, `featherTint` folded into `Burns.KEY`, `wet` per bird) and sets `BloodyWool.PLUMAGE`
+  (plucked, wet), which `ModelFeatureRendererMixin.fluidgore$skinny` turns into a thin `AdultChickenModel` (the part save
+  now keeps x/y/z too); chickens get `drawStains` under their wounds. `Corpse.bird` (`chickenDeaths`) + `Deaths.planBird`
+  / `bird` (run after both the vanilla and the throes paths): `SufferPose.flap/flapRate/neckLimp`, animated in
+  `fluidgore$flap` (wings are the "front legs" of the kick loop, skipped for birds); `Corpse.wrung` = killed by BLUNT.
+  `Corpse.done` waits for `flapEnd`. The rest of the game test runs with `chickenDeaths` off. Game test: `chickens`. Demo:
+  `chickens`.

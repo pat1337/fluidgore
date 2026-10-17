@@ -27,6 +27,8 @@ import org.jspecify.annotations.Nullable;
  */
 public final class Demos {
 	public static final List<Demo> ALL = List.of(
+			new Demo("chickens", "2.13.0", "Chickens killed three ways (wrung neck, cut throat, beheaded) flap themselves to death; feathers fly bloody, a hen in the rain goes dark and slick, and the feathers lie where they fell", false, Demos::chickens),
+			new Demo("stairs", "2.13.0", "A sheep and a pig killed at the top of a narrow stair: the bodies slump over the edge and tumble down step by step", true, Demos::stairs),
 			new Demo("decay", "2.12.0", "A chicken, a pig and a cow left to rot (Extreme): six weeks in a minute, day by day, from bloat to bones", false, Demos::decay),
 			new Demo("kept", "2.11.0", "The vanilla death made gory: a sword kill and an axe kill keel over, stay, are chopped where they lie, and are cleaned up", false, Demos::kept),
 			new Demo("injured", "2.10.0", "Injuries: a zombie limps on a smashed leg holding its belly, then you take blows and fade near death", false, Demos::injured),
@@ -332,6 +334,81 @@ public final class Demos {
 	}
 
 	/**
+	 * Chickens die as chickens do: three killed three ways, each flapping itself to death in its own way; a live one cut
+	 * so its feathers redden and fly; then a shower of rain soaks the living ones (in a biome where it rains).
+	 */
+	private static void chickens(Script s, Stage st) {
+		s.summon(st, "chicken", "fgd_hen0", -3, 0, 4, 90.0F, "");
+		s.summon(st, "chicken", "fgd_hen1", 0, 0, 4, 90.0F, "");
+		s.summon(st, "chicken", "fgd_hen2", 3, 0, 4, 90.0F, "");
+		s.pause(20).hold("minecraft:air").say("Bare hands: the neck wrung. The head hangs loose, and the wings go");
+		s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.CHICKEN, -3, 0, 4), BodyPart.HEAD));
+		s.hit("fgd_hen0", 100.0F).pause(120);
+		s.hold("minecraft:iron_sword").say("A cut throat: it lies bleeding a moment, then flaps as the brain dies");
+		s.client(mc -> {
+			aim(mc, st.find(mc.level, EntityTypes.CHICKEN, 0, 0, 4), BodyPart.HEAD);
+			GoreSystems.suffering().forceNextDeath(Corpse.Kind.EXSANGUINATION, false);
+		});
+		s.hit("fgd_hen1", 100.0F).pause(150);
+		s.hold("minecraft:iron_axe").say("An axe to the neck: the headless chicken. It flaps hardest and longest, throwing blood");
+		s.client(mc -> {
+			aim(mc, st.find(mc.level, EntityTypes.CHICKEN, 3, 0, 4), BodyPart.HEAD);
+			GoreSystems.suffering().forceNextDeath(Corpse.Kind.DECAPITATION, false);
+		});
+		s.hit("fgd_hen2", 100.0F).pause(10);
+		s.client(mc -> chopAt(mc, BodyPart.HEAD)).pause(200);
+
+		s.summon(st, "chicken", "fgd_hen3", -1.5, 0, 2.5, 90.0F, "");
+		s.pause(20).hold("minecraft:iron_sword").say("Cut, not killed: feathers knocked out wet with blood, its own reddening round the wound");
+		s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.CHICKEN, -1.5, 0, 2.5), null));
+		s.hit("fgd_hen3", 1.5F).pause(40).hit("fgd_hen3", 1.0F).pause(60);
+		s.cmd("weather rain");
+		s.pause(20).say("In the rain the feathers go dark and slick, and the birds look half their size").pause(140);
+		s.cmd("weather clear");
+		s.say("Feathers lie where they fell, the bloody ones clumped. Walk through them and the dry ones lift").pause(80);
+	}
+
+	/**
+	 * A one-block-wide stair cut down into the ground ahead. A body that falls across the top step slumps over it and
+	 * goes down step by step to the bottom, as a dead weight does (with Fluid Gore on the server, the server moves it, so
+	 * everyone sees it there).
+	 */
+	private static void stairs(Script s, Stage st) {
+		s.say("A narrow stair, one block wide, cut down into the ground ahead");
+		s.cmd("fill " + st.block(-1, -5, 1) + " " + st.block(1, 1, 10) + " minecraft:stone");
+		s.cmd("fill " + st.block(0, 0, 1) + " " + st.block(0, 1, 1) + " minecraft:air");
+		s.cmd("fill " + st.block(0, -4, 2) + " " + st.block(0, 1, 10) + " minecraft:air");
+		for (int i = 0; i < 4; i++) {
+			int up = -1 - i;
+			if (up - 1 >= -4) {
+				s.cmd("fill " + st.block(0, -4, 2 + i) + " " + st.block(0, up - 1, 2 + i) + " minecraft:stone");
+			}
+
+			s.cmd("setblock " + st.block(0, up, 2 + i) + " minecraft:oak_stairs[facing=" + st.back() + "]");
+		}
+
+		s.summon(st, "sheep", "fgd_stairs_sheep", 0, 0, 2.05, 0.0F, "");
+		s.pause(30).hold("minecraft:iron_sword").say("A sheep at the top of the stair, killed where it stands");
+		s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.SHEEP, 0, 0, 2.05), null));
+		s.hit("fgd_stairs_sheep", 100.0F).pause(40);
+		s.say("Dead weight: half of it hangs over the step, so it slumps over the edge").pause(60);
+		s.say("and goes on down, thumping onto every step, smearing blood as it drags").pause(80);
+		s.summon(st, "pig", "fgd_stairs_pig", 0, 0, 2.05, 0.0F, "");
+		s.pause(20).hold("minecraft:iron_axe").say("A pig after it");
+		s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.PIG, 0, 0, 2.05), null));
+		s.hit("fgd_stairs_pig", 100.0F).pause(140);
+		s.say("They lie at the bottom, one on the other, where they came to rest").pause(80);
+		s.hold("minecraft:sponge").say("Cleaned up with a sponge");
+		s.client(mc -> {
+			for (Corpse corpse : new ArrayList<>(GoreSystems.suffering().corpses())) {
+				if (corpse.entity.distanceToSqr(mc.player) < 16.0 * 16.0) {
+					GoreSync.act(GoreAction.of(GoreAction.CLEAN, corpse.entity.getId(), 0L, mc.player.getEyePosition(), mc.player.getViewVector(1.0F), 0, 0.0F));
+				}
+			}
+		}).pause(40);
+	}
+
+	/**
 	 * Three bodies of three sizes rot side by side, a day skipped every second and a half (/time add, so this world's
 	 * day count moves on six weeks). Needs the Extreme gore level and Fluid Gore on the server (singleplayer).
 	 */
@@ -381,7 +458,7 @@ public final class Demos {
 			}).pause(6);
 		}
 
-		s.say("Bare, goose-pimpled skin, the feather pits showing").pause(40);
+		s.say("Bare, goose-pimpled skin, the feather pits showing: a skinny thing under all those feathers").pause(40);
 		s.hold("minecraft:iron_axe").say("Jointed: head, wings and legs off at the joints");
 		for (BodyPart part : BodyPart.values()) {
 			for (int i = 0; i < 3; i++) {
