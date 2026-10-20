@@ -114,13 +114,15 @@ public final class Burns {
 			}
 
 			Vec3 at = where(entity);
-			if (since > 0 && since < SMOULDER && RANDOM.nextFloat() < c * 0.25F * (1.0F - since / (float) SMOULDER)) {
+			// A body being cremated has its own fire, smoke and smouldering (see Cremation).
+			boolean cremated = GoreSystems.dismemberment().cremation().burning(id) || GoreSystems.dismemberment().cremation().burn(id) > 0.0F;
+			if (!cremated && since > 0 && since < SMOULDER && RANDOM.nextFloat() < c * 0.25F * (1.0F - since / (float) SMOULDER)) {
 				// Smouldering: thin smoke rising off the hide long after the flames are gone.
 				level.addParticle(ParticleTypes.SMOKE, at.x + (RANDOM.nextDouble() - 0.5) * entity.getBbWidth(), at.y,
 						at.z + (RANDOM.nextDouble() - 0.5) * entity.getBbWidth(), 0.0, 0.03, 0.0);
 			}
 
-			if (since == 0) {
+			if (since == 0 && !cremated) {
 				// A corpse's vanilla flames are hidden (they would stay where the entity was), so burn on the body itself.
 				if (entity.isOnFire() && GoreSystems.suffering().corpse(id) != null && RANDOM.nextFloat() < 0.6F) {
 					level.addParticle(ParticleTypes.FLAME, at.x + (RANDOM.nextDouble() - 0.5) * entity.getBbWidth(),

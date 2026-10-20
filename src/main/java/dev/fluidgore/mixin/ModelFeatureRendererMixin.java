@@ -7,6 +7,9 @@ import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.player.Injury;
 import dev.fluidgore.player.InjuryPose;
+import dev.fluidgore.ragdoll.Bends;
+import dev.fluidgore.ragdoll.Poser;
+import dev.fluidgore.ragdoll.RigPose;
 import dev.fluidgore.rot.Rot;
 import dev.fluidgore.rot.RotRenderer;
 import dev.fluidgore.suffer.BodyPose;
@@ -14,6 +17,8 @@ import dev.fluidgore.suffer.SufferPose;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.wound.BloodyWool;
 import dev.fluidgore.wound.Burns;
+import dev.fluidgore.wound.Cremation;
+import dev.fluidgore.wound.CremationRenderer;
 import dev.fluidgore.wound.WoundRenderer;
 import dev.fluidgore.wound.WoundSet;
 import dev.fluidgore.wound.Wounds;
@@ -31,7 +36,9 @@ import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.client.renderer.feature.ModelFeatureRenderer;
 import net.minecraft.client.renderer.feature.RenderTypeFeatureRenderer;
 import net.minecraft.util.Mth;
+import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
+
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -66,6 +73,11 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 	private final List<ModelPart> fluidgore$moved = new ArrayList<>();
 	@Unique
 	private final List<float[]> fluidgore$savedRotations = new ArrayList<>();
+	/** A ragdoll's bends for the model being drawn, and the poser's handle while its cut parts are swapped in. */
+	@Unique
+	private final Bends fluidgore$bends = new Bends();
+	@Unique
+	private @Nullable Object fluidgore$cut;
 
 	@Inject(
 			method = "prepareModel",
@@ -84,13 +96,28 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 		Injury injury = submit.model() instanceof HumanoidModel<?> ? state.getData(Injury.KEY) : null;
 		Rot rot = state.getData(Rot.KEY);
 		BloodyWool.Plumage plumage = submit.model() instanceof AdultChickenModel ? state.getData(BloodyWool.PLUMAGE) : null;
+		Cremation.Charred charred = state.getData(Cremation.KEY);
+		RigPose rig = state.getData(RigPose.KEY);
 		if ((mask == null || mask == 0) && pose == null && body == null && (wounds == null || wounds.brokenMask() == 0) && injury == null && rot == null
-				&& plumage == null) {
+				&& plumage == null && charred == null && rig == null) {
 			return;
 		}
 
 		Model<?> model = submit.model();
+		if (charred != null && charred.shorn() && model instanceof SheepFurModel) {
+			// The wool goes up first, in a flash: none of the fleece is left.
+			model.root().visible = false;
+			fluidgore$hidden.add(model.root());
+			return;
+		}
+
 		ModelPart[] parts = ModelParts.index(model);
+		Object posed = null;
+		if (rig != null) {
+			// Every part where its segment is; everything after this adds to that.
+			posed = Poser.apply(model, rig, this::fluidgore$save, fluidgore$bends);
+		}
+
 		if (plumage != null) {
 			fluidgore$skinny(model, parts, plumage);
 		}
@@ -114,7 +141,7 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 			InjuryPose.apply(parts, injury, state, this::fluidgore$save);
 		}
 
-		if (body != null) {
+		if (body != null && rig == null) {
 			// The head and each limb are free-swinging springs.
 			ModelParts.applyJoints(parts, body.joints(), this::fluidgore$save);
 		}
@@ -125,6 +152,64 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 
 		if (rot != null) {
 			fluidgore$rot(model, parts, rot);
+		}
+
+		if (charred != null) {
+			fluidgore$cremate(model, parts, charred);
+		}
+
+		if (posed != null) {
+			// For the draw itself the cut parts are split into their stretches; the wounds after it go by the bends.
+			Poser.cut(posed);
+			fluidgore$cut = posed;
+			Bends.begin(fluidgore$bends);
+		}
+	}
+
+	/**
+	 * A body in a fire: the heat shortens the muscles and draws the limbs in, forelegs folded back and hind legs drawn
+	 * up (an arm-raised boxer's crouch on a body that walks on two legs) and the head arched back; then the flesh burns
+	 * away and the trunk and limbs shrink down to the bones.
+	 */
+	@Unique
+	private void fluidgore$cremate(Model<?> model, ModelPart[] parts, Cremation.Charred charred) {
+		float flex = charred.flex();
+		float wasted = charred.wasted();
+		boolean upright = model instanceof HumanoidModel<?>;
+		ModelPart torso = ModelParts.torso(model);
+		if (torso != null && wasted > 0.0F) {
+			fluidgore$save(torso);
+			torso.xScale *= 1.0F - 0.3F * wasted;
+			torso.zScale *= 1.0F - 0.3F * wasted;
+			torso.yScale *= 1.0F - 0.06F * wasted;
+		}
+
+		for (int i = 0; i < ModelParts.LIMBS.length; i++) {
+			ModelPart limb = parts[ModelParts.LIMBS[i].ordinal()];
+			if (limb == null) {
+				continue;
+			}
+
+			fluidgore$save(limb);
+			boolean front = i < 2;
+			if (upright) {
+				limb.xRot -= (front ? 1.1F : 0.5F) * flex;
+			} else {
+				limb.xRot += (front ? 0.9F : -0.7F) * flex;
+			}
+
+			limb.xScale *= 1.0F - 0.45F * wasted;
+			limb.zScale *= 1.0F - 0.45F * wasted;
+		}
+
+		ModelPart head = parts[BodyPart.HEAD.ordinal()];
+		if (head != null) {
+			fluidgore$save(head);
+			head.xRot -= 0.4F * flex;
+			float skull = 1.0F - 0.15F * wasted;
+			head.xScale *= skull;
+			head.yScale *= skull;
+			head.zScale *= skull;
 		}
 	}
 
@@ -234,6 +319,7 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/model/Model;renderToBuffer(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;III)V", shift = At.Shift.AFTER)
 	)
 	private void fluidgore$afterDraw(ModelFeatureRenderer.Submit<?> submit, CallbackInfo ci) {
+		fluidgore$mend();
 		// Wounds go on the body model only (not armour sharing its state), not on ghostly see-through bodies or the
 		// block-breaking overlay, and while the parts are still posed and severed parts still hidden.
 		if (submit.state() instanceof LivingEntityRenderState state && submit.sheetedDecalPose() == null
@@ -244,6 +330,13 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 				// The rot goes under the wounds.
 				RotRenderer.draw(submit.model().root(), rot.days, rot.arid, rot.seed, poseStack, getVertexBuilder(WoundRenderer.renderType()),
 						submit.lightCoords(), submit.overlayCoords());
+			}
+
+			Cremation.Charred charred = state.getData(Cremation.KEY);
+			if (charred != null && id != null && submit.model() == ModelParts.drawn(id)) {
+				// The fire's work goes under the wounds too.
+				CremationRenderer.draw(submit.model().root(), charred, ModelParts.torso(submit.model()), poseStack,
+						getVertexBuilder(WoundRenderer.renderType()), submit.lightCoords(), submit.overlayCoords());
 			}
 
 			WoundSet wounds = state.getData(Wounds.KEY);
@@ -352,7 +445,18 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 	}
 
 	@Unique
+	private void fluidgore$mend() {
+		if (fluidgore$cut != null) {
+			Poser.mend(fluidgore$cut);
+			fluidgore$cut = null;
+		}
+	}
+
+	@Unique
 	private void fluidgore$restore() {
+		fluidgore$mend();
+		Bends.end();
+		fluidgore$bends.clear();
 		for (ModelPart part : fluidgore$hidden) {
 			part.visible = true;
 		}

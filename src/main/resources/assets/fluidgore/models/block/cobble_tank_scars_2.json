@@ -1,0 +1,21 @@
+{
+  "textures": {
+    "particle": "minecraft:block/furnace_side",
+    "scars": "fluidgore:block/cobble_tank_scars_2"
+  },
+  "elements": [
+    {
+      "__comment": "Scars over every face, a hair proud of the casing.",
+      "from": [-0.01, -0.01, -0.01],
+      "to": [16.01, 16.01, 16.01],
+      "faces": {
+        "down": {"uv": [0, 0, 16, 16], "texture": "#scars", "cullface": "down"},
+        "up": {"uv": [0, 0, 16, 16], "texture": "#scars", "cullface": "up"},
+        "north": {"uv": [0, 0, 16, 16], "texture": "#scars", "cullface": "north"},
+        "south": {"uv": [0, 0, 16, 16], "texture": "#scars", "cullface": "south"},
+        "west": {"uv": [0, 0, 16, 16], "texture": "#scars", "cullface": "west"},
+        "east": {"uv": [0, 0, 16, 16], "texture": "#scars", "cullface": "east"}
+      }
+    }
+  ]
+}

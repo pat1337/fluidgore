@@ -4,6 +4,7 @@ import dev.fluidgore.GoreSystems;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.mixin.ModelPartAccessor;
+import dev.fluidgore.ragdoll.Bends;
 import dev.fluidgore.suffer.BodyPose;
 import java.util.List;
 import net.minecraft.client.model.geom.ModelPart;
@@ -42,6 +43,11 @@ public final class ModelHit {
 		void visit(ModelPart part, Matrix4f pose, @Nullable BodyPart bodyPart);
 	}
 
+	/** Visits each stretch of a part's blocks: the stretch's bounds along {@code axis} and its pose. */
+	private interface Stretches {
+		void visit(int axis, float lo, float hi, Matrix4f pose);
+	}
+
 	private ModelHit() {
 	}
 
@@ -55,13 +61,18 @@ public final class ModelHit {
 			pose.invert(inverse);
 			inverse.transformPosition(origin.set(0.0F));
 			inverse.transformDirection(direction.set((float) dir.x, (float) dir.y, (float) dir.z));
-			for (ModelPart.Cube cube : ((ModelPartAccessor) (Object) part).fluidgore$getCubes()) {
-				double limit = best[0] != null ? best[0].distance() : reach;
-				Result hit = slab(part, cube, origin, direction, limit, pose, bodyPart, from, dir);
-				if (hit != null) {
-					best[0] = hit;
+			stretches(posed.bends(), part, pose, (axis, lo, hi, stretchPose) -> {
+				stretchPose.invert(inverse);
+				inverse.transformPosition(origin.set(0.0F));
+				inverse.transformDirection(direction.set((float) dir.x, (float) dir.y, (float) dir.z));
+				for (ModelPart.Cube cube : ((ModelPartAccessor) (Object) part).fluidgore$getCubes()) {
+					double limit = best[0] != null ? best[0].distance() : reach;
+					Result hit = slab(part, cube, axis, lo, hi, origin, direction, limit, stretchPose, bodyPart, from, dir);
+					if (hit != null) {
+						best[0] = hit;
+					}
 				}
-			}
+			});
 		});
 		return best[0];
 	}
@@ -169,10 +180,32 @@ public final class ModelHit {
 		return out[0];
 	}
 
-	private static @Nullable Result slab(ModelPart part, ModelPart.Cube cube, Vector3f o, Vector3f d, double limit, Matrix4f pose,
-			@Nullable BodyPart bodyPart, Vec3 from, Vec3 dir) {
+	/** Each stretch of a part as drawn: the whole part, or each piece of a part a ragdoll has cut at a joint. */
+	private static void stretches(@Nullable Bends bends, ModelPart part, Matrix4f pose, Stretches visitor) {
+		Bends.Split split = bends != null ? bends.of(part) : null;
+		if (split == null) {
+			visitor.visit(0, -Float.MAX_VALUE, Float.MAX_VALUE, pose);
+			return;
+		}
+
+		float[] bounds = split.cut().bounds();
+		for (int j = 0; j + 1 < bounds.length; j++) {
+			visitor.visit(split.cut().axis(), bounds[j], bounds[j + 1], new Matrix4f(pose).mul(split.toSegment()[j]));
+		}
+	}
+
+	private static @Nullable Result slab(ModelPart part, ModelPart.Cube cube, int cutAxis, float lo, float hi, Vector3f o, Vector3f d, double limit,
+			Matrix4f pose, @Nullable BodyPart bodyPart, Vec3 from, Vec3 dir) {
 		float[] min = {cube.minX / 16.0F, cube.minY / 16.0F, cube.minZ / 16.0F};
 		float[] max = {cube.maxX / 16.0F, cube.maxY / 16.0F, cube.maxZ / 16.0F};
+		float whole0 = min[cutAxis];
+		float whole1 = max[cutAxis];
+		min[cutAxis] = Math.max(min[cutAxis], lo / 16.0F);
+		max[cutAxis] = Math.min(max[cutAxis], hi / 16.0F);
+		if (max[cutAxis] <= min[cutAxis]) {
+			return null;
+		}
+
 		double near = Double.NEGATIVE_INFINITY;
 		double far = Double.POSITIVE_INFINITY;
 		int axis = -1;
@@ -204,8 +237,8 @@ public final class ModelHit {
 			}
 		}
 
-		// Starting inside a cube (the camera inside a mob) gives no face to mark.
-		if (axis < 0 || near < 0.0 || near > limit) {
+		// Starting inside a cube (the camera inside a mob) gives no face to mark. A stretch's cut end is inside the body: no face.
+		if (axis < 0 || near < 0.0 || near > limit || axis == cutAxis && (sign < 0 ? min[axis] > whole0 : max[axis] < whole1)) {
 			return null;
 		}
 
@@ -222,7 +255,14 @@ public final class ModelHit {
 	 * {@code ModelPart.translateAndRotate}. Severed parts are skipped with everything attached to them.
 	 */
 	private static void walk(LivingEntity entity, ModelParts.Posed posed, Vec3 relativeTo, Visitor visitor) {
-		LivingEntityRenderState state = posed.state();
+		Matrix4f root = root(entity, posed.state(), relativeTo);
+		ModelPart[] index = ModelParts.index(posed.model());
+		int missing = GoreSystems.dismemberment().missingMask(entity.getId());
+		visit(posed.model().root(), root, null, index, missing, posed.bends(), visitor);
+	}
+
+	/** The model's root transform as {@code LivingEntityRenderer} draws it, relative to {@code relativeTo}. */
+	public static Matrix4f root(LivingEntity entity, LivingEntityRenderState state, Vec3 relativeTo) {
 		Matrix4f root = new Matrix4f().translation((float) (state.x - relativeTo.x), (float) (state.y - relativeTo.y), (float) (state.z - relativeTo.z));
 		root.scale(state.scale);
 		BodyPose body = state.getData(BodyPose.KEY);
@@ -240,12 +280,11 @@ public final class ModelHit {
 
 		root.scale(-1.0F, -1.0F, 1.0F);
 		root.translate(0.0F, -MODEL_Y_OFFSET, 0.0F);
-		ModelPart[] index = ModelParts.index(posed.model());
-		int missing = GoreSystems.dismemberment().missingMask(entity.getId());
-		visit(posed.model().root(), root, null, index, missing, visitor);
+		return root;
 	}
 
-	private static void visit(ModelPart part, Matrix4f parent, @Nullable BodyPart bodyPart, ModelPart[] index, int missing, Visitor visitor) {
+	private static void visit(ModelPart part, Matrix4f parent, @Nullable BodyPart bodyPart, ModelPart[] index, int missing, @Nullable Bends bends,
+			Visitor visitor) {
 		if (!part.visible) {
 			return;
 		}
@@ -274,8 +313,11 @@ public final class ModelHit {
 			visitor.visit(part, pose, here);
 		}
 
+		Bends.Split split = bends != null ? bends.of(part) : null;
 		for (ModelPart child : ((ModelPartAccessor) (Object) part).fluidgore$getChildren().values()) {
-			visit(child, pose, here, index, missing, visitor);
+			Integer segment = split != null ? split.childSegment().get(child) : null;
+			Matrix4f childParent = segment != null && segment > 0 ? new Matrix4f(pose).mul(split.toSegment()[segment]) : pose;
+			visit(child, childParent, here, index, missing, bends, visitor);
 		}
 	}
 }

@@ -20,7 +20,8 @@
 		"MinecraftMixin",
 		"MobSoundInvoker",
 		"ModelFeatureRendererMixin",
-		"ModelPartAccessor"
+		"ModelPartAccessor",
+		"SoundEngineMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

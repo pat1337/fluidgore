@@ -1,5 +1,6 @@
 package dev.fluidgore.dismember;
 
+import dev.fluidgore.blood.BloodSupply;
 import java.util.HashMap;
 import dev.fluidgore.GoreSystems;
 import dev.fluidgore.mixin.ModelPartAccessor;
@@ -14,6 +15,7 @@ import dev.fluidgore.trigger.EntityFilter;
 import dev.fluidgore.trigger.Fate;
 import dev.fluidgore.wound.BloodyWool;
 import dev.fluidgore.wound.Burns;
+import dev.fluidgore.wound.Cremation;
 import dev.fluidgore.wound.WoundSet;
 import dev.fluidgore.wound.Wounds;
 import it.unimi.dsi.fastutil.ints.Int2IntMap;
@@ -56,6 +58,7 @@ public final class Dismemberment {
 	private final Giblets giblets = new Giblets();
 	private final Feathers feathers = new Feathers();
 	private final Burns burns = new Burns();
+	private final Cremation cremation = new Cremation();
 	private final BloodyWool wool = new BloodyWool();
 	private final Butchery butchery = new Butchery();
 	/** Bodies torn to pieces by a blast: not drawn at all any more. */
@@ -72,6 +75,10 @@ public final class Dismemberment {
 
 	public Butchery butchery() {
 		return butchery;
+	}
+
+	public Cremation cremation() {
+		return cremation;
 	}
 
 	public Burns burns() {
@@ -476,6 +483,7 @@ public final class Dismemberment {
 		giblets.tick(level, blood);
 		feathers.tick(level, blood);
 		burns.tick(level, blood);
+		cremation.tick(level, blood);
 		wool.tick(level);
 		if (tick % 8 != 0 || missing.isEmpty()) {
 			return;
@@ -490,7 +498,9 @@ public final class Dismemberment {
 			for (BodyPart part : BodyPart.values()) {
 				if ((entry.getIntValue() & part.bit()) != 0) {
 					Vec3 stump = new Vec3(living.getX(), living.getY() + living.getBbHeight() * part.stumpHeight, living.getZ());
+					BloodSupply.begin(living);
 					BloodEmitter.drip(blood, stump, EntityFilter.bloodColor(living), 0.01F);
+					BloodSupply.end();
 				}
 			}
 		}
@@ -502,6 +512,7 @@ public final class Dismemberment {
 		vaporized.remove(entityId);
 		wounds.forget(entityId);
 		burns.forget(entityId);
+		cremation.forget(entityId);
 		wool.forget(entityId);
 		butchery.forget(entityId);
 	}
@@ -511,6 +522,7 @@ public final class Dismemberment {
 		vaporized.remove(entityId);
 		wounds.forget(entityId);
 		burns.forget(entityId);
+		cremation.forget(entityId);
 		wool.forget(entityId);
 		butchery.forget(entityId);
 	}
@@ -523,6 +535,7 @@ public final class Dismemberment {
 		feathers.clear();
 		vaporized.clear();
 		burns.clear();
+		cremation.clear();
 		wool.clear();
 		butchery.clear();
 		parts.clear();

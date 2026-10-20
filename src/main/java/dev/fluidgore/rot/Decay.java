@@ -148,7 +148,9 @@ public final class Decay {
 		long clock = level.getOverworldClockTime();
 		for (Entity e : level.entitiesForRendering()) {
 			if (!(e instanceof LivingEntity entity) || entity.isAlive() || entity instanceof Player || entity.isRemoved()
-					|| EntityFilter.isBone(entity) || !EntityFilter.affects(entity)) {
+					|| EntityFilter.isBone(entity) || !EntityFilter.affects(entity)
+					// Burnt to char and bone: nothing left to rot.
+					|| GoreSystems.dismemberment().cremation().bare(entity.getId()) > 0.3F) {
 				continue;
 			}
 

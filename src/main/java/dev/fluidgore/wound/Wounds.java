@@ -1,5 +1,6 @@
 package dev.fluidgore.wound;
 
+import dev.fluidgore.blood.BloodSupply;
 import dev.fluidgore.GoreSystems;
 import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.blood.BloodWorld;
@@ -331,41 +332,52 @@ public final class Wounds {
 				continue;
 			}
 
-			// The living clot: the drip thins out after the last blow and stops, so a wounded survivor does not pool forever.
-			float flow = 1.0F;
-			if (corpse == null) {
-				set.quiet += 5;
-				flow = 1.0F - set.quiet / (GoreConfig.get().woundClotSeconds * 20.0F);
-				if (flow <= 0.0F) {
-					continue;
-				}
+			// Its own blood, as much as it has left to give.
+			BloodSupply.begin(corpse != null ? corpse.entity : (LivingEntity) entity);
+			try {
+				bleed(level, blood, set, corpse, entity, base, yaw, puddles);
+			} finally {
+				BloodSupply.end();
+			}
+		}
+	}
+
+	/** One body's wounds bleeding for this step. */
+	private void bleed(ClientLevel level, BloodWorld blood, WoundSet set, @Nullable Corpse corpse, @Nullable Entity entity, Vec3 base, float yaw, float puddles) {
+		// The living clot: the drip thins out after the last blow and stops, so a wounded survivor does not pool forever.
+		float flow = 1.0F;
+		if (corpse == null) {
+			set.quiet += 5;
+			flow = 1.0F - set.quiet / (GoreConfig.get().woundClotSeconds * 20.0F);
+			if (flow <= 0.0F) {
+				return;
+			}
+		}
+
+		if (set.trauma > 0.8F && RANDOM.nextFloat() < Math.min(0.6F, (set.trauma - 0.8F) * 0.35F) * flow) {
+			// Beaten without the skin giving way: it bleeds inside, and the blood comes from the mouth and nose.
+			Vec3 mouth = mouth(corpse != null ? corpse.entity : (LivingEntity) entity);
+			if (mouth != null) {
+				BloodEmitter.drip(blood, mouth, set.blood, 0.004F * Math.min(3.0F, set.trauma) * puddles);
+			}
+		}
+
+		for (int i = 0; i < set.count; i++) {
+			float severity = set.severity[i];
+			if (severity < 0.25F || Float.isNaN(set.ox[i]) || RANDOM.nextFloat() > severity * 0.6F * flow) {
+				continue;
 			}
 
-			if (set.trauma > 0.8F && RANDOM.nextFloat() < Math.min(0.6F, (set.trauma - 0.8F) * 0.35F) * flow) {
-				// Beaten without the skin giving way: it bleeds inside, and the blood comes from the mouth and nose.
-				Vec3 mouth = mouth(corpse != null ? corpse.entity : (LivingEntity) entity);
-				if (mouth != null) {
-					BloodEmitter.drip(blood, mouth, set.blood, 0.004F * Math.min(3.0F, set.trauma) * puddles);
+			Vec3 offset = new Vec3(set.ox[i], set.oy[i], set.oz[i]).yRot((set.yaw[i] - yaw) * Mth.DEG_TO_RAD);
+			Vec3 at = base.add(offset);
+			if (set.flesh.rots()) {
+				// A rotting wound seeps slowly, and now and then a maggot drops out of a deep one.
+				BloodEmitter.drip(blood, at, set.blood, 0.002F * severity * puddles);
+				if (severity >= 0.5F && RANDOM.nextFloat() < 0.25F) {
+					level.addParticle(MAGGOT, at.x, at.y, at.z, 0.0, 0.0, 0.0);
 				}
-			}
-
-			for (int i = 0; i < set.count; i++) {
-				float severity = set.severity[i];
-				if (severity < 0.25F || Float.isNaN(set.ox[i]) || RANDOM.nextFloat() > severity * 0.6F * flow) {
-					continue;
-				}
-
-				Vec3 offset = new Vec3(set.ox[i], set.oy[i], set.oz[i]).yRot((set.yaw[i] - yaw) * Mth.DEG_TO_RAD);
-				Vec3 at = base.add(offset);
-				if (set.flesh.rots()) {
-					// A rotting wound seeps slowly, and now and then a maggot drops out of a deep one.
-					BloodEmitter.drip(blood, at, set.blood, 0.002F * severity * puddles);
-					if (severity >= 0.5F && RANDOM.nextFloat() < 0.25F) {
-						level.addParticle(MAGGOT, at.x, at.y, at.z, 0.0, 0.0, 0.0);
-					}
-				} else {
-					BloodEmitter.drip(blood, at, set.blood, 0.004F * severity * puddles);
-				}
+			} else {
+				BloodEmitter.drip(blood, at, set.blood, 0.004F * severity * puddles);
 			}
 		}
 	}
@@ -442,7 +454,7 @@ public final class Wounds {
 	}
 
 	/** The front underside of the head as posed now, or null if the model has no head (or it is gone). */
-	private static @Nullable Vec3 mouth(LivingEntity entity) {
+	public static @Nullable Vec3 mouth(LivingEntity entity) {
 		ModelParts.Posed posed = ModelParts.pose(entity);
 		Vec3 head = posed == null ? null : ModelHit.centre(entity, posed, BodyPart.HEAD);
 		if (head == null || (GoreSystems.dismemberment().missingMask(entity.getId()) & BodyPart.HEAD.bit()) != 0) {

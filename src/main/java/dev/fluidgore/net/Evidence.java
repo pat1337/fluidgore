@@ -149,6 +149,8 @@ public final class Evidence {
 			WoundCodec.write(wounds, buf);
 		}
 
+		// Last, so a game from before cremation reads the rest and stops short of it.
+		d.cremation().write(id, buf);
 		return ByteBufUtil.getBytes(buf);
 	}
 
@@ -181,6 +183,10 @@ public final class Evidence {
 				if (posed != null) {
 					wounds = WoundCodec.read(buf, posed.model(), posed.model().root());
 				}
+			}
+
+			if (buf.readableBytes() >= 10) {
+				d.cremation().read(entity, buf);
 			}
 
 			d.restoreMissing(id, missing);

@@ -8,6 +8,7 @@ import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.player.Injury;
 import dev.fluidgore.player.InjuryPose;
+import dev.fluidgore.ragdoll.RigPose;
 import dev.fluidgore.rot.Rot;
 import dev.fluidgore.suffer.BodyPose;
 import dev.fluidgore.suffer.Corpse;
@@ -15,6 +16,7 @@ import dev.fluidgore.suffer.Ragdoll;
 import dev.fluidgore.suffer.SufferPose;
 import dev.fluidgore.wound.BloodyWool;
 import dev.fluidgore.wound.Burns;
+import dev.fluidgore.wound.Cremation;
 import dev.fluidgore.wound.Wounds;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -27,6 +29,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.animal.chicken.Chicken;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -40,6 +43,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class LivingEntityRendererMixin {
 	@Shadow
 	protected EntityModel model;
+	@Unique
+	private static final float[] NO_JOINTS = new float[Ragdoll.JOINTS];
 
 	@Inject(
 			method = "extractRenderState(Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;F)V",
@@ -74,6 +79,14 @@ public abstract class LivingEntityRendererMixin {
 			}
 		}
 
+		// Burning: the feathers singe off first, leaving the bird skinny and bare as a plucked one.
+		Cremation.Charred charred = GoreSystems.dismemberment().cremation().look(entity.getId());
+		state.setData(Cremation.KEY, charred);
+		if (charred != null && entity instanceof Chicken) {
+			float singed = Math.min(1.0F, charred.bare() * 6.0F);
+			plumage = new BloodyWool.Plumage(Math.max(singed, plumage == null ? 0.0F : plumage.plucked()), plumage == null ? 0.0F : plumage.wet());
+		}
+
 		state.setData(BloodyWool.PLUMAGE, plumage);
 
 		// Rot discolours it on top of that.
@@ -89,6 +102,7 @@ public abstract class LivingEntityRendererMixin {
 		state.setData(Injury.KEY, GoreSystems.suffering().corpse(entity.getId()) == null ? Injury.of(entity) : null);
 
 		Corpse corpse = GoreSystems.suffering().corpse(entity.getId());
+		state.setData(RigPose.KEY, null);
 		if (corpse != null) {
 			Ragdoll body = corpse.body;
 			// The ragdoll does its own falling over; vanilla's scripted tip-over stays off.
@@ -96,11 +110,19 @@ public abstract class LivingEntityRendererMixin {
 			// Vanilla draws the flames at the entity's real spot, not where the ragdoll has the body: they hang in the air.
 			// Burns puts flame particles on the body itself.
 			state.displayFireAnimation = false;
-			state.bodyRot = body.yaw(partialTicks);
 			state.yRot = 0.0F;
 			state.xRot = 0.0F;
-			state.setData(BodyPose.KEY, new BodyPose(body.x(partialTicks) - state.x, body.y(partialTicks) - state.y,
-					body.z(partialTicks) - state.z, body.roll(partialTicks), body.joints(partialTicks)));
+			if (corpse.rig != null) {
+				// Articulated: drawn unturned from the rig's own origin, every part posed from its segment.
+				RigPose rig = corpse.rig.pose(partialTicks, state.x, state.y, state.z);
+				state.setData(RigPose.KEY, rig);
+				state.bodyRot = 180.0F;
+				state.setData(BodyPose.KEY, new BodyPose(0.0, 0.0, 0.0, 0.0F, NO_JOINTS));
+			} else {
+				state.bodyRot = body.yaw(partialTicks);
+				state.setData(BodyPose.KEY, new BodyPose(body.x(partialTicks) - state.x, body.y(partialTicks) - state.y,
+						body.z(partialTicks) - state.z, body.roll(partialTicks), body.joints(partialTicks)));
+			}
 			// It went down at once: no walking legs, only what the dying body does itself.
 			state.walkAnimationSpeed = 0.0F;
 			state.setData(SufferPose.CLOCK, corpse.age + partialTicks);
@@ -176,9 +198,11 @@ public abstract class LivingEntityRendererMixin {
 		}
 
 		SufferPose pose = state.getData(SufferPose.KEY);
-		if (pose == null) {
+		if (pose == null || state.getData(RigPose.KEY) != null) {
+			// An articulated body moves its own segments: no whole-body shivering on top.
 			return;
 		}
+
 
 		Float clock = state.getData(SufferPose.CLOCK);
 		float t = clock != null ? clock : state.ageInTicks;

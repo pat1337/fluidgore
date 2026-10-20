@@ -109,6 +109,11 @@ public final class CorpseStrike {
 	 * through a wound that is already as deep as it can get takes that part off.
 	 */
 	public static void strike(ClientLevel level, BloodWorld blood, Corpse corpse, Vec3 eye, Vec3 look, Weapon weapon, float damage) {
+		if (GoreSystems.dismemberment().cremation().strike(level, blood, corpse, eye, look, weapon, damage)) {
+			// Burnt: the char comes off it, or the bones break (see Cremation). Nothing bleeds, nothing is cut.
+			return;
+		}
+
 		LivingEntity entity = corpse.entity;
 		Ragdoll body = corpse.body;
 		boolean blade = weapon.cuts();
@@ -174,7 +179,7 @@ public final class CorpseStrike {
 	}
 
 	/** The body's box: the entity's own while it is upright, lying flat once it has tipped over. */
-	private static AABB box(Corpse corpse) {
+	public static AABB box(Corpse corpse) {
 		Ragdoll body = corpse.body;
 		LivingEntity entity = corpse.entity;
 		float lying = Math.abs(Mth.sin(body.roll));

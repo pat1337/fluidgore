@@ -2,6 +2,9 @@ package dev.fluidgore.dismember;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import dev.fluidgore.mixin.ModelPartAccessor;
+import dev.fluidgore.ragdoll.Bends;
+import dev.fluidgore.ragdoll.Poser;
+import dev.fluidgore.ragdoll.RigPose;
 import dev.fluidgore.suffer.BodyPose;
 import dev.fluidgore.suffer.Ragdoll;
 import dev.fluidgore.wound.WoundSet;
@@ -145,7 +148,7 @@ public final class ModelParts {
 
 
 	/** An entity's shared model, posed for that entity right now, with the render state used to pose it. */
-	public record Posed(EntityModel<?> model, LivingEntityRenderState state, LivingEntityRenderer<?, ?, ?> renderer) {
+	public record Posed(EntityModel<?> model, LivingEntityRenderState state, LivingEntityRenderer<?, ?, ?> renderer, @Nullable Bends bends) {
 	}
 
 	/**
@@ -173,8 +176,13 @@ public final class ModelParts {
 		}
 
 		model.setupAnim(state);
+		Bends bends = null;
+		RigPose rig = state.getData(RigPose.KEY);
 		BodyPose body = state.getData(BodyPose.KEY);
-		if (body != null) {
+		if (rig != null) {
+			bends = new Bends();
+			Poser.apply(model, rig, null, bends);
+		} else if (body != null) {
 			applyJoints(index(model), body.joints(), null);
 		}
 
@@ -183,7 +191,7 @@ public final class ModelParts {
 			applyFractures(model, index(model), wounds, null);
 		}
 
-		return new Posed(model, state, livingRenderer);
+		return new Posed(model, state, livingRenderer, bends);
 	}
 
 	/** The partial tick of the frame being drawn, which places and poses entities between ticks. */

@@ -1,6 +1,7 @@
 package dev.fluidgore.suffer;
 
 import dev.fluidgore.dismember.ModelParts;
+import dev.fluidgore.ragdoll.Rig;
 import dev.fluidgore.trigger.Fate;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.LivingEntity;
@@ -76,8 +77,10 @@ public final class Corpse {
 	public boolean vanilla;
 	/** The vanilla fall has hit the ground. */
 	boolean landed;
-	/** Vanilla death: the side it goes over onto, +1 its right, -1 its left: away from the killing blow. */
-	float fallSide = 1.0F;
+	/** The side it goes over onto, +1 its right, -1 its left: away from the killing blow. */
+	public float fallSide = 1.0F;
+	/** Age it started going over at (articulated bodies). */
+	int toppledAt;
 	/** Vanilla death: ticks it stays on buckling legs before it goes over (an axe hacked into it). */
 	int fallDelay;
 	/** Vanilla death: degrees it turns as it goes over, along the swing (a sword). */
@@ -86,6 +89,8 @@ public final class Corpse {
 	@Nullable Vec3 slash;
 
 	public final Ragdoll body;
+	/** The articulated body, once it has one (see {@code ragdoll/Rigging}); then it moves {@link #body}. */
+	public @Nullable Rig rig;
 	/** This body's own dice for its death, seeded by the killing blow: the same on every client (see Fate). */
 	public final RandomSource random;
 	boolean toppled;

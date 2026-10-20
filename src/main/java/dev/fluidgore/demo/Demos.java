@@ -27,6 +27,9 @@ import org.jspecify.annotations.Nullable;
  */
 public final class Demos {
 	public static final List<Demo> ALL = List.of(
+			new Demo("tank", "2.16.0", "The Cobble Tank, for real: a pinhole leak hisses and frosts and costs you your hearing, a cracked tank tears loose and flies, and a full one (600 litres at 10,000 psi, about 21 kg of TNT) lit with redstone 30 blocks off kills to 8 m, bursts eardrums to 15, blows a gate open and the glass out", true, Demos::tank),
+			new Demo("roadster", "2.15.0", "A 2x2 of TNT as the Roadster's pressure vessel (200 litres at 10,000 psi, about 7 kg of TNT) with animals in rings round it: shredded, torn apart, lungs burst, fragments driven in, each by the real overpressure where it stood; 9 blocks off, you are deafened and your ears ring", true, Demos::roadster),
+			new Demo("cremation", "2.14.0", "A chicken, a sheep and a cow set alight where they lie: each burns on its own fat, the heavier the longer and smokier, down to the bone; the cow is put out half burnt, its char knocked off and its bones broken up into ash", true, Demos::cremation),
 			new Demo("chickens", "2.13.0", "Chickens killed three ways (wrung neck, cut throat, beheaded) flap themselves to death; feathers fly bloody, a hen in the rain goes dark and slick, and the feathers lie where they fell", false, Demos::chickens),
 			new Demo("stairs", "2.13.0", "A sheep and a pig killed at the top of a narrow stair: the bodies slump over the edge and tumble down step by step", true, Demos::stairs),
 			new Demo("decay", "2.12.0", "A chicken, a pig and a cow left to rot (Extreme): six weeks in a minute, day by day, from bloat to bones", false, Demos::decay),
@@ -571,6 +574,66 @@ public final class Demos {
 	}
 
 	/** Set alight where they stand: they char as they burn, writhe, and lie charred and smoking. */
+	/**
+	 * Three bodies of three weights burnt where they fell: a chicken, a sheep and a cow, lit with a flint and steel. The
+	 * cow is put out with a splash of water half burnt; when the others are bones, its char is knocked off and all three
+	 * skeletons are broken up.
+	 */
+	private static void cremation(Script s, Stage st) {
+		s.summon(st, "chicken", "fgd_pyre_chicken", -3.5, 0, 4, 90.0F, "");
+		s.summon(st, "sheep", "fgd_pyre_sheep", 0, 0, 4, 90.0F, "");
+		s.summon(st, "cow", "fgd_pyre_cow", 4, 0, 4, 90.0F, "");
+		s.pause(20).hold("minecraft:iron_sword").say("A chicken, a sheep and a cow, killed where they stand");
+		s.hit("fgd_pyre_chicken", 100.0F).hit("fgd_pyre_sheep", 100.0F).hit("fgd_pyre_cow", 100.0F).pause(60);
+		s.hold("minecraft:flint_and_steel").say("Fire put to each with a flint and steel: the feathers and the wool go up first");
+		s.client(mc -> {
+			for (Corpse corpse : GoreSystems.suffering().corpses()) {
+				GoreSync.act(GoreAction.of(GoreAction.IGNITE, corpse.entity.getId(), 0L, mc.player.getEyePosition(), mc.player.getViewVector(1.0F), 0, 0.0F));
+			}
+		}).pause(120);
+		s.say("The fat has caught: they burn on their own now. The heavier the body, the bigger the fire and the smoke").pause(220);
+		s.say("The chicken is bones already. The heat draws the limbs in, like a boxer's").pause(300);
+		s.say("Put out early: water on the cow, and it stays as it was, charred");
+		s.cmd("fill " + st.block(3, 0, 3) + " " + st.block(5, 0, 5) + " minecraft:water replace air").pause(5);
+		s.cmd("fill " + st.block(2, 0, 2) + " " + st.block(6, 1, 6) + " minecraft:air replace water").pause(10);
+		s.cmd("fill " + st.block(2, 0, 2) + " " + st.block(6, 1, 6) + " minecraft:air replace water").pause(400);
+		s.say("The sheep has burnt to the bone: black first, then grey, then white").pause(140);
+		s.hold("minecraft:stone_shovel").say("Hit the charred cow: the char comes off the bone in black crumbs");
+		for (int i = 0; i < 6; i++) {
+			s.client(mc -> beatPyre(mc, EntityTypes.COW)).pause(10);
+		}
+
+		s.say("Then the bones break: the legs, the skull, the ribs, until there is only ash");
+		for (int i = 0; i < 14; i++) {
+			s.client(mc -> beatPyre(mc, EntityTypes.COW)).pause(8);
+		}
+
+		for (int i = 0; i < 7; i++) {
+			s.client(mc -> beatPyre(mc, EntityTypes.SHEEP)).pause(8);
+		}
+
+		for (int i = 0; i < 7; i++) {
+			s.client(mc -> beatPyre(mc, EntityTypes.CHICKEN)).pause(8);
+		}
+
+		s.say("Cleared away. Bones and char never drag at your legs like a carcass does").pause(100);
+	}
+
+	/** A blunt blow, through GoreSync, on the burnt body of {@code type} nearest the player. */
+	private static void beatPyre(Minecraft mc, EntityType<?> type) {
+		for (Corpse corpse : GoreSystems.suffering().corpses()) {
+			if (corpse.entity.getType() != type || GoreSystems.dismemberment().vaporized(corpse.entity.getId())) {
+				continue;
+			}
+
+			Vec3 centre = CorpseStrike.centre(corpse);
+			Vec3 eye = centre.add(mc.player.position().subtract(centre).multiply(1.0, 0.0, 1.0).normalize().scale(1.2)).add(0.0, 1.0, 0.0);
+			lookAt(mc, centre);
+			GoreSync.act(GoreAction.of(GoreAction.STRIKE, corpse.entity.getId(), 0L, eye, centre.subtract(eye).normalize(), Weapon.BLUNT.ordinal(), 5.0F));
+			return;
+		}
+	}
+
 	private static void burnt(Script s, Stage st) {
 		s.summon(st, "chicken", "fgd_chicken", -1, 0, 3, 90.0F, "");
 		s.summon(st, "pig", "fgd_pig", 1.5, 0, 3.5, 90.0F, "");
@@ -608,6 +671,53 @@ public final class Demos {
 		}
 
 		s.say("When it goes, it pops: head, legs and scraps to kick around").pause(500);
+	}
+
+	/**
+	 * The tank block. A pinhole leak 6 blocks ahead, its crack towards the player: it hisses and frosts, and standing by it
+	 * costs hearing. A cracked tank 20 ahead and 15 to the right tears loose and flies off away from the player. Then a full tank 30 ahead,
+	 * lit with redstone: cows at 3, 7 and 12 m from it (shredded, killed, hurt), a gate 18 m to its side and a row of glass
+	 * 20 m beyond it; the player, 30 m off, is only deafened.
+	 */
+	private static void tank(Script s, Stage st) {
+		Vec3 back = st.at(0, 0, -1).subtract(st.at(0, 0, 0));
+		// The crack faces the player, so the jet comes their way and the thrust pushes the tank away from them.
+		String towards = String.format(java.util.Locale.ROOT, "JetX:%.0ff,JetY:0f,JetZ:%.0ff", back.x, back.z);
+		s.say("The Cobble Tank: TNT with cobblestone on four sides. 600 litres of air at 10,000 psi");
+		s.cmd("setblock " + st.block(-4, 0, 6) + " fluidgore:cobble_tank[leak=pinhole,scars=3]{Damage:0.6f,Crack:0.05f," + towards + "}");
+		s.pause(20).say("A pinhole: it hisses for minutes, frost grows at the crack. Standing this close, your hearing goes");
+		s.pause(140);
+		s.cmd("setblock " + st.block(15, 0, 20) + " fluidgore:cobble_tank[leak=cracked,scars=3]{Damage:0.8f,Crack:0.6f," + towards + "}");
+		s.say("A cracked fitting: 5 kN of thrust on a 400 kg tank. It tears loose and flies");
+		s.pause(120);
+		s.cmd("setblock " + st.block(0, 0, 30) + " fluidgore:cobble_tank");
+		s.summon(st, "cow", "fgd_tank_cow", 0.5, 0, 33.5, 90.0F, "");
+		s.summon(st, "cow", "fgd_tank_cow2", 7.5, 0, 30.5, 0.0F, "");
+		s.summon(st, "cow", "fgd_tank_cow3", -12.0, 0, 30.5, 45.0F, "");
+		s.cmd("setblock " + st.block(-18, 0, 30) + " minecraft:oak_fence_gate");
+		s.cmd("fill " + st.block(-6, 0, 50) + " " + st.block(6, 2, 50) + " minecraft:glass_pane");
+		s.pause(40).say("A full one, 30 blocks off. Cows at 3, 7 and 12 m from it; a gate at 18 m, glass at 20 m beyond. Lit...");
+		s.cmd("setblock " + st.block(0, 1, 30) + " minecraft:redstone_block");
+		s.pause(100).say("Gone at 3 m. Dead at 7. Hurt at 12. The gate blown open, the glass out. Read the chat for yours").pause(200);
+		s.say("You were 30 m away: 11 kPa, enough to ring your ears").pause(200);
+	}
+
+	/**
+	 * A 2x2 of TNT 9 to 10 blocks ahead is the Roadster's pressure vessel, lit with redstone. Animals stand in rings
+	 * round it (2, 3, 4.5 and 7 m); the player, 9 m off and out of the TNT's reach, still gets about 45 kPa: burst eardrums.
+	 */
+	private static void roadster(Script s, Stage st) {
+		s.say("A 2x2 of TNT is the Roadster's tank: 200 litres of gas at 10,000 psi, about 7 kg of TNT");
+		s.cmd("fill " + st.block(0, 0, 9) + " " + st.block(1, 0, 10) + " minecraft:tnt");
+		s.summon(st, "cow", "fgd_vessel_cow", 0.5, 0, 11.5, 90.0F, "");
+		s.summon(st, "sheep", "fgd_vessel_sheep", 3.5, 0, 9.5, 0.0F, "");
+		s.summon(st, "pig", "fgd_vessel_pig", -3.5, 0, 12.0, 45.0F, "");
+		s.summon(st, "cow", "fgd_vessel_far_cow", 0.5, 0, 16.5, 90.0F, "");
+		s.pause(40).say("2 m: a cow. 3 m: a sheep. 4.5 m: a pig. 7 m: another cow. You: 9 m");
+		s.pause(60).say("Lit. Four seconds...");
+		s.cmd("fill " + st.block(0, 1, 9) + " " + st.block(1, 1, 10) + " minecraft:redstone_block");
+		s.pause(90).say("Gone at 2 m. Torn apart at 3. Lungs burst at 4.5. Eardrums and fragments at 7. Read the chat for yours").pause(200);
+		s.say("Your hearing comes back slowly; the ringing goes last").pause(300);
 	}
 
 	/** A raised floor with pigs and TNT on it; after the blast what is left of the floor is removed. */

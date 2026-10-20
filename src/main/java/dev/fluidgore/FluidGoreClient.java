@@ -8,6 +8,7 @@ import dev.fluidgore.net.GoreSync;
 import dev.fluidgore.net.PieceSync;
 import dev.fluidgore.player.HurtScreen;
 import dev.fluidgore.render.GoreRenderer;
+import dev.fluidgore.tank.client.TankClient;
 import dev.fluidgore.ui.GoreCommand;
 import dev.fluidgore.ui.OptionsScreenButton;
 import dev.fluidgore.ui.SortButtons;
@@ -20,8 +21,9 @@ import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import org.slf4j.Logger;
 
 /**
- * Client entrypoint: all of the gore. It adds no blocks, items, entities or registry entries; its one packet
- * ({@link GoreSync}) is only used on a server that runs Fluid Gore too (see {@link FluidGore}).
+ * Client entrypoint: all of the gore. Its packets ({@link GoreSync} and the rest) are only used on a server that runs
+ * Fluid Gore too (see {@link FluidGore}); the one block it adds, the pressure vessel, has its client half in
+ * {@link TankClient}.
  */
 public class FluidGoreClient implements ClientModInitializer {
 	public static final Logger LOGGER = FluidGore.LOGGER;
@@ -32,13 +34,16 @@ public class FluidGoreClient implements ClientModInitializer {
 		PieceSync.register();
 		Evidence.register();
 		Decay.register();
+		TankClient.register();
 
 		ClientTickEvents.END_CLIENT_TICK.register(GoreSystems::tick);
 		ClientTickEvents.END_CLIENT_TICK.register(DemoPlayer::tick);
+		ClientTickEvents.END_CLIENT_TICK.register(TankClient::tick);
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, context) -> GoreCommand.register(dispatcher));
 		ClientReceiveMessageEvents.ALLOW_GAME.register((message, overlay) -> overlay || DemoPlayer.allowMessage(message));
 		ClientChunkEvents.CHUNK_UNLOAD.register((level, chunk) -> GoreSystems.onChunkUnload(chunk.getPos().x(), chunk.getPos().z()));
 		ClientEntityEvents.ENTITY_UNLOAD.register((entity, level) -> GoreSystems.onEntityUnload(entity.getId()));
+		ClientEntityEvents.ENTITY_LOAD.register((entity, level) -> GoreSystems.onEntityLoad(entity));
 
 		GoreRenderer.register();
 		HurtScreen.register();

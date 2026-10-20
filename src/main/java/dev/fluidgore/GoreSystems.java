@@ -1,5 +1,6 @@
 package dev.fluidgore;
 
+import dev.fluidgore.blood.BloodSupply;
 import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.blood.BrokenBlocks;
 import dev.fluidgore.blood.Gush;
@@ -119,8 +120,27 @@ public final class GoreSystems {
 		DISMEMBERMENT.parts().removeChunk(chunkX, chunkZ);
 	}
 
+	/**
+	 * A living entity comes into this world under an id a dead body still holds: a player respawned (the server gives
+	 * them back their old id) or a new mob took a freed one. The old body's state (burnt away, cut apart, its corpse)
+	 * must not follow the id onto it, or the respawned player is drawn as nothing.
+	 */
+	public static void onEntityLoad(net.minecraft.world.entity.Entity entity) {
+		if (!(entity instanceof net.minecraft.world.entity.LivingEntity living) || !living.isAlive()) {
+			return;
+		}
+
+		int id = living.getId();
+		if (SUFFERING.release(living) || DISMEMBERMENT.vaporized(id)) {
+			DISMEMBERMENT.restore(id);
+			DECAY.forget(id);
+			BloodSupply.refill(id, 1.0F, true);
+		}
+	}
+
 	public static void onEntityUnload(int entityId) {
 		TRACKER.forget(entityId);
+		BloodSupply.forget(entityId);
 		GoreSync.forget(entityId);
 		Evidence.forget(entityId);
 		DECAY.forget(entityId);
@@ -135,6 +155,7 @@ public final class GoreSystems {
 		GoreSync.clear();
 		Evidence.clear();
 		Gush.clear();
+		BloodSupply.clear();
 		BrokenBlocks.clear();
 		ModelParts.clearDrawn();
 		INJURIES.clear();

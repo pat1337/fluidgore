@@ -19,8 +19,22 @@ loom {
 		}
 	}
 
+	// Only some game tests, for quick work on one feature: ./gradlew runClientGameTest -PonlyTests=ragdoll,stairs
+	if (project.hasProperty("onlyTests")) {
+		runs.configureEach {
+			vmArg "-Dfluidgore.only=${project.property('onlyTests')}"
+		}
+	}
+	// ... and with Ragdoll Physics on: -PragdollOn
+	if (project.hasProperty("ragdollOn")) {
+		runs.configureEach {
+			vmArg "-Dfluidgore.ragdollOn=true"
+		}
+	}
+
 	mods {
 		"fluidgore" {
+
 			sourceSet sourceSets.main
 		}
 	}

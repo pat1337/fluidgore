@@ -5,6 +5,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.mixin.ModelPartAccessor;
+import dev.fluidgore.ragdoll.Bends;
 import net.minecraft.client.model.Model;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.rendertype.RenderType;
@@ -12,8 +13,6 @@ import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.LightCoordsUtil;
 import net.minecraft.util.Mth;
-import org.joml.Matrix4f;
-import org.joml.Vector3f;
 
 /**
  * Draws a body's wounds right after its model, inside the same part transforms, so they move with every limb.
@@ -74,9 +73,6 @@ public final class WoundRenderer {
 	/** The outer skin layer over each {@link dev.fluidgore.dismember.BodyPart} of a player model, in its order. */
 	private static final String[] CLOTHES = {"hat", "right_sleeve", "left_sleeve", "right_pants", "left_pants"};
 
-	private static final Vector3f POS = new Vector3f();
-	private static final Vector3f NORMAL = new Vector3f();
-	private static final float[] CORNER = new float[3];
 
 	private WoundRenderer() {
 	}
@@ -105,10 +101,7 @@ public final class WoundRenderer {
 			}
 
 			poseStack.pushPose();
-			for (ModelPart part : chain) {
-				part.translateAndRotate(poseStack);
-			}
-
+			Bends.chain(poseStack, chain);
 			wound(set, i, poseStack.last(), buffer, light, overlay);
 			poseStack.popPose();
 		}
@@ -177,12 +170,8 @@ public final class WoundRenderer {
 			}
 
 			poseStack.pushPose();
-			for (ModelPart link : chain) {
-				link.translateAndRotate(poseStack);
-			}
-
+			Bends.chain(poseStack, chain);
 			PoseStack.Pose pose = poseStack.last();
-			pose.transformNormal(NORMAL.set(0.0F).setComponent(a, set.sign[i]), NORMAL);
 			float tu = set.variant[i] * TILE_U;
 			float tv = SMEAR.row() * TILE_V;
 			float span = 1.0F / (2.0F * r);
@@ -193,11 +182,7 @@ public final class WoundRenderer {
 			float depth = (set.sign[i] > 0 ? max[a] : min[a]) + set.sign[i] * LIFT;
 			// Blood in wool dries darker than it ran.
 			int color = 0xFF000000 | set.flesh.tint(Flesh.Tissue.SPLIT, set.blood);
-			Matrix4f m = pose.pose();
-			vertex(buffer, m, a, b, c, depth, b0, c0, color, u0, v0, light, overlay);
-			vertex(buffer, m, a, b, c, depth, b1, c0, color, u1, v0, light, overlay);
-			vertex(buffer, m, a, b, c, depth, b1, c1, color, u1, v1, light, overlay);
-			vertex(buffer, m, a, b, c, depth, b0, c1, color, u0, v1, light, overlay);
+			Bends.quad(buffer, pose, part, a, b, c, depth, set.sign[i], b0, b1, c0, c1, u0, u1, v0, v1, color, light, overlay);
 			poseStack.popPose();
 		}
 	}
@@ -226,7 +211,6 @@ public final class WoundRenderer {
 		float[] max = {cube.maxX, cube.maxY, cube.maxZ};
 		float face = set.sign[i] > 0 ? max[a] : min[a];
 		float severity = set.severity[i];
-		pose.transformNormal(NORMAL.set(0.0F).setComponent(a, set.sign[i]), NORMAL);
 		boolean slash = set.morph[i] == WoundSet.SLASH;
 		Layer[] layers = switch (set.morph[i]) {
 			case WoundSet.PLUCK -> PLUCKED;
@@ -265,20 +249,7 @@ public final class WoundRenderer {
 			int color = 0xFF000000 | set.flesh.tint(layer.tissue(), set.blood);
 			// The raw cut in an enderman glows with its blood.
 			int lit = glows(set, layer.tissue()) ? LightCoordsUtil.FULL_BRIGHT : light;
-			Matrix4f m = pose.pose();
-			vertex(buffer, m, a, b, c, depth, b0, c0, color, u0, v0, lit, overlay);
-			vertex(buffer, m, a, b, c, depth, b1, c0, color, u1, v0, lit, overlay);
-			vertex(buffer, m, a, b, c, depth, b1, c1, color, u1, v1, lit, overlay);
-			vertex(buffer, m, a, b, c, depth, b0, c1, color, u0, v1, lit, overlay);
+			Bends.quad(buffer, pose, set.part[i], a, b, c, depth, set.sign[i], b0, b1, c0, c1, u0, u1, v0, v1, color, lit, overlay);
 		}
-	}
-
-	private static void vertex(VertexConsumer buffer, Matrix4f m, int a, int b, int c, float depth, float pb, float pc,
-			int color, float u, float v, int light, int overlay) {
-		CORNER[a] = depth / 16.0F;
-		CORNER[b] = pb / 16.0F;
-		CORNER[c] = pc / 16.0F;
-		m.transformPosition(CORNER[0], CORNER[1], CORNER[2], POS);
-		buffer.addVertex(POS.x, POS.y, POS.z, color, u, v, overlay, light, NORMAL.x, NORMAL.y, NORMAL.z);
 	}
 }

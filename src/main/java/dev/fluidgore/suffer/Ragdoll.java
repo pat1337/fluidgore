@@ -43,13 +43,13 @@ public final class Ragdoll {
 	/** Bounding-box volume of an adult cow, the reference body for {@link #heft}. */
 	private static final float COW_VOLUME = 0.9F * 0.9F * 1.4F;
 
-	double x, y, z;
-	double px, py, pz;
-	double vx, vy, vz;
-	float yaw, pyaw, yawV;
+	public double x, y, z;
+	public double px, py, pz;
+	public double vx, vy, vz;
+	public float yaw, pyaw, yawV;
 	/** Sideways lean in radians: 0 upright, +-PI/2 lying on a side. */
-	float roll, proll, rollV;
-	boolean onGround;
+	public float roll, proll, rollV;
+	public boolean onGround;
 	/** Hit a block sideways during the last step. */
 	boolean blocked;
 	/** How far the body can roll: onto its side (PI/2), or over onto its back (PI) for a body that ends legs-up. */
@@ -64,6 +64,15 @@ public final class Ragdoll {
 	private final float[] joint = new float[JOINTS];
 	private final float[] jointO = new float[JOINTS];
 	private final float[] jointV = new float[JOINTS];
+	/**
+	 * Kicks given to the joints since an articulated rig last took them (see {@code ragdoll/Rigging}), and the motion it
+	 * last wrote here, so that pushes other code gives this body reach the rig.
+	 */
+	public final float[] kicks = new float[JOINTS];
+	public double sentVx;
+	public double sentVy;
+	public double sentVz;
+	public float sentRollV;
 
 	Ragdoll(LivingEntity entity) {
 		this.x = this.px = entity.getX();
@@ -189,7 +198,9 @@ public final class Ragdoll {
 	/** A sudden convulsion: every joint is flung, and a body on the ground may hop. */
 	void spasm(RandomSource random, float strength) {
 		for (int i = 0; i < JOINTS; i++) {
-			jointV[i] += (random.nextFloat() - 0.5F) * strength * (i >= LIMB_X && i < LIMB_Z ? 1.6F : 0.9F);
+			float kick = (random.nextFloat() - 0.5F) * strength * (i >= LIMB_X && i < LIMB_Z ? 1.6F : 0.9F);
+			jointV[i] += kick;
+			kicks[i] += kick;
 		}
 
 		if (onGround) {
@@ -203,17 +214,23 @@ public final class Ragdoll {
 	 */
 	void strikeJoint(int slot, float strength, RandomSource random) {
 		if (slot < 0) {
-			jointV[HEAD_X] += (random.nextFloat() - 0.3F) * strength;
-			jointV[HEAD_Y] += (random.nextFloat() - 0.5F) * strength;
+			kickJoint(HEAD_X, (random.nextFloat() - 0.3F) * strength);
+			kickJoint(HEAD_Y, (random.nextFloat() - 0.5F) * strength);
 		} else {
-			jointV[LIMB_X + slot] += (random.nextBoolean() ? 1.0F : -1.0F) * strength * 1.4F;
-			jointV[LIMB_Z + slot] += (random.nextFloat() - 0.5F) * strength * 0.6F;
+			kickJoint(LIMB_X + slot, (random.nextBoolean() ? 1.0F : -1.0F) * strength * 1.4F);
+			kickJoint(LIMB_Z + slot, (random.nextFloat() - 0.5F) * strength * 0.6F);
 		}
 
 		spasm(random, strength * 0.25F);
 	}
 
+	private void kickJoint(int i, float kick) {
+		jointV[i] += kick;
+		kicks[i] += kick;
+	}
+
 	/** Passes an impact or sudden movement of the whole body on to the joints, which then swing on their own. */
+
 	private void jolt(float amount) {
 		for (int i = LIMB_X; i < LIMB_X + 4; i++) {
 			jointV[i] += amount * (i % 2 == 0 ? 0.35F : -0.35F);

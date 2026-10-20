@@ -3,11 +3,11 @@ package dev.fluidgore.rot;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.fluidgore.mixin.ModelPartAccessor;
+import dev.fluidgore.ragdoll.Bends;
 import java.util.List;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.util.Mth;
-import org.joml.Matrix4f;
-import org.joml.Vector3f;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Paints rot onto a body, drawn right after its model in the same part transforms, with the wound tiles (see
@@ -48,9 +48,7 @@ public final class RotRenderer {
 	private static final float TILE_U = 1.0F / 8.0F;
 	private static final float TILE_V = 1.0F / 18.0F;
 
-	private static final Vector3f POS = new Vector3f();
-	private static final Vector3f NORMAL = new Vector3f();
-	private static final float[] CORNER = new float[3];
+
 	private static final float[] MIN = new float[3];
 	private static final float[] MAX = new float[3];
 
@@ -71,7 +69,7 @@ public final class RotRenderer {
 			return;
 		}
 
-		walk(root, days, arid, seed, 1, poseStack, buffer, light, overlay);
+		walk(null, root, days, arid, seed, 1, poseStack, buffer, light, overlay);
 	}
 
 	/** Draws the rot on a severed piece; {@code pose} is where the piece itself is drawn. */
@@ -81,31 +79,36 @@ public final class RotRenderer {
 		draw(root, days, arid, seed, stack, buffer, light, overlay);
 	}
 
-	private static int walk(ModelPart part, float days, boolean arid, long seed, int index, PoseStack poseStack, VertexConsumer buffer, int light, int overlay) {
+	private static int walk(@Nullable ModelPart parent, ModelPart part, float days, boolean arid, long seed, int index, PoseStack poseStack, VertexConsumer buffer, int light, int overlay) {
 		if (!part.visible) {
 			return index + 1;
 		}
 
 		poseStack.pushPose();
-		part.translateAndRotate(poseStack);
+		if (parent == null) {
+			part.translateAndRotate(poseStack);
+		} else {
+			Bends.enter(poseStack, parent, part);
+		}
+
 		ModelPartAccessor access = (ModelPartAccessor) (Object) part;
 		if (!part.skipDraw) {
 			List<ModelPart.Cube> cubes = access.fluidgore$getCubes();
 			for (int k = 0; k < cubes.size(); k++) {
-				cube(cubes.get(k), index * 16 + k, days, arid, seed, poseStack.last(), buffer, light, overlay);
+				cube(part, cubes.get(k), index * 16 + k, days, arid, seed, poseStack.last(), buffer, light, overlay);
 			}
 		}
 
 		int next = index + 1;
 		for (ModelPart child : access.fluidgore$getChildren().values()) {
-			next = walk(child, days, arid, seed, next, poseStack, buffer, light, overlay);
+			next = walk(part, child, days, arid, seed, next, poseStack, buffer, light, overlay);
 		}
 
 		poseStack.popPose();
 		return next;
 	}
 
-	private static void cube(ModelPart.Cube cube, int key, float days, boolean arid, long seed, PoseStack.Pose pose, VertexConsumer buffer, int light, int overlay) {
+	private static void cube(ModelPart part, ModelPart.Cube cube, int key, float days, boolean arid, long seed, PoseStack.Pose pose, VertexConsumer buffer, int light, int overlay) {
 		MIN[0] = cube.minX;
 		MIN[1] = cube.minY;
 		MIN[2] = cube.minZ;
@@ -138,8 +141,6 @@ public final class RotRenderer {
 			float pv = (MIN[c] + MAX[c]) * 0.5F + (rand(seed, patch, 4) - 0.5F) * halfC * 0.8F;
 			int variant = (int) (rand(seed, patch, 5) * 8.0F) & 7;
 			float depth = sign > 0 ? MAX[a] : MIN[a];
-			pose.transformNormal(NORMAL.set(0.0F).setComponent(a, sign), NORMAL);
-			Matrix4f m = pose.pose();
 			for (int n = 0; n < layers.length; n++) {
 				Layer layer = layers[n];
 				if (q < layer.from() || q >= layer.until()) {
@@ -170,10 +171,7 @@ public final class RotRenderer {
 				float v1 = tv + (c1 - (pv - r)) * span * TILE_V;
 				float d = depth + sign * LIFT * (n + 1);
 				int color = 0xFF000000 | (dry ? Rot.lerp(layer.wet(), layer.dried(), (days - Rot.DRY) / 20.0F) : layer.wet());
-				vertex(buffer, m, a, b, c, d, b0, c0, color, u0, v0, light, overlay);
-				vertex(buffer, m, a, b, c, d, b1, c0, color, u1, v0, light, overlay);
-				vertex(buffer, m, a, b, c, d, b1, c1, color, u1, v1, light, overlay);
-				vertex(buffer, m, a, b, c, d, b0, c1, color, u0, v1, light, overlay);
+				Bends.quad(buffer, pose, part, a, b, c, d, sign, b0, b1, c0, c1, u0, u1, v0, v1, color, light, overlay);
 			}
 		}
 	}
@@ -187,12 +185,4 @@ public final class RotRenderer {
 		return (h >>> 40) / (float) (1 << 24);
 	}
 
-	private static void vertex(VertexConsumer buffer, Matrix4f m, int a, int b, int c, float depth, float pb, float pc,
-			int color, float u, float v, int light, int overlay) {
-		CORNER[a] = depth / 16.0F;
-		CORNER[b] = pb / 16.0F;
-		CORNER[c] = pc / 16.0F;
-		m.transformPosition(CORNER[0], CORNER[1], CORNER[2], POS);
-		buffer.addVertex(POS.x, POS.y, POS.z, color, u, v, overlay, light, NORMAL.x, NORMAL.y, NORMAL.z);
-	}
 }

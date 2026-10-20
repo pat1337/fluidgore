@@ -64,9 +64,19 @@ public final class DropletSystem {
 	}
 
 	public void spawn(double x, double y, double z, double vx, double vy, double vz, float volume, int rgb, float size) {
-		if (hasRoom()) {
-			droplets.add(new Droplet(x, y, z, vx, vy, vz, volume, rgb, size));
+		if (!hasRoom()) {
+			return;
 		}
+
+		// Out of the body being bled, if any: as much as it really has left to give, at the pressure it has left.
+		float real = BloodSupply.draw(volume);
+		if (volume > 0.0F && real < volume * 0.02F) {
+			return;
+		}
+
+		// A thinner flow throws smaller drops.
+		float shrink = volume > 0.0F ? (float) Math.sqrt(real / volume) : 1.0F;
+		droplets.add(new Droplet(x, y, z, vx, vy, vz, real, rgb, size * Math.max(0.4F, shrink)));
 	}
 
 	void tick(Level level) {
@@ -120,7 +130,7 @@ public final class DropletSystem {
 		int lifetime = world.decalLifetime();
 
 		if (face == Direction.UP) {
-			world.landOnFloor(level, at.x, at.y, at.z, d.volume, d.rgb, lifetime);
+			world.landOnFloor(level, at.x, at.y, at.z, d.vx, d.vy, d.vz, d.volume, d.rgb, lifetime);
 			return false;
 		}
 

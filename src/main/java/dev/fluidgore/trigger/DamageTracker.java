@@ -4,6 +4,7 @@ import dev.fluidgore.GoreSystems;
 import dev.fluidgore.net.Evidence;
 import dev.fluidgore.net.GoreSync;
 import dev.fluidgore.blood.BloodEmitter;
+import dev.fluidgore.blood.BloodSupply;
 import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.config.GoreLevel;
@@ -56,8 +57,11 @@ public final class DamageTracker {
 	private record PendingHit(int attackerId, boolean melee, boolean explosion, boolean fire, boolean fall, @Nullable Vec3 sourceAt, int tick) {
 	}
 
-	/** An explosion the server told us about: where and how big (TNT is 4, a creeper 3, a charged one 6). */
-	private record Blast(Vec3 center, float radius, int tick) {
+	/**
+	 * An explosion the server told us about: where and how big (TNT is 4, a creeper 3, a charged one 6), and the
+	 * pressure vessel it burst, if it was one of a vessel's TNT.
+	 */
+	private record Blast(Vec3 center, float radius, int tick, PressureVessel.@Nullable Vessel vessel) {
 	}
 
 	/** Blast radius assumed when no explosion packet matches (TNT). */
@@ -72,6 +76,7 @@ public final class DamageTracker {
 	private final Int2FloatOpenHashMap lastHealth = new Int2FloatOpenHashMap();
 	private final Int2ObjectOpenHashMap<PendingHit> pending = new Int2ObjectOpenHashMap<>();
 	private final List<Blast> blasts = new ArrayList<>();
+	private final PressureVessel vessels = new PressureVessel();
 	private int tick;
 
 	public DamageTracker() {
@@ -89,11 +94,23 @@ public final class DamageTracker {
 
 	/** Called on the client thread when an explosion packet arrives. */
 	public void onExplosion(Vec3 center, float radius) {
-		blasts.add(new Blast(center, radius, tick));
+		boolean[] burst = {false};
+		PressureVessel.Vessel vessel = vessels.explosion(center, burst);
+		// The rest of a vessel's TNT is the same burst: every body is graded from the vessel's centre.
+		blasts.add(new Blast(vessel != null ? vessel.centre : center, radius, tick, vessel));
+		ClientLevel level = Minecraft.getInstance().level;
+		if (burst[0] && level != null && GoreConfig.get().goreLevel.enabled()) {
+			PressureVessel.burst(level, GoreSystems.blood(), GoreSystems.dismemberment(), vessel);
+		}
+	}
+
+	public PressureVessel vessels() {
+		return vessels;
 	}
 
 	public void tick(ClientLevel level, BloodWorld blood, Dismemberment dismemberment, Suffering suffering) {
 		tick++;
+		vessels.tick(level);
 		Entity camera = Minecraft.getInstance().getCameraEntity();
 		for (Entity entity : level.entitiesForRendering()) {
 			if (!(entity instanceof LivingEntity living)) {
@@ -110,10 +127,12 @@ public final class DamageTracker {
 			if (previous <= 0.0F && health > 0.0F) {
 				// Respawned (or revived by a totem): the body is whole again.
 				dismemberment.restore(id);
+				BloodSupply.refill(id, 1.0F, true);
 			} else if (previous > 0.0F && health > previous + 0.01F) {
 				// Healing: the wounds close as the health comes back.
 				float max = Math.max(1.0F, living.getMaxHealth());
 				dismemberment.wounds().heal(id, (health - previous) / max, health >= max - 0.01F);
+				BloodSupply.refill(id, (health - previous) / max, health >= max - 0.01F);
 			}
 
 			PendingHit hit = pending.get(id);
@@ -136,9 +155,12 @@ public final class DamageTracker {
 			Fate.begin(living, hit != null && hit.attackerId() >= 0 ? level.getEntity(hit.attackerId()) : null);
 			// This player's own hit: the parts it cuts off are this game's to move (see PieceSync).
 			GoreSync.local(hit != null && Minecraft.getInstance().player != null && hit.attackerId() == Minecraft.getInstance().player.getId());
+			// What comes out of it is its own blood: no more than the body really holds (see BloodSupply).
+			BloodSupply.begin(living);
 			try {
 				hurt(level, blood, dismemberment, suffering, living, damage, health <= 0.0F, hit);
 			} finally {
+				BloodSupply.end();
 				GoreSync.local(false);
 				Fate.end();
 			}
@@ -183,8 +205,13 @@ public final class DamageTracker {
 			if (known != null || hit.sourceAt() != null) {
 				blastAt = known != null ? known.center() : hit.sourceAt();
 				float radius = known != null ? known.radius() : DEFAULT_BLAST_RADIUS;
-				double dist = Math.sqrt(victim.distanceToSqr(blastAt)) / (radius * 2.0);
-				impact = (float) Math.max(0.0, (1.0 - dist) * ServerExplosion.getSeenPercent(blastAt, victim));
+				if (known != null && known.vessel() != null) {
+					// A pressure vessel: graded by the real overpressure on the body, not by vanilla's TNT.
+					impact = PressureVessel.impact(PressureVessel.overpressure(known.vessel(), victim), TEAR_IMPACT, SHRED_IMPACT);
+				} else {
+					double dist = Math.sqrt(victim.distanceToSqr(blastAt)) / (radius * 2.0);
+					impact = (float) Math.max(0.0, (1.0 - dist) * ServerExplosion.getSeenPercent(blastAt, victim));
+				}
 			} else {
 				// No idea where it went off (the explosion packet never came): a blast, but not a close one.
 				blastAt = victim.position();
@@ -333,7 +360,8 @@ public final class DamageTracker {
 			}
 
 			double d = sourceAt != null ? b.center().distanceToSqr(sourceAt) : victim.distanceToSqr(b.center());
-			double limit = sourceAt != null ? 2.5 : b.radius() * 2.0;
+			// A vessel's blasts are centred on the vessel, up to a block and a half from the TNT that did the damage.
+			double limit = sourceAt != null ? (b.vessel() != null ? 4.0 : 2.5) : b.radius() * 2.0;
 			if (d < limit * limit && d < bestSq) {
 				best = b;
 				bestSq = d;
@@ -352,5 +380,6 @@ public final class DamageTracker {
 		lastHealth.clear();
 		pending.clear();
 		blasts.clear();
+		vessels.clear();
 	}
 }

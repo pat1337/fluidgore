@@ -2,6 +2,117 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.17.0]
+
+Ragdoll Physics, polished for killing off cliffs, down stairs and onto slabs; blood read like a spatter analyst reads it.
+
+### Added
+- Directional Spatter (on by default): blood that lands at a slant stretches into a teardrop as long as its width over
+  the sine of the angle it came in at, its tail pointing the way it flew. A burst on the ground leaves a ring of them
+  pointing away from where it happened.
+- Drag Trails (on by default): a bleeding body that slides, tumbles or is shoved over the ground smears a swipe behind
+  it, feathered off the way it went, for the first minute after death.
+- A fall off a cliff lands as hard as it fell: more than about three blocks and the body bursts on the ground, blood
+  driven out low all round.
+
+### Changed (Ragdoll Physics on)
+- Bodies end on their sides: a pig or sheep no longer stays on its belly with folded legs, and a four-legged body that
+  lands on its back rolls onto the nearer side (people still lie on their backs).
+- Bodies tip over their feet and roll over what they lie on, so they no longer skate across the floor; twitches on
+  the ground no longer lift the whole carcass and walk it away.
+- Stairs and ledges: a body only your game has slides down to the bottom; a body the server keeps is put down a step
+  as soon as the server takes it there; a body on a lip slumps over it instead of being flung off a cliff.
+- Every step down a flight of stairs thuds and knocks a little blood out, as with the old ragdoll.
+
+### Fixed
+- A player who burnt to nothing in lava (or was blown or cut apart) came back invisible after respawning: the server
+  gives a respawned player their old id, and the dead body's state followed it onto them.
+
+## [2.16.0]
+
+The Cobble Tank: the Roadster's tank, for real.
+
+### Added
+- Cobble Tank: a TNT with cobblestone on its four sides. 600 litres of air at 10,000 psi (about 21 kg of TNT; both can
+  be set for new tanks). Placed like a piston: its top faces away from the block you put it on. **It is a real block:
+  Fluid Gore must be on the server and on every player who joins** (singleplayer just works). Real damage applies for
+  this block only; everything else stays cosmetic.
+- Light it like TNT (flint and steel, fire charge, burning arrow, fire or lava beside it, redstone): the casing creaks
+  and pops, then it bursts. Like TNT, nothing is said in chat. Every body is hurt by the real peak overpressure where it stood: nothing left within 2 m,
+  dead to about 8 m, eardrums burst to about 15 m; fragments of the casing fly out a few hundred metres. Glass breaks to
+  about 55 m and wooden doors, trapdoors and gates are blown open to about 28 m (Tank Breaks Glass). No crater, no fire:
+  it is cold gas. A white fog, then debris clattering down. Explosions burst it, and it bursts other tanks near it.
+- It cannot be mined while it holds pressure. Hit it instead: a fist thuds, wood and stone scuff it, iron cuts the
+  fibres, diamond and netherite get through in a few blows. Every blow grinds: stone cracking and chipping off in cobble
+  crumbs, the tool scraping the metal under it, sparks once a hard tool bites. The scars stay on the tank: scratches,
+  then chips, then a gouge down to the black fibre.
+- Through the casing it leaks, where it was struck. A pinhole hisses and frosts for minutes. A cracked fitting screams,
+  vents in 15 to 30 seconds and pushes up to 9 kN back the way the blow came. Struck from the side, it tears loose
+  once the push beats the friction on its 400 kg and flies; struck from above, the thrust only presses it into the
+  ground; braced against a wall, it stays. Flying, it is a rigid body: real gravity, air drag, friction skidding on the
+  ground, and a torque from a jet that never points quite through its centre, so it tumbles faster and faster. It hits
+  what is in its way by its kinetic energy and smashes through glass, leaves and dirt. When it has vented it lands and
+  stands as a block, top the way it came to rest.
+- Standing in the jet: air forced under the skin within 30 cm (swelling, and now and then a fatal air embolism),
+  sandblasted to 1 m, knocked down or thrown to 3 m, a gale to 5 m. The tank and the crack chill to -80 C: touching them
+  freezes you, frost and ice form at the crack, but the jet itself is only a cold wind. Standing near a leak costs your
+  hearing the longer you stay. Hit a leaking tank again, or let the crack run, and it can still burst, sized to the
+  pressure left.
+- Sneak and use an unharmed tank with an empty hand to pick it up again.
+- Demo: `/gore demo tank`.
+- Ragdoll Physics (off by default): dead bodies go limp as real ones do. Head, trunk and every leg move on their own,
+  the head on a neck that lets it droop, each joint only as far as a real one goes. The body falls the way the blow
+  sent it, folds, drapes over edges and comes to rest under its own weight, never through a block, then sleeps and
+  costs nothing. The body stays whole, as on the vanilla model. Zombies, skeletons and other players get one too.
+  Ragdolls Bend at the Knee (off) also bends legs at the knee and hock and arms at the elbow; Show Ragdoll Segments
+  draws the physics. Off: the original physics.
+
+## [2.15.0]
+
+The Roadster's pressure vessel.
+
+### Added
+- Pressure Vessel (on by default): light a 2x2 square of TNT (flat or standing, by flint and steel or redstone) and it
+  bursts like a carbon-overwrapped pressure vessel. By default it is the Roadster's: 200 litres of gas at 10,000 psi,
+  about 29 MJ, some 7 kg of TNT. Volume and pressure can be set.
+- Every body is hurt by the real peak overpressure where it stood, worked out from the gas's stored energy and the
+  standard blast-scaling curves, less what a wall took out of it: nothing recognisable left within about 2 m, limbs
+  torn off by the blast wind out to about 3, lungs torn out to about 4.5, coughing blood and burst eardrums out to about
+  10, ringing ears beyond. Fragments of the casing fly out and wound whatever they hit, more often the closer it was.
+- It happens to you too. A line in chat tells you how far you were, the pressure there and what it does to a body. Your
+  view is thrown about; with burst eardrums, blood runs down both sides of the screen, every sound goes muffled under a
+  high ringing, and your hearing comes back over half a minute or more (Blast Deafness, can be turned off). Fragments
+  splash blood from the vessel's side.
+- Cosmetic, as everything else: who lives and dies is still vanilla's TNT. The two agree well: four TNT kill a player
+  out to about 4.4 blocks, where the real burst gives about 290 kPa.
+- Demo: `/gore demo roadster`.
+
+## [2.14.0]
+
+Burning bodies.
+
+### Added
+- Burning Bodies (on by default): set a dead animal alight where it lies (right-click it with a flint and steel or a
+  fire charge, or lay it in fire, on a lit campfire or in lava) and it burns the way a carcass really does on an open
+  fire. The wool, hair or feathers go up first in a flash and white smoke, and the hide sears black. Once the fat
+  catches, it burns on its own, fire or no fire under it: thick, black, greasy smoke, fat dripping and spitting, the
+  skin splitting over cracks that glow orange. The heat draws the limbs in (the boxer's pose of every burnt body), the
+  flesh burns away, and the body shrinks down to a skeleton with its ribs showing, the bones charred black, then grey,
+  then white. Grey ash is left under it.
+- It goes by weight: a chicken flares and is bones in about 16 seconds under a wisp of smoke; a sheep burns for most of
+  a minute; a cow burns for nearly two, roaring, under a tall column of smoke you can see from far off. Burning Speed
+  sets the pace.
+- Put out early (water, or rain on a body burning on its own), a body stays as it was: charred, cracked, half-burnt meat
+  on blackened bone. Hit it and the char comes off the bone in black crumbs, flakes and soot (poke one still burning and
+  sparks fly). Hit the bare bones and they break, the legs first, then the skull, last the ribs and spine, until the
+  skeleton falls in on itself and is gone: the way to clear a burnt body away. With the server half it is gone for
+  everyone.
+- Bones and char do not drag at your legs the way a carcass does: walk through them with a crunch. Burnt bodies do not
+  rot.
+- Lighting a body is shared with the other players (with the server half), and what is left of a burnt body is shown to
+  players who come by later.
+- Demo: `/gore demo cremation`.
+
 ## [2.13.1]
 
 Clearing a killing floor.

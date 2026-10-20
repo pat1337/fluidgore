@@ -52,6 +52,15 @@ public final class GenerateTextures {
 		ImageIO.write(hurt(), "png", new File(misc, "hurt.png"));
 		ImageIO.write(feathers(), "png", new File(misc, "feather.png"));
 
+		File block = new File(root, "textures/block");
+		if (!block.isDirectory() && !block.mkdirs()) {
+			throw new IOException("Cannot create " + block);
+		}
+
+		for (int stage = 1; stage <= 3; stage++) {
+			ImageIO.write(scars(stage), "png", new File(block, "cobble_tank_scars_" + stage + ".png"));
+		}
+
 		ImageIO.write(icon(), "png", new File(root, "icon.png"));
 		System.out.println("Wrote textures to " + root.getAbsolutePath());
 	}
@@ -989,6 +998,73 @@ public final class GenerateTextures {
 	 * little. Top row, four dry feathers: full, soft vanes and down at the foot. Bottom row, the same four wet (with blood
 	 * or water): the vanes clumped into a few thin strands. All white/grey; the game tints them.
 	 */
+	/**
+	 * The Cobble Tank's scars, laid over each face (16x16, clear where untouched). Stage 1: bright scratches through the
+	 * stone to the metal, each with a dark lip. Stage 2 adds more and chips knocked out. Stage 3 adds a gouge across the
+	 * face down to the black weave of the carbon overwrap. Same seed for every stage, so each keeps the last one's marks.
+	 */
+	private static BufferedImage scars(int stage) {
+		BufferedImage image = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+		Random random = new Random(12_000);
+		int scratches = stage == 1 ? 3 : stage == 2 ? 7 : 10;
+		for (int i = 0; i < 10; i++) {
+			int x = 1 + random.nextInt(13);
+			int y = 1 + random.nextInt(13);
+			int dx = random.nextBoolean() ? 1 : -1;
+			int length = 3 + random.nextInt(5);
+			if (i >= scratches) {
+				continue;
+			}
+
+			for (int s = 0; s < length; s++) {
+				int px = x + s * dx;
+				int py = y + s / 2;
+				if (px < 0 || px > 15 || py < 0 || py > 14) {
+					break;
+				}
+
+				int shine = 190 + random.nextInt(50);
+				image.setRGB(px, py, argb(255, shine, shine, shine + 6));
+				if ((image.getRGB(px, py + 1) >>> 24) == 0) {
+					image.setRGB(px, py + 1, argb(255, 52, 52, 54));
+				}
+			}
+		}
+
+		if (stage >= 2) {
+			Random chips = new Random(12_100);
+			for (int i = 0; i < 3; i++) {
+				int x = 2 + chips.nextInt(11);
+				int y = 2 + chips.nextInt(11);
+				for (int cx = 0; cx < 2; cx++) {
+					for (int cy = 0; cy < 2; cy++) {
+						image.setRGB(x + cx, y + cy, argb(255, 34 + chips.nextInt(12), 34, 36));
+					}
+				}
+
+				image.setRGB(x - 1, y, argb(255, 150, 150, 152));
+				image.setRGB(x, y - 1, argb(255, 170, 170, 172));
+			}
+		}
+
+		if (stage >= 3) {
+			// A gouge from one edge across: grey metal lips, the carbon weave showing between them.
+			for (int x = 0; x < 16; x++) {
+				int y = 7 + (int) Math.round(Math.sin(x * 0.6) * 1.5);
+				image.setRGB(x, y - 1, argb(255, 205, 205, 210));
+				image.setRGB(x, y, ((x + y) & 1) == 0 ? argb(255, 18, 18, 20) : argb(255, 46, 46, 52));
+				image.setRGB(x, y + 1, ((x + y) & 1) == 0 ? argb(255, 46, 46, 52) : argb(255, 18, 18, 20));
+				image.setRGB(x, y + 2, argb(255, 70, 70, 72));
+			}
+		}
+
+		return image;
+	}
+
+	private static int argb(int a, int r, int g, int b) {
+		return a << 24 | r << 16 | g << 8 | b;
+	}
+
 	private static BufferedImage feathers() {
 		BufferedImage image = new BufferedImage(64, 32, BufferedImage.TYPE_INT_ARGB);
 		for (int variant = 0; variant < 4; variant++) {

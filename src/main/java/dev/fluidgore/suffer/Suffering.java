@@ -1,7 +1,11 @@
 package dev.fluidgore.suffer;
 
+import dev.fluidgore.blood.BloodSupply;
 import dev.fluidgore.GoreSystems;
 import dev.fluidgore.blood.BloodEmitter;
+import dev.fluidgore.blood.BloodTextures;
+import dev.fluidgore.blood.BloodWorld;
+import dev.fluidgore.blood.SurfaceProbe;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.physics.BodySlide;
 import dev.fluidgore.dismember.BodyPart;
@@ -9,6 +13,8 @@ import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.dismember.GorePart;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.net.GoreSync;
+import dev.fluidgore.ragdoll.Rigging;
+import dev.fluidgore.ragdoll.Skeleton;
 import dev.fluidgore.trigger.EntityFilter;
 import dev.fluidgore.trigger.Fate;
 import dev.fluidgore.wound.Weapon;
@@ -24,7 +30,9 @@ import java.util.Set;
 import java.util.function.Supplier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.player.LocalPlayer;
+
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -55,6 +63,21 @@ public final class Suffering {
 	private static final int TERROR_MEMORY = 600;
 	private static final double TERROR_RADIUS_SQ = 14.0 * 14.0;
 	private static final int MAX_CORPSES = 12;
+	/** Ticks a new corpse keeps trying to get an articulated body (it needs to have been drawn once). */
+	private static final int RIG_TRIES = 40;
+	/** Ticks an articulated body is guided over onto the side it falls to. */
+	private static final int GUIDED_FALL = 15;
+	/** Lean (radians) past which a falling body counts as lying on its side and is left to itself. */
+	private static final float ON_SIDE = 1.4F;
+	/** Lean past which a body lies on its back. */
+	private static final float ON_BACK = 2.2F;
+	/** Ticks after the fall a four-legged body still rolls off its back. */
+	private static final int RIGHTING_TICKS = 60;
+	/** Landing speed (old ragdoll scale, 0.03 per block per second) past which a fall bursts the body: about three blocks. */
+	private static final float HARD_FALL = 0.4F;
+	/** Ticks after death a body still bleeds enough to leave a trail where it is dragged. */
+	private static final int TRAIL_TICKS = 1200;
+
 	/** Ticks a dead body the server keeps is on screen with no corpse before it is taken for one already lying there. */
 	private static final int ADOPT_AFTER = 5;
 	/** How much longer a beaten or burnt body lies than an ordinary kill, on High and Extreme. */
@@ -328,6 +351,32 @@ public final class Suffering {
 		corpses.put(entity.getId(), corpse);
 	}
 
+	/**
+	 * Whether a body that does not suffer gets a ragdoll when it dies: with Ragdoll Physics on, anything drawn as a person
+	 * (zombies and their kin, skeletons, piglins, other players), not this player, and not one blown to nothing.
+	 */
+	private boolean limps(LivingEntity entity, Entity camera) {
+		return GoreConfig.get().articulatedRagdoll && entity != Minecraft.getInstance().player && !applies(entity)
+				&& camera.distanceToSqr(entity) < ACTIVE_RANGE_SQ && ModelParts.drawn(entity.getId()) instanceof HumanoidModel<?>
+				&& !GoreSystems.dismemberment().vaporized(entity.getId());
+	}
+
+	/**
+	 * A zombie or a player killed: no throes and no cry, it goes down limp the way the blow sent it, bleeds out where it
+	 * lies, and is gone when its time is up, like any other body.
+	 */
+	private void limp(LivingEntity entity) {
+		int linger = Math.round(GoreConfig.get().corpseLingerSeconds * 20 * GoreConfig.get().goreLevel.linger);
+		Corpse corpse = new Corpse(entity, Corpse.Kind.TRAUMA, state(entity).voice, 0, linger, random.nextFloat() * 100.0F);
+		corpse.vanilla = true;
+		deaths.plan(corpse);
+		corpse.throeTicks = Corpse.VANILLA_TICKS;
+		corpse.voiceEnd = 0;
+		corpse.fallSide = toppleSide(corpse);
+		corpses.put(entity.getId(), corpse);
+		evictOldCorpses();
+	}
+
 	/** For tests and demos: the next animal to die dies this way (null: as it would), and bursts at the end or not. */
 	public void forceNextDeath(Corpse.@Nullable Kind kind, boolean pop) {
 		forcing = true;
@@ -397,11 +446,18 @@ public final class Suffering {
 
 				if (living.isAlive()) {
 					if (camera.distanceToSqr(living) < ACTIVE_RANGE_SQ && applies(living)) {
-						tickLiving(level, living);
+						BloodSupply.begin(living);
+						try {
+							tickLiving(level, living);
+						} finally {
+							BloodSupply.end();
+						}
 					}
 				} else if (kept && living.deathTime >= ADOPT_AFTER && !living.isRemoved() && applies(living)
 						&& !GoreSystems.dismemberment().vaporized(living.getId())) {
 					adopt(living);
+				} else if (living.deathTime >= 1 && !living.isRemoved() && limps(living, camera)) {
+					limp(living);
 				}
 			}
 		}
@@ -409,7 +465,13 @@ public final class Suffering {
 		Iterator<Corpse> it = corpses.values().iterator();
 		while (it.hasNext()) {
 			Corpse corpse = it.next();
-			tickCorpse(level, corpse);
+			BloodSupply.begin(corpse.entity);
+			try {
+				tickCorpse(level, corpse);
+			} finally {
+				BloodSupply.end();
+			}
+
 			if (corpse.done()) {
 				it.remove();
 				finishCorpse(corpse);
@@ -640,21 +702,60 @@ public final class Suffering {
 		// The collision box follows the body, not the entity: until the server removes it, the entity still sits
 		// wherever the server last put it.
 		AABB box = entity.getBoundingBox().move(body.x - entity.getX(), body.y - entity.getY(), body.z - entity.getZ());
-		body.move(level, box, 0.0);
-		if (c.age >= c.collapseAt && !c.toppled) {
-			c.toppled = true;
-			if (!c.vanilla) {
-				topple(c);
+		if (c.rig == null && config.articulatedRagdoll && c.age <= RIG_TRIES) {
+			c.rig = Rigging.build(entity, body);
+		}
+
+		if (c.rig != null) {
+			// The articulated body falls, folds and slides on its own; the old one only carries its result.
+			shove(c, box);
+			if (c.age >= c.collapseAt + (c.vanilla ? c.fallDelay : 0) && !c.toppled) {
+				c.toppled = true;
+				if (!c.vanilla) {
+					c.fallSide = toppleSide(c);
+				}
+
+				c.toppledAt = c.age;
+				Rigging.topple(c, c.fallSide, 4.0F);
+			} else if (c.toppled && c.age - c.toppledAt < GUIDED_FALL * 3 && Math.abs(c.body.roll) < ON_SIDE) {
+				// Over onto the side it was sent: away from the blow, as vanilla's dying mob goes, whatever its legs do. A body
+				// still on its belly after the fall (short legs, wide trunk: pig, sheep) is not at rest there: it slumps over.
+				Rigging.lean(c, c.fallSide, c.body.onGround || c.age - c.toppledAt >= GUIDED_FALL ? 3.5F : 1.5F);
+			} else if (c.toppled && c.body.onGround && Math.abs(c.body.roll) > ON_BACK && c.rig.skeleton.plan != Skeleton.Plan.BIPED
+					&& c.age - c.toppledAt < RIGHTING_TICKS) {
+				// A four-legged body does not stay on its back (a fall off a cliff can leave it there): its legs and the
+				// round of its ribs tip it onto the nearer side. A person lies on their back.
+				Rigging.lean(c, -Math.signum(c.body.roll), 2.5F);
 			}
-		}
 
-		shove(c, box);
-		float landing = !c.toppled ? 0.0F : c.vanilla ? vanillaTip(c) : body.tip();
-		if (landing > 0.0F) {
-			slam(level, c, landing, color, gore);
-		}
 
-		slide(level, c, color, gore);
+			float landing = Rigging.tick(level, c);
+			if (landing > 0.0F && c.toppled) {
+				if (!c.landed || landing > 0.1F) {
+					slam(level, c, landing, color, gore);
+				}
+
+				c.landed = true;
+			}
+
+			drag(level, c, color, gore);
+		} else {
+			body.move(level, box, 0.0);
+			if (c.age >= c.collapseAt && !c.toppled) {
+				c.toppled = true;
+				if (!c.vanilla) {
+					topple(c);
+				}
+			}
+
+			shove(c, box);
+			float landing = !c.toppled ? 0.0F : c.vanilla ? vanillaTip(c) : body.tip();
+			if (landing > 0.0F) {
+				slam(level, c, landing, color, gore);
+			}
+
+			slide(level, c, color, gore);
+		}
 
 		Deaths.Posture p = posture.reset();
 		deaths.tick(level, c, p, color, gore);
@@ -662,8 +763,14 @@ public final class Suffering {
 			attractFlies(level, c, c.groundTicks() - c.throeTicks);
 		}
 
-		body.stepJoints();
+		if (c.rig == null) {
+			body.stepJoints();
+		} else if (config.ragdollDebug) {
+			Rigging.debug(c.rig);
+		}
+
 		c.pose = p.build();
+
 		if (c.unloaded) {
 			// Keep the entity (culling, shadow, bounding box) with the body; no offset is then needed to draw it.
 			entity.xo = body.px;
@@ -727,6 +834,19 @@ public final class Suffering {
 		if (gore && !EntityFilter.isBloodless(c.entity)) {
 			BloodEmitter.burst(GoreSystems.blood(), level, middle, color, 0.02F + speed * 0.2F, 4 + Math.round(speed * 40.0F));
 			BloodEmitter.drip(GoreSystems.blood(), neck(c), color, 0.02F);
+			if (speed > HARD_FALL) {
+				// Off a cliff: the body bursts on the ground and blood is driven out low all round, so it lands in
+				// teardrops whose tails point away from where it hit.
+				float hard = (speed - HARD_FALL) / (0.8F - HARD_FALL);
+				int rays = 5 + Math.round(hard * 5.0F);
+				for (int i = 0; i < rays; i++) {
+					double angle = (i + c.random.nextFloat() * 0.6) / rays * Mth.TWO_PI;
+					Vec3 away = new Vec3(Math.cos(angle), 0.15 + 0.15 * c.random.nextFloat(), Math.sin(angle)).normalize();
+					BloodEmitter.cut(GoreSystems.blood(), level, middle.add(0.0, -0.2, 0.0), away, color, 0.01F + hard * 0.02F, 3 + Math.round(hard * 4.0F));
+				}
+
+				BloodEmitter.burstSound(level, middle, 0.4F + 0.6F * hard);
+			}
 		}
 
 		c.body.spasm(c.random, 0.4F);
@@ -786,6 +906,47 @@ public final class Suffering {
 		}
 	}
 
+	/**
+	 * A rigged body going over the ground: a thud at every step it drops down (a cliff is the landing's), and while it
+	 * still bleeds, a smear where it drags, feathered off the way it went, as a swipe reads at a scene.
+	 */
+	private static void drag(ClientLevel level, Corpse c, int color, boolean gore) {
+		Ragdoll body = c.body;
+		double fell = body.py - body.y;
+		if (fell > 0.02) {
+			c.drop += (float) fell;
+		} else {
+			if (c.drop > 0.3F && c.drop < 1.5F) {
+				bump(level, c, c.drop, color, gore);
+			}
+
+			c.drop = 0.0F;
+		}
+
+		double dx = body.x - body.px;
+		double dz = body.z - body.pz;
+		double speed = Math.sqrt(dx * dx + dz * dz);
+		if (!gore || !GoreConfig.get().dragTrails || !c.toppled || c.age - c.toppledAt < GUIDED_FALL || !body.onGround || speed < 0.03 || c.age > TRAIL_TICKS || EntityFilter.isBloodless(c.entity)
+				|| (c.age & 1) != 0) {
+			return;
+		}
+
+		Vec3 middle = centre(c);
+		double surface = SurfaceProbe.surfaceBelow(level, middle.x, body.y + 0.3, body.y - 0.6, middle.z);
+		if (Double.isNaN(surface)) {
+			return;
+		}
+
+		BloodWorld blood = GoreSystems.blood();
+		float fresh = 1.0F - c.age / (float) TRAIL_TICKS;
+		float half = (0.18F + 0.12F * fresh) * Math.min(1.5F, (float) Math.sqrt(c.entity.getBbWidth()));
+		double ux = dx / speed;
+		double uz = dz / speed;
+		int orient = Math.abs(ux) > Math.abs(uz) ? 4 | (ux < 0.0 ? 2 : 0) : uz < 0.0 ? 2 : 0;
+		blood.decals().addFloor(level, middle.x, surface, middle.z, half, BloodTextures.STREAK, orient | c.random.nextInt(2),
+				blood.vary(color, 0.15F), true, blood.decalLifetime());
+	}
+
 	/** The body drops onto the next step: a dull, soft thud, a little blood knocked out of it, the limbs flop. */
 	private static void bump(ClientLevel level, Corpse c, float drop, int color, boolean gore) {
 		Vec3 middle = centre(c);
@@ -818,6 +979,16 @@ public final class Suffering {
 		body.vz += motion.z * 0.5 * body.heft;
 		if (c.random.nextFloat() < 0.3F) {
 			body.spasm(c.random, 0.2F);
+		}
+
+		if (GoreSystems.dismemberment().cremation().bare(c.entity.getId()) > 0.6F) {
+			// Burnt down to char and bone: no weight left to drag at the legs, only a crunch underfoot.
+			if (c.random.nextInt(6) == 0 && GoreConfig.get().goreSounds) {
+				player.level().playLocalSound(player.getX(), player.getY(), player.getZ(), SoundEvents.BONE_BLOCK_STEP, SoundSource.PLAYERS, 0.6F,
+						0.8F + c.random.nextFloat() * 0.3F, false);
+			}
+
+			return;
 		}
 
 		// Wading through dead weight: every body underfoot drags at the legs, a pile of them more so.
@@ -857,13 +1028,22 @@ public final class Suffering {
 		return Math.min(1.0F, Mth.sqrt(Math.max(0.0F, ticks - 1.0F) / Corpse.VANILLA_TICKS * 1.6F));
 	}
 
-	/** Starts the fall: the push comes from the body's own momentum, so a hit knocks it over away from the blow. */
-	private void topple(Corpse c) {
+	/** The side a body goes over onto: away from the blow if it was moving, else either. */
+	private static float toppleSide(Corpse c) {
 		Ragdoll body = c.body;
 		float yawRad = body.yaw * Mth.DEG_TO_RAD;
 		// Positive lean tips towards (cos yaw, sin yaw): the body's own right-hand side.
 		double lateral = body.vx * Mth.cos(yawRad) + body.vz * Mth.sin(yawRad);
-		float side = Math.abs(lateral) > 0.01 ? (float) Math.signum(lateral) : (c.random.nextBoolean() ? 1.0F : -1.0F);
+		return Math.abs(lateral) > 0.01 ? (float) Math.signum(lateral) : (c.random.nextBoolean() ? 1.0F : -1.0F);
+	}
+
+	/** Starts the fall: the push comes from the body's own momentum, so a hit knocks it over away from the blow. */
+	private void topple(Corpse c) {
+		Ragdoll body = c.body;
+		float yawRad = body.yaw * Mth.DEG_TO_RAD;
+		double lateral = body.vx * Mth.cos(yawRad) + body.vz * Mth.sin(yawRad);
+		float side = toppleSide(c);
+
 		float forward = (float) Math.hypot(body.vx, body.vz);
 		// A firm push, so it keels over about as fast as vanilla's tip-over instead of teetering.
 		body.topple(side, 0.05F + Math.min(0.2F, forward * 0.5F + (float) Math.abs(lateral)));
@@ -930,6 +1110,21 @@ public final class Suffering {
 		}
 
 		corpse.unloaded = true;
+		return true;
+	}
+
+	/**
+	 * A living entity has come in under the id of a body here (a player respawned with their old id): the body is let
+	 * go so it is not drawn over the living one. Returns true if there was such a body.
+	 */
+	public boolean release(LivingEntity living) {
+		Corpse corpse = corpses.get(living.getId());
+		if (corpse == null || corpse.entity == living) {
+			return false;
+		}
+
+		corpses.remove(living.getId());
+		states.remove(living.getId());
 		return true;
 	}
 

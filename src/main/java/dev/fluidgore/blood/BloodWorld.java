@@ -14,6 +14,8 @@ import net.minecraft.world.phys.Vec3;
 public final class BloodWorld {
 	/** Smallest amount of blood that starts a new puddle on its own. */
 	private static final float MIN_POOL_VOLUME = 0.02F;
+	/** Sine of the impact angle below which a drop stretches (about 50 degrees from the floor). */
+	private static final double SLANT = 0.77;
 
 	private final DecalManager decals = new DecalManager(this);
 	private final BloodFluidSim fluid = new BloodFluidSim(this);
@@ -51,6 +53,30 @@ public final class BloodWorld {
 
 	/** A droplet (or anything else carrying blood) reached a floor at (x, y, z). */
 	public void landOnFloor(Level level, double x, double y, double z, float volume, int rgb, int lifetime) {
+		landOnFloor(level, x, y, z, 0.0, -1.0, 0.0, volume, rgb, lifetime);
+	}
+
+	/**
+	 * A drop landing at velocity (vx, vy, vz). Steep, it splats round; at a slant it stretches into a teardrop as long
+	 * as its width over the sine of the angle it came in at, its tail pointing the way it flew. That is how a spatter
+	 * analyst reads where blood came from.
+	 */
+	public void landOnFloor(Level level, double x, double y, double z, double vx, double vy, double vz, float volume, int rgb, int lifetime) {
+		double across = Math.sqrt(vx * vx + vz * vz);
+		double sine = Math.abs(vy) / Math.max(1.0E-6, Math.sqrt(across * across + vy * vy));
+		if (sine < SLANT && across > 1.0E-4 && volume < MIN_POOL_VOLUME && GoreConfig.get().directionalSpatter) {
+			float width = (0.05F + (float) Math.min(0.3, Math.sqrt(volume) * 0.9)) * lognormal(0.3F);
+			float half = Math.min(0.6F, width / (float) Math.max(0.33, sine) * 0.5F);
+			double dx = vx / across;
+			double dz = vz / across;
+			// The streak tile's blob sits near one end with the tails running on: the blob goes where the drop hit.
+			double ahead = half * 0.76;
+			int orient = Math.abs(dx) > Math.abs(dz) ? 4 | (dx < 0.0 ? 2 : 0) : dz < 0.0 ? 2 : 0;
+			decals.addFloor(level, x + dx * ahead, y, z + dz * ahead, half, BloodTextures.STREAK, orient | random.nextInt(2), vary(rgb, 0.18F), true,
+					lifetime);
+			return;
+		}
+
 		// Small drops only leave a splat; they join the fluid simulation when they land in an existing puddle
 		// or carry enough blood to start one. This keeps a spray from turning into dozens of tiny puddles.
 		boolean pooled = volume >= MIN_POOL_VOLUME

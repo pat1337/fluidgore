@@ -13,11 +13,16 @@ Easy follow-up work is listed in **TASKS.md**. Do those one at a time.
    asked for by the user in 2.11 ("a server side mod so i can see my brother chopping up the bits of dead cow"): the
    server half, `server/KeptBodies` (common code, `main` entrypoint `FluidGore`, mixin `LivingEntityDeathMixin`) and
    its one packet `net/GoreAction`. Keep it that small: the server keeps bodies and relays actions; it never works out
-   gore. Every client feature must still work with `GoreSync.serverKeepsBodies()` false.
+   gore. Every client feature must still work with `GoreSync.serverKeepsBodies()` false. The second exception, asked
+   for by the user in 2.16 ("It's a real block, so Fluid Gore has to be on the server and on every player who joins.
+   Real damage applies for this block only"): the Cobble Tank (`fluidgore:cobble_tank`), `tank/` (block, block entity, flying-tank
+   entity, item, recipe, three damage types, packet `net/TankBurstPayload`). Nothing else may register content.
 2. **Cosmetic only.** Never change health, damage, drops, loot, AI or game rules. Exceptions: kept bodies (2.11, a
    dead body stays as an entity on the server and refuses interactions; drops and XP are untouched), and, asked for by the
    user in 2.3, the inventory sorter (`ui/InventorySorter`, `ui/SortButtons`), which moves items with ordinary vanilla
    inventory clicks (`handleContainerInput` PICKUP), exactly what a player could do by hand. No custom packets.
+   And the tank block (2.16), whose burst, jet and flight do real damage, break glass, open doors and freeze; nothing
+   else it touches is changed.
 3. **26.3 is not 1.21.** Names are Mojang's unobfuscated names and many APIs changed (render states,
    `SubmitNodeCollector`, `LevelRenderEvents`, `GuiGraphicsExtractor`, `Identifier` instead of `ResourceLocation`,
    `client.gui.setScreen`). Check the real source before guessing. See "Looking up APIs".
@@ -140,6 +145,22 @@ Mod Menu 21.0.0 (compile-only, soft dependency).
     bone for `Flesh.rots()`. A slash's `variant % 4` is its angle (`WoundSet.slashVariant`: level along the face).
     `Weapon` (blunt/flint/blade/chop/pick/pierce/bite/blast), `Flesh` (meat/bone/dried/rotten; `Flesh.rotten(type)` +
     `rottenUndead`; `EntityFilter.isRotten` gives `BloodColor.ROTTEN`, half the bleed, no spurts).
+- `tank/` (2.16, common unless noted): the Cobble Tank (`fluidgore:cobble_tank`; FACING = its top, placed on the clicked face; SCARS 0-3 multipart overlay from `cobble_tank_scars_N.png`; the jet is a vector in the block entity, from the blow's direction; `TankEntity` is a rigid body in SI units with a tilted nozzle for torque; `Scrape` = blow sounds and particles; no chat report for `Vessel.real()`). `Blast` is the physics shared with the client
+  (`trigger/PressureVessel` delegates to it): Brode energy, Mills overpressure x1.8 surface burst, `reach`, `damage`
+  (nothing below `EARDRUM_KPA`, log share of max health, 1000 from `FATAL_KPA`), leak thrust/bleed/temperature/loudness.
+  `TankState` (litres, psi, `fraction`, `damage`, crack `area`; `blow` by `force(stack)`: THROUGH 0.5 pinhole, CRACK
+  0.75 cracked fitting, SPLIT 1 burst; `bleed` + crack running). `Tanks` registers everything (`main` entrypoint).
+  `TankBlock` (LIT, FACING = top, LEAK, SCARS; unmineable while pressurized, `attack` = a blow; light like TNT;
+  `onExplosionHit` bursts it later; sneak-use picks up an unharmed tank). `TankBlockEntity` (fuse, leak, tears loose
+  into `TankEntity` when the thrust lifts it or beats static friction (0.6) on its weight less any lift, unless a sturdy block braces it; update packets every 10 ticks while leaking). `TankEntity` (synced
+  rotation quaternion, crack vector, pressure, area; thrust, tumble, smash weak blocks, impact damage by kinetic energy,
+  settles back into a block). `Jet` (injection/sandblast/throw/gale by distance scaled with sqrt of jet power, damage
+  types `fluidgore:jet`/`embolism`, `chill`, `frost`). `TankBurst`: sends `TankBurstPayload` (centre, litres, psi,
+  fragment hits per body) to players within 320, then a block-keeping vanilla explosion with a `Calculator` for the
+  real damage, `shatter` (glass/doors via section `maybeHas`), `chain` (nearby tanks go too), `later` (queued, ticked
+  on `END_LEVEL_TICK`). `TankFx` particles + the `leaks` hook. Client (`tank/client`): `TankRenderer` (moving block
+  turned by the quaternion), `TankClient` (payload -> `PressureVessel.told`, then `DamageTracker.onExplosion` if the
+  player is too far for the explosion packet; looping `LeakSound`; `PlayerInjuries.noise` dose for hearing).
 - `render/GoreRenderer`: draws decals, puddles, droplets, parts and removed corpses via
   `LevelRenderEvents.COLLECT_SUBMITS` and `submitCustomGeometry` / `submitModelPart` / the entity dispatcher.
 - `mixin/` (`fluidgore.mixins.json`, all client):
@@ -148,6 +169,7 @@ Mod Menu 21.0.0 (compile-only, soft dependency).
   - `ModelFeatureRendererMixin`: hides severed parts and animates limbs right around `renderToBuffer`, then restores.
   - `MinecraftMixin`: routes attack/use clicks to severed parts.
   - `ClientPacketListenerMixin`: records each explosion's centre and radius.
+  - `SoundEngineMixin`: blast deafness (`PlayerInjuries.hearing`) scales `calculateVolume(float, SoundSource)`.
   - `ClientLevelMixin`: records blocks that lose their collision in `blood/BrokenBlocks`, so resting gore drops at once.
   - Accessors and invokers for `ModelPart` and entity sounds.
 
@@ -296,3 +318,40 @@ severable parts; severed heads can't blink.
   `wadeSlowPercent` per body. `Evidence.waitForGround`: a server-sent piece whose chunk is not loaded on the client waits
   (it used to be dropped at once by `GorePartManager.step`: the old flaky "diced piece was not there" test). Game test:
   `clearingBodies`. No demo (`kept` shows it).
+- **2.14.0**: `wound/Cremation` (owned by `Dismemberment.cremation()`, ticked after `Burns`): per-corpse `Fire` (burn,
+  crumble, glow, kindle, blows). Heat from the corpse box (`CorpseStrike.box`, now public): lava 2, fire/lit campfire or
+  the entity's synced fire flag 1; `GoreAction.IGNITE` (flint and steel / fire charge via `MinecraftMixin` use routing,
+  `GoreSync.perform`) sets `kindle`. It burns on its own past `CATCHES`; water puts it out, rain too unless it lies in
+  lava. Pace `1 / (20 * SECONDS * cbrt(kg) * 100 / cremationSpeedPercent)` from the `KILOGRAMS` table (babies x0.15);
+  flames, smoke (white, then `LARGE_SMOKE`, cosy-smoke column) and sounds scale with `cbrt(kg)`. It raises `Burns` char
+  (Burns skips its own particles for these bodies). `Cremation.KEY` render state (`Charred`: bare, burn, glow, seed):
+  `ModelFeatureRendererMixin.fluidgore$cremate` (pugilistic flex, shrink to the bone, sheep fur hidden),
+  `CremationRenderer` patches (crust row 6, full-bright embers, meat row 2, bone row 3 coloured by calcination, ribs row
+  13 on the torso), chickens singed via `BloodyWool.Plumage`. `Cremation.strike` (called first in `CorpseStrike.strike`):
+  past `CHARRED` blows add `crumble` (char crumbs, seared giblets); past `BONE` they break `BONES` in order via the
+  missing mask, then `hide` (vaporized, so `GoreSync.tick` CLEANs it). `Suffering.shove` does not slow on burnt bodies,
+  `Decay` skips them, `Evidence` appends burn/crumble/blows. Game test: `cremation`. Demo: `cremation` (destructive: water).
+- **2.15.0**: `trigger/PressureVessel` (owned by `DamageTracker.vessels()`, ticked first in `DamageTracker.tick`): a
+  `PrimedTnt` seen for the first time that is one corner of a 2x2 square of TNT (any plane; the others still blocks or
+  lit) arms a `Vessel` at the square's centre. The first explosion within 3 blocks bursts it (`burst`: crack, fog,
+  carbon shreds, then per living body `Fate.begin(body, null)`, Poisson `fragments` -> `Wounds.strike` PIERCE, ear drips
+  over `EARDRUM_KPA`, mouth spray over `LUNG_KPA`, and `PlayerInjuries.burst` for the local player); later ones within
+  `AFTERSHOCK_TICKS` are the same burst. Every `Blast` of a vessel is centred on it and graded by `overpressure`
+  (Brode energy of `vesselLitres` at `vesselPsi`, x1.8 surface burst, Mills 1987 curve, `0.35 + 0.65 seen`) mapped
+  through `impact` so `TEAR_KPA`/`SHRED_KPA` land on `TEAR_IMPACT`/`SHRED_IMPACT`. `PlayerInjuries.burst`: chat report
+  (`fluidgore.vessel.*`), stagger, deafness (`hearing`, `SoundEngineMixin`) and `Tinnitus` (looping amethyst resonate at
+  pitch 2 on MASTER, which deafness skips). `Wounds.mouth` is public. Game test: `pressureVessel`. Demo: `roadster`.
+- **2.16.0**: the Cobble Tank (`tank/`, see Architecture and the rule 1 and 2 exceptions). Config `tankLitres`,
+  `tankPsi`, `tankBreaksGlass`. `PressureVessel.Vessel` carries `psi` and the server's fragment `hits` (`real()`; the
+  burst sends no chat report); `PressureVessel.told`; debris `clatter` after every
+  burst. `PlayerInjuries.noise(dB)`. Game test: `tankBlock`. Demo: `tank`.
+- **2.17.0**: Ragdoll Physics polish (still `articulatedRagdoll` off by default). `Suffering`: guided fall leans until
+  `ON_SIDE` (|roll| 1.4, up to `GUIDED_FALL * 3` ticks, harder once on the ground); quadrupeds (`Skeleton.Plan` not BIPED)
+  on their back past `ON_BACK` roll onto the nearer side for `RIGHTING_TICKS`; `drag` (rig bodies: step `bump`s for
+  drops under 1.5 blocks, `dragTrails` swipe decals for `TRAIL_TICKS`); `slam` bursts radially past `HARD_FALL`.
+  `Rigging`: `lean` tops spin up to a rate about the ground contact (never accumulates), `topple` pivots at the feet,
+  spasm hops under `HOP` are not passed to a grounded rig, `follow` drops a kept rig to the server's body past `DROP`,
+  `slide` feels for the edge at the lowest point and at the trunk (`PROPPED`), runs while asleep, tops speed up to
+  `SLIDE` x the pull. Landing strength capped 0.8 (was 0.35). `BloodWorld.landOnFloor(..., vx, vy, vz, ...)`:
+  `directionalSpatter` streaks below `SLANT`. Game test: `drops` (cliff onto slabs); `-PragdollOn` runs the picked
+  tests with Ragdoll Physics on. No demo (the user waived it for this release).

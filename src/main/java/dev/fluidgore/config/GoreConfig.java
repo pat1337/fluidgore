@@ -46,6 +46,10 @@ public final class GoreConfig {
 	/** Hard cap on splat decals plus puddle cells; the oldest are removed first. */
 	public int maxBloodDecals = 1500;
 	public boolean wallSplatter = true;
+	/** Drops that land at a slant leave stretched marks with tails pointing the way they flew (2.17). */
+	public boolean directionalSpatter = true;
+	/** A bleeding body dragged or sliding over the ground smears a trail behind it (2.17). */
+	public boolean dragTrails = true;
 	public boolean footprints = true;
 	public boolean rainWashesBlood = true;
 	/** Fluid simulation budget: puddle cells processed per client tick. */
@@ -109,6 +113,16 @@ public final class GoreConfig {
 	 * until it lies on the flat. Kept bodies are moved by the server, so everyone sees them where they end up.
 	 */
 	public boolean bodySlide = true;
+	/**
+	 * Dead bodies are articulated ragdolls: every leg bends at the knee or hock, the trunk at the waist and the head on a
+	 * neck, each joint as far as a real one goes, and the whole body falls, folds, drapes over steps and edges and comes
+	 * to rest under its own weight, never through a block. Off: the old one-piece ragdoll.
+	 */
+	public boolean articulatedRagdoll = false;
+	/** Articulated ragdolls bend their legs at the knee and hock (and elbows) too, not only where the model's parts join. */
+	public boolean ragdollKnees = false;
+	/** Shows the segments and joints of every articulated ragdoll (green moving, blue asleep, yellow the neck). */
+	public boolean ragdollDebug = false;
 	/** How much each body you walk through slows you, in percent: wading through a pile of carcasses is hard going. */
 	public int wadeSlowPercent = 35;
 	/** Dying bodies stay tinted red, like vanilla's death, until they are gone. */
@@ -125,6 +139,15 @@ public final class GoreConfig {
 	public int deathPopPercent = 5;
 	/** Animals on fire char from seared to black, smoke and smoulder, and leave a scorch mark where they burn to death. */
 	public boolean burns = true;
+	/**
+	 * Dead bodies can be burnt where they lie (a flint and steel or fire charge on one, or fire, a campfire or lava under
+	 * it): the hide sears and splits, the fat catches and burns on its own under thick black smoke, the limbs draw in,
+	 * and it burns down to a charred, then white skeleton, slower and smokier the heavier the animal. Put out early, it
+	 * stays charred; blows knock the char off the bone and break up the bones until nothing is left but ash.
+	 */
+	public boolean cremation = true;
+	/** How fast bodies burn, in percent: 100 burns a chicken to the bone in about 16 seconds, a sheep in 50, a cow in 100. */
+	public int cremationSpeedPercent = 100;
 	/**
 	 * Extreme gore level only: bodies that stay (kept bodies, severed pieces) rot as a real carcass does, by the
 	 * Minecraft day: rigor, bloat, rupture, maggots, bones. Faster for small bodies and in hot biomes, slower in water,
@@ -190,6 +213,24 @@ public final class GoreConfig {
 	public boolean lowHealthHeartbeat = true;
 	/** How hard a blow knocks your view about, in percent; 0 turns it off. A low-health sway comes with it. */
 	public int staggerPercent = 100;
+	/**
+	 * A 2x2 of TNT is a carbon-overwrapped pressure vessel (by default the Roadster's: 200 litres at 10,000 psi). When it
+	 * goes, bodies are hurt by the real overpressure where they stood: shredded, torn apart, lungs and eardrums burst,
+	 * fragments driven in; you are told what it did to you. Cosmetic: who dies is still vanilla's TNT damage.
+	 */
+	public boolean pressureVessel = true;
+	/** The vessel's volume, litres. */
+	public int vesselLitres = 200;
+	/** The vessel's pressure, psi. */
+	public int vesselPsi = 10_000;
+	/** The pressure vessel block (crafted, real damage): its volume, litres. Only new tanks take a changed size. */
+	public int tankLitres = 600;
+	/** The pressure vessel block's pressure when full, psi. */
+	public int tankPsi = 10_000;
+	/** A tank block bursting breaks glass and blows doors open around it (on the server). */
+	public boolean tankBreaksGlass = true;
+	/** A blast loud enough leaves you deaf for a while (other sounds muffled) with your ears ringing. */
+	public boolean blastDeafness = true;
 	/** A broken or cut leg makes the body limp (your own view hitches on that step), a hurt arm hangs, a belly wound is clutched. */
 	public boolean limp = true;
 	/** Blood soaks through clothes and smears armour over every open wound on a player. */
@@ -230,7 +271,10 @@ public final class GoreConfig {
 			"minecraft:parched",
 			"minecraft:skeleton_horse"
 	));
-	/** Per-mob blood measure overrides, by entity id (1 = average). Mobs not listed use the built-in amounts. */
+	/**
+	 * Litres of blood in each kind of mob, by entity id ({@code "minecraft:cow": 37.0}). Mobs not listed have their real
+	 * blood volume: body weight times the species' blood per kilogram (see {@code BloodSupply}).
+	 */
 	public java.util.Map<String, Float> bloodAmounts = new java.util.HashMap<>();
 	/** Entities that never bleed or lose parts (constructs, decorations). */
 	public List<String> bloodlessEntities = new ArrayList<>(List.of(
@@ -282,7 +326,7 @@ public final class GoreConfig {
 	}
 
 	/** Repairs values that a hand-edited file may have broken (missing enums, negative caps, null lists). */
-	private static final int CONFIG_VERSION = 6;
+	private static final int CONFIG_VERSION = 7;
 
 	private void sanitize() {
 		if (configVersion < 2) {
@@ -310,6 +354,11 @@ public final class GoreConfig {
 			if (partLifetimeSeconds == 60) partLifetimeSeconds = 600;
 		}
 
+		if (configVersion < 7) {
+			// 2.15: blood amounts are litres now, not a relative measure; the old numbers would mean a few spoonfuls.
+			if (bloodAmounts != null) bloodAmounts.clear();
+		}
+
 		configVersion = CONFIG_VERSION;
 		if (goreLevel == null) goreLevel = GoreLevel.MEDIUM;
 		if (bloodStyle == null) bloodStyle = BloodStyle.REDSTONE;
@@ -322,6 +371,10 @@ public final class GoreConfig {
 		partLifetimeSeconds = clamp(partLifetimeSeconds, 5, 3600);
 		woundClotSeconds = clamp(woundClotSeconds, 5, 600);
 		staggerPercent = clamp(staggerPercent, 0, 200);
+		vesselLitres = clamp(vesselLitres, 10, 1000);
+		vesselPsi = clamp(vesselPsi, 500, 20_000);
+		tankLitres = clamp(tankLitres, 10, 2000);
+		tankPsi = clamp(tankPsi, 500, 20_000);
 		maxDetachedParts = clamp(maxDetachedParts, 1, 256);
 		maxGiblets = clamp(maxGiblets, 0, Giblets.CAPACITY);
 		maxFeathers = clamp(maxFeathers, 0, dev.fluidgore.dismember.Feathers.CAPACITY);
@@ -332,6 +385,7 @@ public final class GoreConfig {
 		corpseLingerSeconds = clamp(corpseLingerSeconds, 3, 600);
 		maxKeptBodies = clamp(maxKeptBodies, 1, 512);
 		wadeSlowPercent = clamp(wadeSlowPercent, 0, 80);
+		cremationSpeedPercent = clamp(cremationSpeedPercent, 10, 1000);
 		decaySpeed = clamp(decaySpeed, 1, 100);
 		griefSeconds = clamp(griefSeconds, 0, 3600);
 		if (sufferingAnimals == null) sufferingAnimals = new ArrayList<>();
@@ -343,7 +397,7 @@ public final class GoreConfig {
 		if (bloodlessEntities == null) bloodlessEntities = new ArrayList<>();
 		if (bloodAmounts == null) bloodAmounts = new java.util.HashMap<>();
 		bloodAmounts.values().removeIf(v -> v == null || !(v >= 0.0F));
-		bloodAmounts.replaceAll((k, v) -> Math.min(v, 10.0F));
+		bloodAmounts.replaceAll((k, v) -> Math.min(v, 500.0F));
 	}
 
 	private static int clamp(int value, int min, int max) {

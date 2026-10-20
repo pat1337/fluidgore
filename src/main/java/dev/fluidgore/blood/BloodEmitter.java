@@ -64,7 +64,8 @@ public final class BloodEmitter {
 		BloodColor type = EntityFilter.bloodType(entity);
 		int rgb = type.rgb;
 		float measure = BloodAmount.measure(entity);
-		float bodySize = Mth.clamp(entity.getBbWidth() * entity.getBbHeight() / (0.6F * 1.8F), 0.3F, 3.0F) * measure;
+		// How hard this body bleeds from a wound (its size is in it: see BloodAmount); how much it has left is BloodSupply's.
+		float bodySize = measure;
 		// How bad this particular wound is: most near 1, some barely bleed, some gush.
 		float severity = Mth.clamp(world.lognormal(0.5F), 0.3F, 4.0F);
 		float volume = Math.min(3.0F, (0.03F + damage * 0.03F) * preset.puddles * bodySize * (lethal ? 3.0F : 1.0F) * severity * open);
@@ -95,7 +96,7 @@ public final class BloodEmitter {
 		if (lethal) {
 			double surface = SurfaceProbe.surfaceBelow(level, entity.getX(), entity.getY() + 0.3, entity.getY() - 1.5, entity.getZ());
 			if (!Double.isNaN(surface)) {
-				world.landOnFloor(level, entity.getX(), surface, entity.getZ(), volume * 0.3F, rgb, world.decalLifetime());
+				world.landOnFloor(level, entity.getX(), surface, entity.getZ(), BloodSupply.draw(volume * 0.3F), rgb, world.decalLifetime());
 			}
 		}
 
@@ -196,7 +197,8 @@ public final class BloodEmitter {
 		int mist = Math.min(40, Math.round(scaled * 0.6F));
 		for (int i = 0; i < mist; i++) {
 			int color = world.vary(rgb, 0.25F);
-			float scale = 1.5F + RANDOM.nextFloat() * 2.5F;
+			// A fine mist, not sheets: the drops of a blast spray are a fraction of a millimetre.
+			float scale = 0.6F + RANDOM.nextFloat() * 1.0F;
 			level.addParticle(new DustColorTransitionOptions(color, darken(color), scale),
 					origin.x + RANDOM.nextGaussian() * 0.5, origin.y + RANDOM.nextGaussian() * 0.4, origin.z + RANDOM.nextGaussian() * 0.5,
 					RANDOM.nextGaussian() * 0.05, 0.02 + RANDOM.nextDouble() * 0.04, RANDOM.nextGaussian() * 0.05);

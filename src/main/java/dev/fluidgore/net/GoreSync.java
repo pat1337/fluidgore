@@ -96,6 +96,7 @@ public final class GoreSync {
 		}
 
 		Fate.begin(seed);
+		dev.fluidgore.blood.BloodSupply.begin(corpse != null ? corpse.entity : null);
 		try {
 			return switch (action.kind()) {
 				case GoreAction.STRIKE -> {
@@ -118,6 +119,7 @@ public final class GoreSync {
 					GONE.add(action.entityId());
 					yield GoreSystems.suffering().clean(level, action.entityId());
 				}
+				case GoreAction.IGNITE -> corpse != null && GoreSystems.dismemberment().cremation().ignite(level, corpse, action.weapon() == 1);
 				case GoreAction.SCRUB -> {
 					Direction[] faces = Direction.values();
 					yield Cleaning.scrub(level, GoreSystems.blood(), action.at(), faces[Math.floorMod(action.weapon(), faces.length)]) > 0;
@@ -125,6 +127,7 @@ public final class GoreSync {
 				default -> false;
 			};
 		} finally {
+			dev.fluidgore.blood.BloodSupply.end();
 			Fate.end();
 		}
 	}

@@ -55,6 +55,11 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 				scaledSlider("fluidgore.option.persistence", 1, 120, 10, c.persistenceSeconds, "fluidgore.unit.seconds", v -> c.persistenceSeconds = v),
 				scaledSlider("fluidgore.option.max_decals", 1, 100, 50, c.maxBloodDecals, null, v -> c.maxBloodDecals = v),
 				OptionInstance.createBoolean("fluidgore.option.wall_splatter", c.wallSplatter, v -> c.wallSplatter = v),
+				OptionInstance.createBoolean("fluidgore.option.directional_spatter",
+						OptionInstance.cachedConstantTooltip(Component.translatable("fluidgore.option.directional_spatter.tooltip")), c.directionalSpatter,
+						v -> c.directionalSpatter = v),
+				OptionInstance.createBoolean("fluidgore.option.drag_trails", OptionInstance.cachedConstantTooltip(Component.translatable("fluidgore.option.drag_trails.tooltip")),
+						c.dragTrails, v -> c.dragTrails = v),
 				OptionInstance.createBoolean("fluidgore.option.footprints", c.footprints, v -> c.footprints = v),
 				OptionInstance.createBoolean("fluidgore.option.rain_washes", c.rainWashesBlood, v -> c.rainWashesBlood = v),
 				OptionInstance.createBoolean("fluidgore.option.cleaning", c.cleaning, v -> c.cleaning = v)
@@ -101,7 +106,17 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 				OptionInstance.createBoolean("fluidgore.option.heartbeat", c.lowHealthHeartbeat, v -> c.lowHealthHeartbeat = v),
 				scaledSlider("fluidgore.option.stagger", 0, 20, 10, c.staggerPercent, "fluidgore.unit.percent", v -> c.staggerPercent = v),
 				OptionInstance.createBoolean("fluidgore.option.limp", c.limp, v -> c.limp = v),
-				OptionInstance.createBoolean("fluidgore.option.bloody_clothes", c.bloodyClothes, v -> c.bloodyClothes = v)
+				OptionInstance.createBoolean("fluidgore.option.bloody_clothes", c.bloodyClothes, v -> c.bloodyClothes = v),
+				OptionInstance.createBoolean("fluidgore.option.pressure_vessel", OptionInstance.cachedConstantTooltip(Component.translatable("fluidgore.option.pressure_vessel.tooltip")),
+						c.pressureVessel, v -> c.pressureVessel = v),
+				OptionInstance.createBoolean("fluidgore.option.blast_deafness", OptionInstance.cachedConstantTooltip(Component.translatable("fluidgore.option.blast_deafness.tooltip")),
+						c.blastDeafness, v -> c.blastDeafness = v),
+				scaledSlider("fluidgore.option.vessel_litres", 1, 100, 10, c.vesselLitres, "fluidgore.unit.litres", v -> c.vesselLitres = v),
+				scaledSlider("fluidgore.option.vessel_psi", 1, 40, 500, c.vesselPsi, "fluidgore.unit.psi", v -> c.vesselPsi = v),
+				OptionInstance.createBoolean("fluidgore.option.tank_breaks_glass", OptionInstance.cachedConstantTooltip(Component.translatable("fluidgore.option.tank_breaks_glass.tooltip")),
+						c.tankBreaksGlass, v -> c.tankBreaksGlass = v),
+				scaledSlider("fluidgore.option.tank_litres", 1, 200, 10, c.tankLitres, "fluidgore.unit.litres", v -> c.tankLitres = v),
+				scaledSlider("fluidgore.option.tank_psi", 1, 40, 500, c.tankPsi, "fluidgore.unit.psi", v -> c.tankPsi = v)
 		);
 
 		this.list.addHeader(Component.translatable("fluidgore.header.suffering"));
@@ -120,6 +135,14 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 						c.keepBodies, v -> c.keepBodies = v),
 				OptionInstance.createBoolean("fluidgore.option.body_slide", OptionInstance.cachedConstantTooltip(Component.translatable("fluidgore.option.body_slide.tooltip")),
 						c.bodySlide, v -> c.bodySlide = v),
+				OptionInstance.createBoolean("fluidgore.option.articulated_ragdoll",
+						OptionInstance.cachedConstantTooltip(Component.translatable("fluidgore.option.articulated_ragdoll.tooltip")),
+						c.articulatedRagdoll, v -> c.articulatedRagdoll = v),
+				OptionInstance.createBoolean("fluidgore.option.ragdoll_knees", OptionInstance.cachedConstantTooltip(Component.translatable("fluidgore.option.ragdoll_knees.tooltip")),
+						c.ragdollKnees, v -> c.ragdollKnees = v),
+				OptionInstance.createBoolean("fluidgore.option.ragdoll_debug", OptionInstance.cachedConstantTooltip(Component.translatable("fluidgore.option.ragdoll_debug.tooltip")),
+						c.ragdollDebug, v -> c.ragdollDebug = v),
+
 				scaledSlider("fluidgore.option.wade_slow", 0, 16, 5, c.wadeSlowPercent, "fluidgore.unit.percent", v -> c.wadeSlowPercent = v),
 				scaledSlider("fluidgore.option.max_kept_bodies", 1, 64, 8, c.maxKeptBodies, null, v -> c.maxKeptBodies = v),
 				scaledSlider("fluidgore.option.corpse_linger", 1, 120, 5, c.corpseLingerSeconds, "fluidgore.unit.seconds", v -> c.corpseLingerSeconds = v),
@@ -127,6 +150,9 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 				OptionInstance.createBoolean("fluidgore.option.death_pop", c.deathPop, v -> c.deathPop = v),
 				scaledSlider("fluidgore.option.death_pop_chance", 0, 20, 5, c.deathPopPercent, "fluidgore.unit.percent", v -> c.deathPopPercent = v),
 				OptionInstance.createBoolean("fluidgore.option.burns", c.burns, v -> c.burns = v),
+				OptionInstance.createBoolean("fluidgore.option.cremation", OptionInstance.cachedConstantTooltip(Component.translatable("fluidgore.option.cremation.tooltip")),
+						c.cremation, v -> c.cremation = v),
+				scaledSlider("fluidgore.option.cremation_speed", 1, 40, 25, c.cremationSpeedPercent, "fluidgore.unit.percent", v -> c.cremationSpeedPercent = v),
 				OptionInstance.createBoolean("fluidgore.option.body_decay", OptionInstance.cachedConstantTooltip(Component.translatable("fluidgore.option.body_decay.tooltip")),
 						c.bodyDecay, v -> c.bodyDecay = v),
 				scaledSlider("fluidgore.option.decay_speed", 1, 100, 1, c.decaySpeed, "fluidgore.unit.times", v -> c.decaySpeed = v)

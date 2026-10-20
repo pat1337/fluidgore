@@ -23,6 +23,8 @@ public final class Spurts {
 		final float strength;
 		/** Ticks between heartbeats; a panicking animal's heart races. */
 		final int beat;
+		/** The body it bleeds out of (see BloodSupply), or -1. */
+		final int body = BloodSupply.currentId();
 		Vec3 direction;
 		int age;
 
@@ -72,6 +74,7 @@ public final class Spurts {
 		final int rgb;
 		final int life;
 		final float strength;
+		final int body = BloodSupply.currentId();
 		int age;
 
 		Ooze(Supplier<Vec3> top, Supplier<Vec3> bottom, double width, int rgb, int life, float strength) {
@@ -100,8 +103,16 @@ public final class Spurts {
 	}
 
 	void tick() {
-		spurts.removeIf(this::step);
-		oozes.removeIf(this::stepOoze);
+		spurts.removeIf(s -> {
+			boolean[] done = {false};
+			BloodSupply.as(s.body, () -> done[0] = step(s));
+			return done[0];
+		});
+		oozes.removeIf(o -> {
+			boolean[] done = {false};
+			BloodSupply.as(o.body, () -> done[0] = stepOoze(o));
+			return done[0];
+		});
 	}
 
 	private boolean stepOoze(Ooze o) {
