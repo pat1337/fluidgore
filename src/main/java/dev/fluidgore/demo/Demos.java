@@ -1,6 +1,7 @@
 package dev.fluidgore.demo;
 
 import dev.fluidgore.GoreSystems;
+import dev.fluidgore.blood.Cleaning;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.GorePart;
 import dev.fluidgore.dismember.ModelParts;
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.function.Function;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.Direction;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.LivingEntity;
@@ -28,6 +30,7 @@ import org.jspecify.annotations.Nullable;
  */
 public final class Demos {
 	public static final List<Demo> ALL = List.of(
+			new Demo("sponge", "3.1.0", "A pig's blood and guts cleaned up: a clean sponge lifts the blood, a bloody one smears it along the stroke and squashes the guts into streaks, a soaked one leaves red wipes on a clean floor, and the blood clouds out of it when it is washed", false, Demos::sponge),
 			new Demo("arrows", "3.0.0", "Arrows with no one behind them, as from a dispenser, at a cow side-on: with Fluid Gore on the server each wounds exactly where it strikes (leg, flank, neck), the same on every screen", false, Demos::arrows),
 			new Demo("tank", "2.16.0", "The Cobble Tank, for real: a pinhole leak hisses and frosts and costs you your hearing, a cracked tank tears loose and flies, and a full one (600 litres at 10,000 psi, about 21 kg of TNT) lit with redstone 30 blocks off kills to 8 m, bursts eardrums to 15, blows a gate open and the glass out", true, Demos::tank),
 			new Demo("roadster", "2.15.0", "A 2x2 of TNT as the Roadster's pressure vessel (200 litres at 10,000 psi, about 7 kg of TNT) with animals in rings round it: shredded, torn apart, lungs burst, fragments driven in, each by the real overpressure where it stood; 9 blocks off, you are deafened and your ears ring", true, Demos::roadster),
@@ -101,6 +104,44 @@ public final class Demos {
 						ModelParts.torso(ModelParts.pose(c.entity).model()), new Vec3(0, -1, 0));
 			}
 		}).pause(100);
+	}
+
+	/**
+	 * Bloody tools (3.1): a pig killed and gutted on the floor, then wiped up by a sponge growing bloodier: clean it
+	 * lifts the blood, half soaked it smears it on and squashes the guts, soaked it leaves wipes on clean floor, and it is
+	 * washed. The strokes are played here (a demo never puts a real sponge in the player's hand).
+	 */
+	private static void sponge(Script s, Stage st) {
+		s.summon(st, "pig", "fgd_pig", 0, 0, 4, 90.0F, "");
+		s.pause(20).hold("minecraft:iron_axe").say("A pig killed on the floor: blood and guts to clean up");
+		s.hit("fgd_pig", 100).pause(10);
+		s.client(mc -> {
+			LivingEntity e = st.find(mc.level, EntityTypes.PIG, 0, 0, 4);
+			if (e != null) {
+				GoreSystems.dismemberment().giblets().spill(mc.level, GoreSystems.blood(), e, e.position().add(0.0, 0.4, 0.0), 0.6F);
+			}
+		}).pause(50);
+		s.say("A clean sponge takes the blood up");
+		strokes(s, st, 0.0F, 3.4);
+		s.pause(20).say("Bloodier, it takes up less and drags the rest along, squashing the guts into streaks");
+		strokes(s, st, 0.6F, 4.4);
+		s.pause(20).say("Soaked through, it leaves red wipes on a clean floor");
+		strokes(s, st, 1.0F, 2.2);
+		s.pause(30).say("Washed in water, the blood clouds out of it (with Fluid Gore on the server, everyone sees the sponge go red)");
+		for (int i = 0; i < 3; i++) {
+			s.client(mc -> Cleaning.wash(mc.level, st.at(1.5, 0.1, 2.0), 0x8A0303)).pause(15);
+		}
+
+		s.pause(40);
+	}
+
+	/** One wipe across the floor {@code forward} blocks out, left to right, with a tool {@code soak} bloody. */
+	private static void strokes(Script s, Stage st, float soak, double forward) {
+		Vec3 way = st.at(1.0, 0.0, forward).subtract(st.at(0.0, 0.0, forward)).normalize();
+		for (int i = 0; i < 9; i++) {
+			Vec3 at = st.at(-1.4 + i * 0.35, 0.0, forward);
+			s.client(mc -> Cleaning.scrub(mc.level, GoreSystems.blood(), at, Direction.UP, way, soak, 0x8A0303)).pause(3);
+		}
 	}
 
 	/**

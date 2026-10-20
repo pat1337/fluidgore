@@ -8,6 +8,7 @@ import dev.fluidgore.net.BodyAge;
 import dev.fluidgore.net.GoreAction;
 import dev.fluidgore.net.PieceState;
 import dev.fluidgore.physics.BodySlide;
+import dev.fluidgore.trigger.EntityFilter;
 import dev.fluidgore.wound.Weapon;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -339,6 +340,11 @@ public final class KeptBodies {
 			return;
 		}
 
+		if (action.kind() == GoreAction.WASH && !BloodyTools.wash(player)) {
+			// No bloody tool, or no water to wash it in.
+			return;
+		}
+
 		for (ServerPlayer other : PlayerLookup.around(level, where, SHOW_RANGE)) {
 			if (other != player && ServerPlayNetworking.canSend(other, GoreAction.TYPE)) {
 				ServerPlayNetworking.send(other, action);
@@ -346,7 +352,16 @@ public final class KeptBodies {
 		}
 
 		if (action.kind() == GoreAction.CLEAN && body != null) {
+			if (action.damage() > 0.0F) {
+				// Wiped away by hand (not a body blown to nothing that a game asked to have taken): it is on the tool now.
+				BloodyTools.wipedBody(player, EntityFilter.bloodType(body).rgb);
+			}
+
 			clean(body);
+		}
+
+		if (action.kind() == GoreAction.SCRUB) {
+			BloodyTools.absorb(player, action.damage(), (int) (action.partKey() & 0xFFFFFF));
 		}
 
 		if (action.kind() == GoreAction.STRIKE && body != null && isKept(body)) {

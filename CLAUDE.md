@@ -26,7 +26,9 @@ Easy follow-up work is listed in **TASKS.md**. Do those one at a time.
    user in 2.3, the inventory sorter (`ui/InventorySorter`, `ui/SortButtons`), which moves items with ordinary vanilla
    inventory clicks (`handleContainerInput` PICKUP), exactly what a player could do by hand. No custom packets.
    And the tank block (2.16), whose burst, jet and flight do real damage, break glass, open doors and freeze; nothing
-   else it touches is changed.
+   else it touches is changed. And bloody tools (3.1, asked for by the user: "bloody sponge ... the brush gets bloody
+   and needs washed"): the server writes `custom_model_data` (float 0 soak, colour 0 blood) on the held cleaning item
+   and turns a sponge washed clean into a wet sponge (`server/BloodyTools`); nothing else about items changes.
 3. **26.3 is not 1.21.** Names are Mojang's unobfuscated names and many APIs changed (render states,
    `SubmitNodeCollector`, `LevelRenderEvents`, `GuiGraphicsExtractor`, `Identifier` instead of `ResourceLocation`,
    `client.gui.setScreen`). Check the real source before guessing. See "Looking up APIs".
@@ -109,6 +111,15 @@ Mod Menu 21.0.0 (compile-only, soft dependency).
   - `BloodFluidSim` + `BloodCell` are the cellular puddle flow.
   - `DecalManager` + `Decal` are splats split into pieces that follow stairs and slabs.
   - `Spurts` are arterial jets. `Footprints`.
+  - `Cleaning` (sponge/brush, `cleaningItems`; 3.1 bloody tools): `onUse` washes a bloody tool near water
+    (`GoreAction.WASH`, `BloodyTools.nearWater`), cleans a body away (CLEAN, damage 1 = by hand), or scrubs a stroke
+    (direction from the last scrub point within `SCRUB_GRACE`). `scrub` = `BloodWorld.scrub` (takes up the share
+    `lift = 1 - soak` of each decal/cell, drags the rest along the stroke as `smear` STREAK decals) + `Giblets.squash`
+    (resting pieces -> dark gut smears) + a soaked tool's own smear past `DEPOSIT`. `ToolSoak` reads the stack's stain
+    when the server runs the mod, else keeps a local one per item kind. The item look: `assets/minecraft/items/
+    {sponge,wet_sponge,brush}.json` range-dispatch on `custom_model_data` 0 to `fluidgore:item/*_blood_N` (sponge
+    stains in `textures/block`: a block model may only use the block atlas; brush stains in `textures/item`), tinted by
+    colour 0.
   - `SurfaceProbe` gives exact surface heights. `BloodTextures` holds the atlas tiles.
 - `dismember/`:
   - `Dismemberment` decides when to cut, spawns parts, and tracks missing-part masks.
@@ -371,3 +382,7 @@ severable parts; severed heads can't blink.
   wound along their flight. Game test: `hitReports`. Demo: `arrows`. Next steps of the plan: persistence of blood and
   pieces with the world, server-owned ragdolls for kept bodies (capped for the tick budget), then optional gameplay
   consequences behind a server setting (off by default).
+- **3.1.0**: bloody tools (see `blood/Cleaning` and rule 2): `server/BloodyTools` (common: soak/colour on the stack,
+  `absorb` from SCRUB's reported litres, `wipedBody` on CLEAN by hand, `wash`), `blood/ToolSoak`, `BloodWorld.scrub`
+  (replaces `clean`) + `smear`, `Giblets.squash`, `GoreAction.WASH`. Textures from the generator (`spongeBlood`,
+  `brushBlood`). Game test: `bloodyTools`. Demo: `sponge`. `-PonlyDemos=a,b` limits the `demos` test.

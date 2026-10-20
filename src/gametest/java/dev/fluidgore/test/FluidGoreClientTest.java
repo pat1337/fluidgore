@@ -53,6 +53,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 						case "deaths" -> deaths(context, server);
 						case "hackModel" -> hackModel(context, server);
 						case "hitReports" -> hitReports(context, server);
+						case "bloodyTools" -> bloodyTools(context, server);
 						case "sharedFate" -> sharedFate(context, server);
 						case "weapons" -> weapons(context, server);
 						case "playerGore" -> playerGore(context, server);
@@ -122,6 +123,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			hackModel(context, singleplayer.getServer());
 			sharedFate(context, singleplayer.getServer());
 			hitReports(context, singleplayer.getServer());
+			bloodyTools(context, singleplayer.getServer());
 			rot(context, singleplayer.getServer());
 
 
@@ -349,7 +351,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		boolean cleaned = context.computeOnClient(mc -> {
 			net.minecraft.world.phys.Vec3 spot = new net.minecraft.world.phys.Vec3(0.5, -60.0, 5.5);
 			for (int i = 0; i < 3; i++) {
-				GoreSystems.blood().clean(spot, net.minecraft.core.Direction.UP, 4.0F);
+				GoreSystems.blood().scrub(mc.level, spot, net.minecraft.core.Direction.UP, 4.0F, 1.0F, null);
 			}
 
 			return !GoreSystems.blood().hasBloodNear(spot, 3.0F);
@@ -740,6 +742,80 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			var set = GoreSystems.dismemberment().wounds().get(cowId);
 			return set != null && set.severity(leg) > 0.0F;
 		}), "an ownerless arrow at the " + leg + " did not wound it: " + outcome);
+		// Gone before a later test turns on kept bodies: a cow killed then would stay, lying, and be taken for its own.
+		server.runCommand("kill @e[type=!minecraft:player]");
+		context.waitTicks(30);
+	}
+
+	/**
+	 * Bloody tools (3.1): a sponge scrubbing pools of blood soaks it up (on the stack, from the server), until it is so
+	 * bloody that dragging it over a clean floor leaves smears; rinsed in water a few times, it comes out a clean wet sponge.
+	 */
+	private static void bloodyTools(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		context.runOnClient(mc -> GoreSystems.blood().clear());
+		server.runCommand("fill 137 -60 0 144 -58 6 minecraft:air");
+		server.runCommand("tp @a 140.5 -60 0.5 0 45");
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:sponge");
+		context.waitTicks(20);
+		float[] soak = new float[1];
+		for (int round = 0; round < 6 && soak[0] < 0.7F; round++) {
+			context.runOnClient(mc -> {
+				for (int i = 0; i < 5; i++) {
+					GoreSystems.blood().landOnFloor(mc.level, 139.6 + i * 0.4, -60.0, 2.5, 0.06F, 0x8A0303, 2000);
+				}
+			});
+			context.waitTicks(5);
+			for (int stroke = 0; stroke < 5; stroke++) {
+				int s = stroke;
+				context.runOnClient(mc -> aimAt(mc, 139.4 + s * 0.4, -60.0, 2.5));
+				context.waitTicks(2);
+				context.runOnClient(mc -> dev.fluidgore.blood.Cleaning.onUse(mc, GoreSystems.blood()));
+				context.waitTicks(2);
+			}
+
+			context.waitTicks(5);
+			soak[0] = context.computeOnClient(mc -> dev.fluidgore.server.BloodyTools.soak(mc.player.getMainHandItem()));
+			System.out.println("[FluidGoreTest] bloody tools: sponge after round " + round + ": " + soak[0]);
+		}
+
+		check(soak[0] > 0.55F, "scrubbing pools of blood did not soak the sponge: " + soak[0]);
+		context.runOnClient(mc -> mc.player.setXRot(10.0F));
+		context.waitTicks(3);
+		context.takeScreenshot("bloody_sponge");
+
+		// Soaked: dragged over clean stone it smears.
+		int before = context.computeOnClient(mc -> GoreSystems.blood().decals().size());
+		for (int stroke = 0; stroke < 4; stroke++) {
+			int s = stroke;
+			context.runOnClient(mc -> aimAt(mc, 139.4 + s * 0.4, -60.0, 4.5));
+			context.waitTicks(2);
+			context.runOnClient(mc -> dev.fluidgore.blood.Cleaning.onUse(mc, GoreSystems.blood()));
+			context.waitTicks(2);
+		}
+
+		int after = context.computeOnClient(mc -> GoreSystems.blood().decals().size());
+		System.out.println("[FluidGoreTest] bloody tools: decals on a clean floor before/after the soaked sponge: " + before + " " + after);
+		check(after > before, "a soaked sponge dragged over a clean floor left no smear");
+
+		// Washed: a few dunks in a cauldron of water and it is clean (and wet).
+		server.runCommand("setblock 140 -60 3 minecraft:water_cauldron[level=3]");
+		context.waitTicks(10);
+		for (int dunk = 0; dunk < 4; dunk++) {
+			context.runOnClient(mc -> aimAt(mc, 140.5, -59.3, 3.5));
+			context.waitTicks(2);
+			context.runOnClient(mc -> dev.fluidgore.blood.Cleaning.onUse(mc, GoreSystems.blood()));
+			context.waitTicks(4);
+		}
+
+		String held = context.computeOnClient(mc -> mc.player.getMainHandItem().getItem() + " soak "
+				+ dev.fluidgore.server.BloodyTools.soak(mc.player.getMainHandItem()));
+		System.out.println("[FluidGoreTest] bloody tools: after washing: " + held);
+		check(context.computeOnClient(mc -> mc.player.getMainHandItem().is(net.minecraft.world.item.Items.WET_SPONGE)
+				&& dev.fluidgore.server.BloodyTools.soak(mc.player.getMainHandItem()) <= dev.fluidgore.server.BloodyTools.CLEAN),
+				"washing did not leave a clean wet sponge: " + held);
+		server.runCommand("setblock 140 -60 3 minecraft:air");
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");
 	}
 
 	/**
@@ -3932,7 +4008,13 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		boolean allowed = context.computeOnClient(mc -> dev.fluidgore.demo.DemoPlayer.allowed(mc));
 		check(allowed, "the test player may not run demo commands");
 		int spot = 0;
+		// -PonlyDemos=sponge,arrows: just those.
+		String onlyDemos = System.getProperty("fluidgore.demos", "");
 		for (dev.fluidgore.demo.Demo demo : dev.fluidgore.demo.Demos.ALL) {
+			if (!onlyDemos.isBlank() && !java.util.List.of(onlyDemos.split(",")).contains(demo.name())) {
+				continue;
+			}
+
 			server.runCommand("tp @a " + (200 + spot * 40) + ".5 -60 0.5 0 15");
 			spot++;
 			context.waitTicks(30);

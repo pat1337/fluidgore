@@ -1,6 +1,7 @@
 package dev.fluidgore;
 
 import dev.fluidgore.blood.BloodSupply;
+import dev.fluidgore.blood.ToolSoak;
 import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.blood.BrokenBlocks;
 import dev.fluidgore.blood.Gush;
@@ -156,6 +157,7 @@ public final class GoreSystems {
 		Evidence.clear();
 		Gush.clear();
 		BloodSupply.clear();
+		ToolSoak.clear();
 		BrokenBlocks.clear();
 		ModelParts.clearDrawn();
 		INJURIES.clear();

@@ -1,0 +1,13 @@
+{
+	"model": {
+		"type": "minecraft:range_dispatch",
+		"property": "minecraft:custom_model_data",
+		"index": 0,
+		"entries": [
+			{"threshold": 0.05, "model": {"type": "minecraft:model", "model": "fluidgore:item/wet_sponge_blood_1", "tints": [{"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}},
+			{"threshold": 0.4, "model": {"type": "minecraft:model", "model": "fluidgore:item/wet_sponge_blood_2", "tints": [{"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}},
+			{"threshold": 0.8, "model": {"type": "minecraft:model", "model": "fluidgore:item/wet_sponge_blood_3", "tints": [{"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}}
+		],
+		"fallback": {"type": "minecraft:model", "model": "minecraft:block/wet_sponge"}
+	}
+}

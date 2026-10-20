@@ -14,11 +14,14 @@ import net.minecraft.world.phys.Vec3;
  *
  * @param kind     what was done, see the constants
  * @param entityId the body (STRIKE, PLUCK, CLEAN, IGNITE), or -1
- * @param partKey  the loose piece (CUT), see {@code GorePart#key}, or 0
- * @param x        the eye (STRIKE, PLUCK, CUT) or the scrubbed point (SCRUB)
- * @param dx       the view direction, or the scrubbed face's normal (SCRUB)
- * @param weapon   ordinal of the {@code Weapon} held (STRIKE), 1 for a fire charge (IGNITE)
- * @param damage   the attack damage of the held item (STRIKE)
+ * @param partKey  the loose piece (CUT), see {@code GorePart#key}; for SCRUB the tool's blood colour (high 32 bits)
+ *                 and the lifted blood's (low); for WASH the tool's blood colour; or 0
+ * @param x        the eye (STRIKE, PLUCK, CUT), the scrubbed point (SCRUB) or the water (WASH)
+ * @param dx       the view direction; for SCRUB the stroke's direction (dx, dz; 0 for a dab) and how bloody the tool
+ *                 was (dy, 0..1)
+ * @param weapon   ordinal of the {@code Weapon} held (STRIKE), 1 for a fire charge (IGNITE), the face (SCRUB)
+ * @param damage   the attack damage of the held item (STRIKE), blood lifted in litres (SCRUB), 1 for a body wiped
+ *                 away by hand (CLEAN)
  */
 public record GoreAction(byte kind, int entityId, long partKey, float x, float y, float z, float dx, float dy, float dz, byte weapon,
 		float damage) implements CustomPacketPayload {
@@ -34,6 +37,11 @@ public record GoreAction(byte kind, int entityId, long partKey, float x, float y
 	public static final byte SCRUB = 4;
 	/** Fire put to a body (a flint and steel; weapon 1: a fire charge). */
 	public static final byte IGNITE = 5;
+	/**
+	 * A bloody cleaning tool rinsed in water (3.1): {@code x} where the water is, {@code partKey} the blood's colour. The
+	 * server rinses the stack and passes it on only if there is water there.
+	 */
+	public static final byte WASH = 6;
 
 	public static final Type<GoreAction> TYPE = new Type<>(Identifier.fromNamespaceAndPath(FluidGore.MOD_ID, "action"));
 	public static final StreamCodec<ByteBuf, GoreAction> CODEC = StreamCodec.of((buf, a) -> {

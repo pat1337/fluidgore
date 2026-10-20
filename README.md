@@ -124,6 +124,13 @@ Droplets fly with gravity and splat on floors and walls. Puddles flow to lower g
 and drip off ledges. Arterial spurts pump in pulses. Blood dries and darkens, rain washes it away, footprints track
 through it, and a sponge or brush scrubs it off.
 
+### Cleaning up (3.1)
+A sponge or brush scrubs blood away, and it soaks up what it takes: the item goes red in three stages, in the
+blood's own colour. The bloodier it gets, the less it lifts and the more it drags along the stroke, and guts on the
+floor are squashed into dark streaks. Soaked through, it leaves red wipes even on a clean floor. Use it on water, a
+water cauldron, or while standing in water to rinse it; a sponge washed clean comes out a wet sponge. With the mod on
+the server everyone sees the stained item. Try `/gore demo sponge`.
+
 ### Butchery
 Process a carcass the way it is done on a farm: right-click a dead chicken with an empty hand to pluck it, a
 handful of feathers at a time, down to bare, goose-pimpled skin. Take the head, wings and legs off at the joints
@@ -187,7 +194,7 @@ Tested alongside Sodium, Iris (without a shader pack), Lithium, FerriteCore, Ent
 | Wall Splatter | On | Blood sticks to walls and runs down ledges. |
 | Bloody Footprints | On | Anything walking through a puddle leaves footprints. |
 | Rain Washes Blood | On | Rain fades blood much faster. Blood in water always disperses. |
-| Scrub Blood | On | Hold a sponge, wet sponge or brush and hold use on blood to wipe it away. Sneak to use the item normally. |
+| Scrub Blood | On | Hold a sponge, wet sponge or brush and hold use on blood to wipe it away. The tool gets bloody and smears more the bloodier it is; use it on water to wash it. Sneak to use the item normally. |
 | Fluid Cells/Tick | 64 | Fluid simulation budget per tick. Lower it on a weak CPU. |
 | Max Droplets | 600 | Cap on flying droplets. |
 | Max Flesh Pieces | 3000 | Cap on the small pieces of flesh and bone from blasts, picks and axes. The oldest go first. |

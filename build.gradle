@@ -25,6 +25,12 @@ loom {
 			vmArg "-Dfluidgore.only=${project.property('onlyTests')}"
 		}
 	}
+	// ... and only some demos in the demos test: -PonlyTests=demos -PonlyDemos=sponge,arrows
+	if (project.hasProperty("onlyDemos")) {
+		runs.configureEach {
+			vmArg "-Dfluidgore.demos=${project.property('onlyDemos')}"
+		}
+	}
 	// ... and with Ragdoll Physics on: -PragdollOn
 	if (project.hasProperty("ragdollOn")) {
 		runs.configureEach {

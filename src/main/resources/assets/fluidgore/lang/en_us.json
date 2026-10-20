@@ -45,7 +45,7 @@
 	"fluidgore.option.rain_washes": "Rain Washes Blood",
 	"fluidgore.option.rain_washes.tooltip": "Blood exposed to rain fades much faster.",
 	"fluidgore.option.cleaning": "Scrub Blood",
-	"fluidgore.option.cleaning.tooltip": "Hold a sponge or brush (cleaningItems in the config) and use it on blood to wipe it away. Sneak to use the item normally.",
+	"fluidgore.option.cleaning.tooltip": "Hold a sponge or brush (cleaningItems in the config) and use it on blood to wipe it away. The tool soaks up what it wipes: the bloodier it gets, the more it smears blood and guts along the floor instead. Use it on water to wash it. Sneak to use the item normally.",
 	"fluidgore.option.cells_per_tick": "Fluid Cells/Tick",
 	"fluidgore.option.cells_per_tick.tooltip": "How many puddle cells the blood flow simulation may update per tick. Lower is cheaper.",
 	"fluidgore.option.max_droplets": "Max Droplets",

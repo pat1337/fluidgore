@@ -1,6 +1,7 @@
 package dev.fluidgore.net;
 
 import dev.fluidgore.GoreSystems;
+import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.blood.Cleaning;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.Butchery;
@@ -17,6 +18,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.Direction;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * The client half of shared butchery. A player's blow, cut, pluck or clean-up on a body is played here at once and
@@ -132,7 +134,14 @@ public final class GoreSync {
 				case GoreAction.IGNITE -> corpse != null && GoreSystems.dismemberment().cremation().ignite(level, corpse, action.weapon() == 1);
 				case GoreAction.SCRUB -> {
 					Direction[] faces = Direction.values();
-					yield Cleaning.scrub(level, GoreSystems.blood(), action.at(), faces[Math.floorMod(action.weapon(), faces.length)]) > 0;
+					Vec3 stroke = action.dx() != 0.0F || action.dz() != 0.0F ? new Vec3(action.dx(), 0.0, action.dz()).normalize() : null;
+					BloodWorld.Scrub scrub = Cleaning.scrub(level, GoreSystems.blood(), action.at(), faces[Math.floorMod(action.weapon(), faces.length)], stroke,
+							Math.clamp(action.dy(), 0.0F, 1.0F), (int) (action.partKey() >>> 32) & 0xFFFFFF);
+					yield scrub.touched() + scrub.smeared() > 0;
+				}
+				case GoreAction.WASH -> {
+					Cleaning.wash(level, action.at(), (int) action.partKey() & 0xFFFFFF);
+					yield true;
 				}
 				default -> false;
 			};

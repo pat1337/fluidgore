@@ -1,0 +1,34 @@
+{
+	"parent": "minecraft:block/block",
+	"textures": {
+		"particle": "minecraft:block/sponge",
+		"base": "minecraft:block/sponge",
+		"blood": "fluidgore:block/sponge_blood_2"
+	},
+	"elements": [
+		{
+			"from": [0, 0, 0],
+			"to": [16, 16, 16],
+			"faces": {
+				"down": {"texture": "#base"},
+				"up": {"texture": "#base"},
+				"north": {"texture": "#base"},
+				"south": {"texture": "#base"},
+				"west": {"texture": "#base"},
+				"east": {"texture": "#base"}
+			}
+		},
+		{
+			"from": [-0.02, -0.02, -0.02],
+			"to": [16.02, 16.02, 16.02],
+			"faces": {
+				"down": {"texture": "#blood", "uv": [0, 0, 16, 16], "tintindex": 0},
+				"up": {"texture": "#blood", "uv": [0, 0, 16, 16], "tintindex": 0},
+				"north": {"texture": "#blood", "uv": [0, 0, 16, 16], "tintindex": 0},
+				"south": {"texture": "#blood", "uv": [0, 0, 16, 16], "tintindex": 0},
+				"west": {"texture": "#blood", "uv": [0, 0, 16, 16], "tintindex": 0},
+				"east": {"texture": "#blood", "uv": [0, 0, 16, 16], "tintindex": 0}
+			}
+		}
+	]
+}

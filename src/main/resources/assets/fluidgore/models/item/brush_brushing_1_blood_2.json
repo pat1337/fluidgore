@@ -1,0 +1,6 @@
+{
+	"parent": "minecraft:item/brush_brushing_1",
+	"textures": {
+		"layer1": "fluidgore:item/brush_blood_2"
+	}
+}

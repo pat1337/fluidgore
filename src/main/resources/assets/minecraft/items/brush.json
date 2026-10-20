@@ -1,0 +1,57 @@
+{
+	"model": {
+		"type": "minecraft:range_dispatch",
+		"property": "minecraft:custom_model_data",
+		"index": 0,
+		"entries": [
+			{"threshold": 0.05, "model": {
+				"type": "minecraft:range_dispatch",
+				"property": "minecraft:use_cycle",
+				"period": 10.0,
+				"scale": 0.1,
+				"entries": [
+					{"threshold": 0.25, "model": {"type": "minecraft:model", "model": "fluidgore:item/brush_brushing_0_blood_1", "tints": [{"type": "minecraft:constant", "value": -1}, {"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}},
+					{"threshold": 0.5, "model": {"type": "minecraft:model", "model": "fluidgore:item/brush_brushing_1_blood_1", "tints": [{"type": "minecraft:constant", "value": -1}, {"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}},
+					{"threshold": 0.75, "model": {"type": "minecraft:model", "model": "fluidgore:item/brush_brushing_2_blood_1", "tints": [{"type": "minecraft:constant", "value": -1}, {"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}}
+				],
+				"fallback": {"type": "minecraft:model", "model": "fluidgore:item/brush_blood_1", "tints": [{"type": "minecraft:constant", "value": -1}, {"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}
+			}},
+			{"threshold": 0.4, "model": {
+				"type": "minecraft:range_dispatch",
+				"property": "minecraft:use_cycle",
+				"period": 10.0,
+				"scale": 0.1,
+				"entries": [
+					{"threshold": 0.25, "model": {"type": "minecraft:model", "model": "fluidgore:item/brush_brushing_0_blood_2", "tints": [{"type": "minecraft:constant", "value": -1}, {"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}},
+					{"threshold": 0.5, "model": {"type": "minecraft:model", "model": "fluidgore:item/brush_brushing_1_blood_2", "tints": [{"type": "minecraft:constant", "value": -1}, {"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}},
+					{"threshold": 0.75, "model": {"type": "minecraft:model", "model": "fluidgore:item/brush_brushing_2_blood_2", "tints": [{"type": "minecraft:constant", "value": -1}, {"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}}
+				],
+				"fallback": {"type": "minecraft:model", "model": "fluidgore:item/brush_blood_2", "tints": [{"type": "minecraft:constant", "value": -1}, {"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}
+			}},
+			{"threshold": 0.8, "model": {
+				"type": "minecraft:range_dispatch",
+				"property": "minecraft:use_cycle",
+				"period": 10.0,
+				"scale": 0.1,
+				"entries": [
+					{"threshold": 0.25, "model": {"type": "minecraft:model", "model": "fluidgore:item/brush_brushing_0_blood_3", "tints": [{"type": "minecraft:constant", "value": -1}, {"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}},
+					{"threshold": 0.5, "model": {"type": "minecraft:model", "model": "fluidgore:item/brush_brushing_1_blood_3", "tints": [{"type": "minecraft:constant", "value": -1}, {"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}},
+					{"threshold": 0.75, "model": {"type": "minecraft:model", "model": "fluidgore:item/brush_brushing_2_blood_3", "tints": [{"type": "minecraft:constant", "value": -1}, {"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}}
+				],
+				"fallback": {"type": "minecraft:model", "model": "fluidgore:item/brush_blood_3", "tints": [{"type": "minecraft:constant", "value": -1}, {"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}
+			}}
+		],
+		"fallback": {
+				"type": "minecraft:range_dispatch",
+				"property": "minecraft:use_cycle",
+				"period": 10.0,
+				"scale": 0.1,
+				"entries": [
+					{"threshold": 0.25, "model": {"type": "minecraft:model", "model": "minecraft:item/brush_brushing_0", "tints": [{"type": "minecraft:constant", "value": -1}, {"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}},
+					{"threshold": 0.5, "model": {"type": "minecraft:model", "model": "minecraft:item/brush_brushing_1", "tints": [{"type": "minecraft:constant", "value": -1}, {"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}},
+					{"threshold": 0.75, "model": {"type": "minecraft:model", "model": "minecraft:item/brush_brushing_2", "tints": [{"type": "minecraft:constant", "value": -1}, {"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}}
+				],
+				"fallback": {"type": "minecraft:model", "model": "minecraft:item/brush", "tints": [{"type": "minecraft:constant", "value": -1}, {"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}
+			}
+	}
+}

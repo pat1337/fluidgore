@@ -587,6 +587,36 @@ public final class Giblets {
 		return posed == null ? null : ((net.minecraft.client.renderer.entity.LivingEntityRenderer) posed.renderer()).getTextureLocation(posed.state());
 	}
 
+	/**
+	 * A cleaning tool dragged over the floor at {@code at} (3.1): every piece lying within {@code radius} is squashed and
+	 * smeared along {@code stroke} (or round where it lay, for a dab), a dark streak of gut and blood. Returns how many.
+	 */
+	public int squash(ClientLevel level, BloodWorld world, Vec3 at, float radius, @Nullable Vec3 stroke) {
+		int squashed = 0;
+		for (int i = 0; i < count; i++) {
+			double dx = x[i] - at.x;
+			double dz = z[i] - at.z;
+			if (!resting[i] || stuck[i] > 0 || age[i] >= life[i] || Math.abs(y[i] - at.y) > 0.5 || dx * dx + dz * dz > radius * radius) {
+				continue;
+			}
+
+			age[i] = life[i];
+			squashed++;
+			Vec3 way = stroke != null ? stroke : new Vec3(RANDOM.nextDouble() - 0.5, 0.0, RANDOM.nextDouble() - 0.5).normalize();
+			// Gut is darker than the blood it lay in: crushed meat and what was in it.
+			int rgb = blood[i];
+			int dark = (Math.round(((rgb >> 16) & 0xFF) * 0.55F) << 16) | (Math.round(((rgb >> 8) & 0xFF) * 0.5F) << 8) | Math.round((rgb & 0xFF) * 0.5F);
+			world.smear(level, x[i] + way.x * 0.2, y[i], z[i] + way.z * 0.2, way, Math.max(hx[i], hz[i]) * 2.5F + 0.12F, dark);
+		}
+
+		if (squashed > 0) {
+			level.playLocalSound(at.x, at.y, at.z, SoundEvents.SLIME_SQUISH_SMALL, SoundSource.PLAYERS, Math.min(1.0F, 0.3F + squashed * 0.1F),
+					0.7F + RANDOM.nextFloat() * 0.2F, false);
+		}
+
+		return squashed;
+	}
+
 	public void clear() {
 		for (int i = 0; i < count; i++) {
 			texture[i] = null;

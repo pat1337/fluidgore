@@ -2,10 +2,13 @@ package dev.fluidgore.blood;
 
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.trigger.Fate;
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.core.Direction;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Client-side container for all blood in the current level: decals, fluid cells, flying droplets and footprint
@@ -137,16 +140,47 @@ public final class BloodWorld {
 	}
 
 	/**
-	 * Wipes blood within {@code radius} of {@code at} on the surface that was hit: decals fade out at once and
-	 * puddle cells lose most of their volume. Returns how many decals and cells were touched.
+	 * One stroke of a cleaning tool: what it touched, how much blood it took up (litres) and its colour, and how many
+	 * smears it left.
 	 */
-	public int clean(Vec3 at, Direction face, float radius) {
+	public record Scrub(int touched, float lifted, int rgb, int smeared) {
+	}
+
+	/**
+	 * A cleaning tool wiped within {@code radius} of {@code at} on the surface that was hit (3.1). It takes up the share
+	 * {@code lift} of what it touches (a clean sponge nearly all, a soaked one next to nothing); the rest it drags along
+	 * {@code stroke} (null for a dab, which leaves it where it is) and lays down again as smears. Decals it takes up fade
+	 * out at once; puddles lose that share of their volume.
+	 */
+	public Scrub scrub(Level level, Vec3 at, Direction face, float radius, float lift, @Nullable Vec3 stroke) {
 		int touched = 0;
+		int smeared = 0;
+		float lifted = 0.0F;
+		float[] colour = new float[4];
+		List<Decal> dragged = new ArrayList<>();
 		for (Decal d : decals.decals()) {
-			if (d.face == face && d.age < d.lifetime - 4 && decalDistanceSqr(d, at) <= sq(radius + d.half * 0.5F)) {
+			if (d.face != face || d.age >= d.lifetime - 4 || decalDistanceSqr(d, at) > sq(radius + d.half * 0.5F)) {
+				continue;
+			}
+
+			touched++;
+			float amount = d.half * d.half * 0.25F * d.alpha();
+			if (random.nextFloat() < lift) {
 				// Jump to the end of its life: the normal fade-out does the wiping.
 				d.age = d.lifetime - 4;
-				touched++;
+				lifted += amount;
+				weigh(colour, d.rgb, amount);
+			} else if (stroke != null && face == Direction.UP) {
+				d.age = d.lifetime - 4;
+				dragged.add(d);
+			}
+		}
+
+		// Laid down after the loop: the new smears join the very list it walked.
+		for (Decal d : dragged) {
+			if (smear(level, d.centerA + stroke.x * (0.25 + d.half * 0.6), d.plane, d.centerB + stroke.z * (0.25 + d.half * 0.6), stroke,
+					d.half * 0.9F, d.rgb)) {
+				smeared++;
 			}
 		}
 
@@ -154,14 +188,46 @@ public final class BloodWorld {
 			for (BloodCell cell : fluid.cells()) {
 				double dx = cell.bx + 0.5 - at.x;
 				double dz = cell.bz + 0.5 - at.z;
-				if (Math.abs(cell.surfaceY - at.y) < 0.6 && dx * dx + dz * dz <= sq(radius + 0.5F)) {
-					fluid.drain(cell, cell.volume * 0.75F + 0.05F);
-					touched++;
+				if (Math.abs(cell.surfaceY - at.y) >= 0.6 || dx * dx + dz * dz > sq(radius + 0.5F) || cell.volume <= 0.0F) {
+					continue;
+				}
+
+				touched++;
+				float taken = Math.min(cell.volume, (cell.volume * 0.75F + 0.05F) * lift);
+				lifted += taken;
+				weigh(colour, cell.rgb, taken);
+				int rgb = cell.rgb;
+				fluid.drain(cell, taken);
+				if (stroke != null && lift < 0.9F && smear(level, at.x + stroke.x * 0.4, cell.surfaceY, at.z + stroke.z * 0.4, stroke,
+						0.2F + 0.25F * (1.0F - lift), rgb)) {
+					// What it could not take up, it pushes on through the pool.
+					smeared++;
 				}
 			}
 		}
 
-		return touched;
+		int rgb = colour[3] > 0.0F ? Math.round(colour[0] / colour[3]) << 16 | Math.round(colour[1] / colour[3]) << 8 | Math.round(colour[2] / colour[3]) : 0;
+		return new Scrub(touched, lifted, rgb, smeared);
+	}
+
+	/** Lays a smear on the floor near {@code y} at (x, z), drawn out along {@code stroke}. False if there is no floor there. */
+	public boolean smear(Level level, double x, double y, double z, Vec3 stroke, float half, int rgb) {
+		double surface = SurfaceProbe.surfaceBelow(level, x, y + 0.5, y - 0.6, z);
+		if (Double.isNaN(surface)) {
+			return false;
+		}
+
+		int orient = Math.abs(stroke.x) > Math.abs(stroke.z) ? 4 | (stroke.x < 0.0 ? 2 : 0) : stroke.z < 0.0 ? 2 : 0;
+		decals.addFloor(level, x, surface, z, Math.clamp(half, 0.1F, 0.6F), BloodTextures.STREAK, orient | random.nextInt(2), vary(rgb, 0.12F), true,
+				decalLifetime());
+		return true;
+	}
+
+	private static void weigh(float[] colour, int rgb, float amount) {
+		colour[0] += ((rgb >> 16) & 0xFF) * amount;
+		colour[1] += ((rgb >> 8) & 0xFF) * amount;
+		colour[2] += (rgb & 0xFF) * amount;
+		colour[3] += amount;
 	}
 
 	/** True if any decal or puddle lies within {@code radius} of {@code at}. */

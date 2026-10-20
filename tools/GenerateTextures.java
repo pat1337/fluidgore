@@ -61,8 +61,104 @@ public final class GenerateTextures {
 			ImageIO.write(scars(stage), "png", new File(block, "cobble_tank_scars_" + stage + ".png"));
 		}
 
+		File item = new File(root, "textures/item");
+		if (!item.isDirectory() && !item.mkdirs()) {
+			throw new IOException("Cannot create " + item);
+		}
+
+		for (int stage = 1; stage <= 3; stage++) {
+			ImageIO.write(spongeBlood(stage), "png", new File(block, "sponge_blood_" + stage + ".png"));
+			ImageIO.write(brushBlood(stage), "png", new File(item, "brush_blood_" + stage + ".png"));
+		}
+
 		ImageIO.write(icon(), "png", new File(root, "icon.png"));
 		System.out.println("Wrote textures to " + root.getAbsolutePath());
+	}
+
+	/**
+	 * Blood soaked into a sponge (3.1), laid over each face of the vanilla sponge (16x16, clear where clean), light grey
+	 * so the blood's own colour tints it. Stage 1: blotches; stage 2: most of the face; stage 3: all of it, darker where it
+	 * pools in the pores. Same seed for every stage, so each keeps the last one's stains.
+	 */
+	private static BufferedImage spongeBlood(int stage) {
+		BufferedImage image = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+		Random random = new Random(13_000);
+		double[][] field = new double[16][16];
+		for (int i = 0; i < 9; i++) {
+			double cx = random.nextDouble() * 16.0;
+			double cy = random.nextDouble() * 16.0;
+			double r = 2.5 + random.nextDouble() * 3.0;
+			for (int y = 0; y < 16; y++) {
+				for (int x = 0; x < 16; x++) {
+					double d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
+					field[y][x] += Math.max(0.0, 1.0 - d / r);
+				}
+			}
+		}
+
+		double threshold = stage == 1 ? 0.95 : stage == 2 ? 0.3 : -1.0;
+		Random grain = new Random(13_100);
+		for (int y = 0; y < 16; y++) {
+			for (int x = 0; x < 16; x++) {
+				double pore = grain.nextDouble();
+				if (field[y][x] + pore * 0.25 > threshold) {
+					// Pores hold more: darker specks through the stain.
+					int shade = pore < 0.2 ? 120 : 190 + (int) (pore * 60.0);
+					image.setRGB(x, y, argb(stage == 1 ? 210 : 235, shade, shade, shade));
+				}
+			}
+		}
+
+		return image;
+	}
+
+	/** Which pixels of the vanilla brush (16x16) are its bristles: their outline included, the handle and ferrule not. */
+	private static final String[] BRISTLES = {
+			"................",
+			".........###....",
+			"........#######.",
+			".......########.",
+			"......########..",
+			"......#########.",
+			"......#########.",
+			".....#########..",
+			".......######...",
+			"................",
+			"................",
+			"................",
+			"................",
+			"................",
+			"................",
+			"................"};
+
+	/**
+	 * Blood in a brush's bristles (3.1), over the vanilla brush as a second layer, light grey for the blood colour to
+	 * tint. It soaks up from the tips: stage 1 the tips, stage 2 half the bristles, stage 3 all of them and a run down onto
+	 * the ferrule.
+	 */
+	private static BufferedImage brushBlood(int stage) {
+		BufferedImage image = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+		Random random = new Random(13_200);
+		int reach = stage == 1 ? 6 : stage == 2 ? 3 : -2;
+		for (int y = 0; y < 16; y++) {
+			for (int x = 0; x < 16; x++) {
+				int shade = 170 + random.nextInt(70);
+				// The tips are up and to the right; the bristles run down and left into the ferrule.
+				if (BRISTLES[y].charAt(x) == '#' && x - y >= reach + random.nextInt(2)) {
+					image.setRGB(x, y, argb(255, shade, shade, shade));
+				}
+			}
+		}
+
+		if (stage == 3) {
+			// Run down over the ferrule.
+			int[][] drips = {{5, 8}, {6, 8}, {5, 9}, {6, 9}, {4, 10}};
+			for (int[] d : drips) {
+				image.setRGB(d[0], d[1], argb(255, 150, 150, 150));
+			}
+		}
+
+		return image;
 	}
 
 	/** Central blob with satellite droplets and a few radial spikes, like a drop that hit the ground hard. */

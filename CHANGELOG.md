@@ -2,6 +2,23 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [3.1.0]
+
+Cleaning up is messy work now.
+
+### Added
+- Bloody sponges and brushes: a cleaning tool soaks up the blood it wipes, and the stain shows on the item in three
+  stages, in the blood's own colour (red, ender violet, rotten). The bloodier it is, the less it takes up and the more
+  it drags along the stroke as smears. Soaked through, it leaves red wipes wherever it goes, even on a clean floor.
+  Wiping a whole body away soaks it too.
+- Guts on the floor are squashed and smeared into dark streaks when a tool is dragged over them.
+- Washing: use a bloody tool on water (or a water cauldron, or while standing in water). Each dunk rinses some of it
+  out in a red cloud. A sponge washed clean comes out a wet sponge; dry it as usual.
+- The stain is kept on the item by the server (Fluid Gore on the server), so everyone sees it and it stays with the
+  item. On a server without the mod, your game keeps track of it for you alone and the item does not change.
+- A soaked brush is still a brush: on suspicious sand or gravel it digs as usual.
+- Demo: `/gore demo sponge`.
+
 ## [3.0.0]
 
 The server's word on every hit: the first step of Fluid Gore deciding gore on the server when it runs there.
