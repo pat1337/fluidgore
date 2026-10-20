@@ -2,6 +2,7 @@ package dev.fluidgore;
 
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.server.EvidenceStore;
+import dev.fluidgore.server.HitReports;
 import dev.fluidgore.server.KeptBodies;
 import dev.fluidgore.tank.Tanks;
 import net.fabricmc.api.ModInitializer;
@@ -23,6 +24,7 @@ public class FluidGore implements ModInitializer {
 		GoreConfig.load();
 		KeptBodies.register();
 		EvidenceStore.register();
+		HitReports.register();
 		Tanks.register();
 	}
 }

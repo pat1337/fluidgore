@@ -44,6 +44,16 @@ public final class GoreSync {
 				perform(action);
 			}
 		});
+		ClientPlayNetworking.registerGlobalReceiver(HitReport.TYPE, (report, context) -> {
+			if (report.finite()) {
+				GoreSystems.tracker().onReport(report);
+			}
+		});
+	}
+
+	/** The server reports every hit it deals (3.0, see {@link HitReport}): health drops need not be guessed from. */
+	public static boolean serverReportsHits() {
+		return Minecraft.getInstance().getConnection() != null && ClientPlayNetworking.canSend(HitReport.TYPE);
 	}
 
 	/** The server runs Fluid Gore: it keeps slaughtered animals' bodies and passes butchery on to the other players. */

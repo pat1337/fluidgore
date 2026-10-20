@@ -47,10 +47,17 @@ public final class Fate {
 
 	/** Seeds every stream for a hit on {@code victim}. Call {@link #end} when the hit has been handled. */
 	public static void begin(LivingEntity victim, @Nullable Entity attacker) {
+		begin(seed(victim, victim.getHealth(), attacker));
+	}
+
+	/**
+	 * A hit's seed from the facts every client is told: the victim, its health after the hit and who struck. The server
+	 * sends the same seed with its hit reports (see {@code HitReports}), so a reported hit rolls what a guessed one would.
+	 */
+	public static long seed(LivingEntity victim, float healthAfter, @Nullable Entity attacker) {
 		long s = mix(victim.getUUID());
-		s = s * 31 + Float.floatToIntBits(victim.getHealth());
-		s = s * 31 + (attacker != null ? mix(attacker.getUUID()) : 0L);
-		begin(s);
+		s = s * 31 + Float.floatToIntBits(healthAfter);
+		return s * 31 + (attacker != null ? mix(attacker.getUUID()) : 0L);
 	}
 
 	/** Seeds every stream from a value that every client knows the same way. */

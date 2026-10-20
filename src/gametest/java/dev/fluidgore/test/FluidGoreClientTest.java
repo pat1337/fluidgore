@@ -52,6 +52,10 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 						case "clearingBodies" -> clearingBodies(context, server);
 						case "deaths" -> deaths(context, server);
 						case "hackModel" -> hackModel(context, server);
+						case "hitReports" -> hitReports(context, server);
+						case "sharedFate" -> sharedFate(context, server);
+						case "weapons" -> weapons(context, server);
+						case "playerGore" -> playerGore(context, server);
 						case "butchery" -> butchery(context, server);
 						case "cremation" -> cremation(context, server);
 						case "decay" -> decay(context, server);
@@ -117,6 +121,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			suffering(context, singleplayer.getServer());
 			hackModel(context, singleplayer.getServer());
 			sharedFate(context, singleplayer.getServer());
+			hitReports(context, singleplayer.getServer());
 			rot(context, singleplayer.getServer());
 
 
@@ -674,6 +679,67 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 				"a blow along the player's view did not land on the head: " + outcome[0]);
 		check(outcome[0].equals(outcome[1]), "the same fight came out differently: " + outcome[0] + " vs " + outcome[1]);
 		server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");
+	}
+
+	/**
+	 * Hit reports (3.0): this world's server runs Fluid Gore, so it reports its hits. An arrow from a dispenser has no one
+	 * behind it to guess a spot from (it used to leave no wound at all); from the server's report of its flight it must
+	 * wound the leg it was fired at.
+	 */
+	private static void hitReports(ClientGameTestContext context, TestServerContext server) {
+		check(context.computeOnClient(mc -> dev.fluidgore.net.GoreSync.serverReportsHits()), "the integrated server does not report hits");
+		server.runCommand("kill @e[type=!minecraft:player]");
+		context.waitTicks(20);
+		server.runCommand("tp @a 100.5 -60 0.5 0 15");
+		server.runCommand("summon minecraft:cow 100.5 -60 6.5 {NoAI:1b,Rotation:[90f,0f]}");
+		context.waitTicks(15);
+		int cowId = context.computeOnClient(mc -> {
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e instanceof net.minecraft.world.entity.animal.cow.Cow) {
+					return e.getId();
+				}
+			}
+
+			return -1;
+		});
+		check(cowId >= 0, "hit-report cow not found");
+		// The leg nearest the shooter, so nothing stands in front of it.
+		BodyPart[] legs = {BodyPart.RIGHT_ARM, BodyPart.LEFT_ARM, BodyPart.RIGHT_LEG, BodyPart.LEFT_LEG};
+		BodyPart leg = context.computeOnClient(mc -> {
+			var cow = (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(cowId);
+			var posed = ModelParts.pose(cow);
+			BodyPart best = null;
+			double bestZ = Double.MAX_VALUE;
+			for (BodyPart part : legs) {
+				double z = ModelHit.centre(cow, posed, part).z;
+				if (z < bestZ) {
+					bestZ = z;
+					best = part;
+				}
+			}
+
+			return best;
+		});
+		net.minecraft.world.phys.Vec3 at = context.computeOnClient(mc -> {
+			var cow = (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(cowId);
+			return ModelHit.centre(cow, ModelParts.pose(cow), leg);
+		});
+		server.runCommand(String.format(java.util.Locale.ROOT, "summon minecraft:arrow %.3f %.3f %.3f {Motion:[0d,0d,2d],NoGravity:1b}", at.x, at.y, at.z - 2.5));
+		context.waitTicks(15);
+		String outcome = context.computeOnClient(mc -> {
+			var set = GoreSystems.dismemberment().wounds().get(cowId);
+			StringBuilder s = new StringBuilder(set == null ? "no wounds" : set.count() + " wounds");
+			for (BodyPart part : BodyPart.values()) {
+				s.append(' ').append(part).append('=').append(set == null ? 0.0F : set.severity(part));
+			}
+
+			return s.toString();
+		});
+		System.out.println("[FluidGoreTest] hit reports: arrow at " + leg + ": " + outcome);
+		check(context.computeOnClient(mc -> {
+			var set = GoreSystems.dismemberment().wounds().get(cowId);
+			return set != null && set.severity(leg) > 0.0F;
+		}), "an ownerless arrow at the " + leg + " did not wound it: " + outcome);
 	}
 
 	/**

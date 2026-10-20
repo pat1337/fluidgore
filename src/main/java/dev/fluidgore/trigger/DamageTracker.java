@@ -3,6 +3,7 @@ package dev.fluidgore.trigger;
 import dev.fluidgore.GoreSystems;
 import dev.fluidgore.net.Evidence;
 import dev.fluidgore.net.GoreSync;
+import dev.fluidgore.net.HitReport;
 import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.blood.BloodSupply;
 import dev.fluidgore.blood.BloodWorld;
@@ -53,9 +54,23 @@ public final class DamageTracker {
 	/**
 	 * @param explosion the hit was an explosion
 	 * @param sourceAt  where the damage came from, if the packet says (often not for TNT: the TNT entity is gone)
+	 * @param weapon    the weapon the server says it was (a {@link Weapon} ordinal), or -1 to work it out here
+	 * @param rayFrom   a point the blow passed through, from the server (with {@code rayDir}), or null
+	 * @param told      the server reported this hit: {@code seed} is its dice
 	 */
-	private record PendingHit(int attackerId, boolean melee, boolean explosion, boolean fire, boolean fall, @Nullable Vec3 sourceAt, int tick) {
+	private record PendingHit(int attackerId, boolean melee, boolean explosion, boolean fire, boolean fall, @Nullable Vec3 sourceAt, int tick,
+			int weapon, @Nullable Vec3 rayFrom, @Nullable Vec3 rayDir, boolean told, long seed) {
+		PendingHit(int attackerId, boolean melee, boolean explosion, boolean fire, boolean fall, @Nullable Vec3 sourceAt, int tick) {
+			this(attackerId, melee, explosion, fire, fall, sourceAt, tick, -1, null, null, false, 0L);
+		}
 	}
+
+	/** A hit the server reported, waiting for the body's health to arrive too. */
+	private record Report(PendingHit hit, float damage, float healthAfter, boolean lethal) {
+	}
+
+	/** Ticks a reported hit waits for the health update (it comes at the end of the server's tick) before it is played anyway. */
+	private static final int REPORT_WAIT = 3;
 
 	/**
 	 * An explosion the server told us about: where and how big (TNT is 4, a creeper 3, a charged one 6), and the
@@ -75,6 +90,7 @@ public final class DamageTracker {
 
 	private final Int2FloatOpenHashMap lastHealth = new Int2FloatOpenHashMap();
 	private final Int2ObjectOpenHashMap<PendingHit> pending = new Int2ObjectOpenHashMap<>();
+	private final Int2ObjectOpenHashMap<Report> reports = new Int2ObjectOpenHashMap<>();
 	private final List<Blast> blasts = new ArrayList<>();
 	private final PressureVessel vessels = new PressureVessel();
 	private int tick;
@@ -85,11 +101,26 @@ public final class DamageTracker {
 
 	/** Called on the client thread when a damage event packet arrives for {@code victim}. */
 	public void onDamageEvent(LivingEntity victim, DamageSource source) {
+		if (GoreSync.serverReportsHits()) {
+			// The server's own report of this hit follows it (see onReport).
+			return;
+		}
+
 		Entity attacker = source.getEntity();
 		boolean melee = attacker != null && source.getDirectEntity() == attacker;
 		pending.put(victim.getId(), new PendingHit(attacker == null ? -1 : attacker.getId(), melee, source.is(DamageTypeTags.IS_EXPLOSION), source.is(DamageTypeTags.IS_FIRE),
 				source.is(DamageTypeTags.IS_FALL),
 				source.getSourcePosition(), tick));
+	}
+
+	/** Called on the client thread when the server reports a hit it dealt (only a server running Fluid Gore does). */
+	public void onReport(HitReport report) {
+		PendingHit hit = new PendingHit(report.attacker(), report.is(HitReport.MELEE), report.is(HitReport.EXPLOSION), report.is(HitReport.FIRE),
+				report.is(HitReport.FALL), report.sourceAt(), tick, report.weapon(), report.rayFrom(), report.rayDir(), true, report.seed());
+		Report earlier = reports.get(report.victim());
+		// Two hits before the first was played (lava and a sword in one tick): one hit of both together, told as the last.
+		float damage = report.damage() + (earlier != null ? earlier.damage() : 0.0F);
+		reports.put(report.victim(), new Report(hit, damage, report.healthAfter(), report.is(HitReport.LETHAL)));
 	}
 
 	/** Called on the client thread when an explosion packet arrives. */
@@ -112,6 +143,7 @@ public final class DamageTracker {
 		tick++;
 		vessels.tick(level);
 		Entity camera = Minecraft.getInstance().getCameraEntity();
+		boolean told = GoreSync.serverReportsHits();
 		for (Entity entity : level.entitiesForRendering()) {
 			if (!(entity instanceof LivingEntity living)) {
 				continue;
@@ -121,10 +153,10 @@ public final class DamageTracker {
 			float health = living.getHealth();
 			float previous = lastHealth.put(id, health);
 			if (Float.isNaN(previous)) {
-				continue;
-			}
-
-			if (previous <= 0.0F && health > 0.0F) {
+				if (!told) {
+					continue;
+				}
+			} else if (previous <= 0.0F && health > 0.0F) {
 				// Respawned (or revived by a totem): the body is whole again.
 				dismemberment.restore(id);
 				BloodSupply.refill(id, 1.0F, true);
@@ -135,30 +167,53 @@ public final class DamageTracker {
 				BloodSupply.refill(id, (health - previous) / max, health >= max - 0.01F);
 			}
 
-			PendingHit hit = pending.get(id);
+			PendingHit hit;
 			float damage;
-			if (health < previous - 0.01F) {
-				damage = previous - health;
-			} else if (hit != null && tick - hit.tick() > PENDING_TIMEOUT) {
-				// A hit with no visible health change (absorption hearts, armour soaking it all): a small bleed.
-				damage = health > 0.0F ? 1.0F : 0.0F;
+			boolean lethal;
+			if (told) {
+				// The server's word: played once the health has caught up, so the body is as dead here as it is there.
+				Report report = reports.get(id);
+				if (report == null || health > report.healthAfter() + 0.01F && tick - report.hit().tick() < REPORT_WAIT) {
+					continue;
+				}
+
+				reports.remove(id);
+				hit = report.hit();
+				lethal = report.lethal();
+				// Nothing off the health (absorption hearts, armour soaking it all): the blow still landed, a small bleed.
+				damage = report.damage() > 0.01F ? report.damage() : lethal ? 0.0F : 1.0F;
 			} else {
-				continue;
+				hit = pending.get(id);
+				if (health < previous - 0.01F) {
+					damage = previous - health;
+				} else if (hit != null && tick - hit.tick() > PENDING_TIMEOUT) {
+					// A hit with no visible health change (absorption hearts, armour soaking it all): a small bleed.
+					damage = health > 0.0F ? 1.0F : 0.0F;
+				} else {
+					continue;
+				}
+
+				pending.remove(id);
+				lethal = health <= 0.0F;
 			}
 
-			pending.remove(id);
 			if (damage <= 0.0F || camera == null || camera.distanceToSqr(living) > EFFECT_RANGE_SQ) {
 				continue;
 			}
 
-			// Seeded from what every client is told the same way, so everyone with the mod sees the same outcome.
-			Fate.begin(living, hit != null && hit.attackerId() >= 0 ? level.getEntity(hit.attackerId()) : null);
+			if (hit != null && hit.told()) {
+				// The server's dice: the same on every screen, whatever each one's settings make of the rolls before.
+				Fate.begin(hit.seed());
+			} else {
+				// Seeded from what every client is told the same way, so everyone with the mod sees the same outcome.
+				Fate.begin(living, hit != null && hit.attackerId() >= 0 ? level.getEntity(hit.attackerId()) : null);
+			}
 			// This player's own hit: the parts it cuts off are this game's to move (see PieceSync).
 			GoreSync.local(hit != null && Minecraft.getInstance().player != null && hit.attackerId() == Minecraft.getInstance().player.getId());
 			// What comes out of it is its own blood: no more than the body really holds (see BloodSupply).
 			BloodSupply.begin(living);
 			try {
-				hurt(level, blood, dismemberment, suffering, living, damage, health <= 0.0F, hit);
+				hurt(level, blood, dismemberment, suffering, living, damage, lethal, hit);
 			} finally {
 				BloodSupply.end();
 				GoreSync.local(false);
@@ -172,6 +227,7 @@ public final class DamageTracker {
 		}
 
 		pending.int2ObjectEntrySet().removeIf(e -> tick - e.getValue().tick() > 100);
+		reports.int2ObjectEntrySet().removeIf(e -> tick - e.getValue().hit().tick() > 100);
 		blasts.removeIf(b -> tick - b.tick() > 100);
 	}
 
@@ -239,6 +295,10 @@ public final class DamageTracker {
 			if (aim.lengthSqr() > 1.0E-6) {
 				strike = aim.normalize();
 			}
+		} else if (hit != null && hit.rayDir() != null) {
+			// Shot from further off than this client can see: the arrow's flight, as the server tells it.
+			strike = hit.rayDir();
+			away = new Vec3(strike.x, 0.0, strike.z).lengthSqr() > 1.0E-6 ? new Vec3(strike.x, 0.0, strike.z).normalize() : null;
 		}
 
 		GoreConfig config = GoreConfig.get();
@@ -256,7 +316,10 @@ public final class DamageTracker {
 			}
 		}
 
-		Weapon weapon = weapon(attacker, meleeAttacker, blastAt);
+		Weapon weapon = blastAt == null && hit != null && hit.weapon() >= 0 && hit.weapon() < Weapon.values().length
+				// The server knows the stack that struck; a demo only pretends this player holds one (see DemoPlayer).
+				&& !(meleeAttacker == Minecraft.getInstance().player && DemoPlayer.playing())
+				? Weapon.values()[hit.weapon()] : weapon(attacker, meleeAttacker, blastAt);
 		// One player's blade on another: deeper cuts, harder bleeding, and a kill takes more than one limb.
 		boolean pvp = config.brutalPvp && victim instanceof Player && meleeAttacker instanceof Player && weapon != null && weapon.cuts();
 		Deaths.Zone zone = Deaths.Zone.UNKNOWN;
@@ -271,14 +334,16 @@ public final class DamageTracker {
 
 			Wounds.Strike wound = weapon == null ? null : blastAt != null
 					? dismemberment.wounds().onBlast(victim, blastAt, damage)
-					: dismemberment.wounds().onDamage(victim, attacker, meleeAttacker != null, weapon, damage * (pvp ? PVP_DEPTH : 1.0F));
+					: dismemberment.wounds().onDamage(victim, attacker, meleeAttacker != null, weapon, damage * (pvp ? PVP_DEPTH : 1.0F),
+							hit != null ? hit.rayFrom() : null, hit != null ? hit.rayDir() : null);
 			if (wound != null) {
 				BodyPart part = wound.hit().bodyPart();
 				zone = part == null ? Deaths.Zone.BODY : part == BodyPart.HEAD ? Deaths.Zone.HEAD : Deaths.Zone.LEG;
 			}
 
 			if (wound != null) {
-				Vec3 from = blastAt != null ? blastAt : attacker.getEyePosition();
+				// The shooter may be too far away for this client to know of; the server said where the arrow came from.
+				Vec3 from = blastAt != null ? blastAt : hit != null && hit.rayFrom() != null ? hit.rayFrom() : attacker.getEyePosition();
 				Vec3 blow = wound.hit().point().subtract(from);
 				if (blow.lengthSqr() > 1.0E-6) {
 					HitFeedback.hit(level, blood, victim, wound, weapon, blow.normalize());
@@ -374,11 +439,13 @@ public final class DamageTracker {
 	public void forget(int entityId) {
 		lastHealth.remove(entityId);
 		pending.remove(entityId);
+		reports.remove(entityId);
 	}
 
 	public void clear() {
 		lastHealth.clear();
 		pending.clear();
+		reports.clear();
 		blasts.clear();
 		vessels.clear();
 	}

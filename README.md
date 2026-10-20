@@ -10,8 +10,14 @@ and heads hacked off, blood that sprays, pools and runs downhill, and animals th
 
 ![A cow's leg hacked open to the bone](docs/images/wounded-leg.png)
 
-Everything is visual. The mod adds no blocks, items, entities or registry entries, so it works on **vanilla servers**
-and nobody else needs it installed. It never changes health, damage, drops, AI or game rules.
+The gore is visual and works on **vanilla servers** with nobody else needing the mod. It never changes health, damage,
+drops, AI or game rules, with one exception: the **Cobble Tank** (2.16), a real block that does real damage. Because it
+is a registered block, **a server running Fluid Gore 2.16 or later only lets in players who have the same version.**
+
+**Server-reported hits (3.0, with Fluid Gore on the server):** the server tells every player exactly what each hit was:
+the damage it did, the weapon that really struck, and the path the blow took (a player's exact view, an arrow's
+flight). Wounds land where blows really landed, a shield block draws no blood, and an arrow from a dispenser wounds
+where it strikes. Without the mod on the server, each game works it out from what vanilla sends, as before.
 
 **Kept bodies (with Fluid Gore on the server too):** in singleplayer, on a LAN world you host (e4mc included) or on a
 Fabric server that runs the mod, a slaughtered animal does not vanish. It dies the vanilla way, gone red and keeled
@@ -52,6 +58,12 @@ after death. Open wounds drip, so a wounded animal leaves a trail.
   splits to a sickly, poison-coloured ooze. Skeletons never bleed: they scuff, crack, chip into shards and shatter.
 
 ![Severed pieces with raw cut ends](docs/images/severed.png)
+
+### Broken bones
+Blunt blows break skulls, ribs and limbs, with visible fractures and bone shards; repeated blows smash heads or tear
+limbs off. Toggle Broken Bones in settings. Horses have heavier, longer deaths and more blood. Their neck and head
+sever together, including on donkeys and mules; splitting a horse carcass drops the tail separately. Try
+`/gore demo horse`.
 
 ### Explosions
 A blast is graded the way a real one is, by how close each body was and how much of it the blast could see (the
@@ -280,6 +292,3 @@ screenshots to `build/run/clientGameTest/screenshots`. Textures are generated, n
 ## License
 
 [MIT](LICENSE)
-
-### Horse and bone revamp (2.5.0)
-Blunt blows break skulls, ribs and limbs, with visible fractures and bone shards; repeated blows smash heads or tear limbs off. Toggle Broken Bones in settings. Horses have heavier, longer deaths and more blood. Their neck and head sever together, including on donkeys and mules; splitting a horse carcass drops the tail separately. Try /gore demo horse.

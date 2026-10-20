@@ -17,12 +17,15 @@ import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import org.jspecify.annotations.Nullable;
 
 /** Decides which entities bleed, what colour, and which held items count as blades. */
 public final class EntityFilter {
-	private static List<String> cachedBladeSource;
-	private static final Set<Identifier> bladeItems = new HashSet<>();
-	private static final List<TagKey<Item>> bladeTags = new ArrayList<>();
+	/** The bladed-items list as last read. The server asks too (3.0, {@code HitReports}), from its own thread. */
+	private record Blades(List<String> source, Set<Identifier> items, List<TagKey<Item>> tags) {
+	}
+
+	private static volatile @Nullable Blades blades;
 	private static List<String> cachedBloodlessSource;
 	private static final Set<Identifier> bloodless = new HashSet<>();
 	private static List<String> cachedBoneSource;
@@ -117,10 +120,11 @@ public final class EntityFilter {
 		}
 
 		List<String> source = GoreConfig.get().bladedItems;
-		if (source != cachedBladeSource) {
-			cachedBladeSource = source;
-			bladeItems.clear();
-			bladeTags.clear();
+		Blades current = blades;
+		if (current == null || current.source() != source) {
+			// Built aside and swapped in whole: the client and the server thread never see one half-made.
+			Set<Identifier> items = new HashSet<>();
+			List<TagKey<Item>> tags = new ArrayList<>();
 			for (String raw : source) {
 				String entry = raw.trim();
 				boolean tag = entry.startsWith("#");
@@ -130,18 +134,21 @@ public final class EntityFilter {
 				}
 
 				if (tag) {
-					bladeTags.add(TagKey.create(Registries.ITEM, id));
+					tags.add(TagKey.create(Registries.ITEM, id));
 				} else {
-					bladeItems.add(id);
+					items.add(id);
 				}
 			}
+
+			current = new Blades(source, Set.copyOf(items), List.copyOf(tags));
+			blades = current;
 		}
 
-		if (bladeItems.contains(BuiltInRegistries.ITEM.getKey(stack.getItem()))) {
+		if (current.items().contains(BuiltInRegistries.ITEM.getKey(stack.getItem()))) {
 			return true;
 		}
 
-		for (TagKey<Item> tag : bladeTags) {
+		for (TagKey<Item> tag : current.tags()) {
 			if (stack.is(tag)) {
 				return true;
 			}

@@ -13,6 +13,7 @@ import dev.fluidgore.wound.ModelHit;
 import dev.fluidgore.wound.Weapon;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Function;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.EntityType;
@@ -27,6 +28,7 @@ import org.jspecify.annotations.Nullable;
  */
 public final class Demos {
 	public static final List<Demo> ALL = List.of(
+			new Demo("arrows", "3.0.0", "Arrows with no one behind them, as from a dispenser, at a cow side-on: with Fluid Gore on the server each wounds exactly where it strikes (leg, flank, neck), the same on every screen", false, Demos::arrows),
 			new Demo("tank", "2.16.0", "The Cobble Tank, for real: a pinhole leak hisses and frosts and costs you your hearing, a cracked tank tears loose and flies, and a full one (600 litres at 10,000 psi, about 21 kg of TNT) lit with redstone 30 blocks off kills to 8 m, bursts eardrums to 15, blows a gate open and the glass out", true, Demos::tank),
 			new Demo("roadster", "2.15.0", "A 2x2 of TNT as the Roadster's pressure vessel (200 litres at 10,000 psi, about 7 kg of TNT) with animals in rings round it: shredded, torn apart, lungs burst, fragments driven in, each by the real overpressure where it stood; 9 blocks off, you are deafened and your ears ring", true, Demos::roadster),
 			new Demo("cremation", "2.14.0", "A chicken, a sheep and a cow set alight where they lie: each burns on its own fat, the heavier the longer and smokier, down to the bone; the cow is put out half burnt, its char knocked off and its bones broken up into ash", true, Demos::cremation),
@@ -99,6 +101,25 @@ public final class Demos {
 						ModelParts.torso(ModelParts.pose(c.entity).model()), new Vec3(0, -1, 0));
 			}
 		}).pause(100);
+	}
+
+	/**
+	 * Hit reports (3.0): ownerless arrows at a cow side-on, low, middle and high. The server says where each flew, so
+	 * each opens a wound where it struck; on a server without Fluid Gore they leave none (nobody shot them).
+	 */
+	private static void arrows(Script s, Stage st) {
+		s.summon(st, "cow", "fgd_target", 0, 0, 5, 90.0F, "");
+		s.pause(20).say("Arrows with no one behind them, as from a dispenser: each wounds where it strikes");
+		// Along the cow, then up: a leg, the flank, the neck.
+		double[][] shots = {{0.3, 0.35}, {0.0, 0.8}, {-0.5, 1.1}};
+		for (double[] shot : shots) {
+			Vec3 from = st.at(shot[0], shot[1], 2.0);
+			Vec3 v = st.at(shot[0], shot[1], 5.0).subtract(from).normalize().scale(2.0);
+			s.cmd(String.format(Locale.ROOT, "summon minecraft:arrow %.3f %.3f %.3f {NoGravity:1b,Motion:[%.3fd,%.3fd,%.3fd],Tags:[\"%s\"]}",
+					from.x, from.y, from.z, v.x, v.y, v.z, Script.TAG)).pause(30);
+		}
+
+		s.say("The server told every player where each one flew: the same wounds on every screen").pause(60);
 	}
 
 	/**

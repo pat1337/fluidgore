@@ -2,6 +2,26 @@
 
 All notable changes to Fluid Gore. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [3.0.0]
+
+The server's word on every hit: the first step of Fluid Gore deciding gore on the server when it runs there.
+
+### Added
+- Server-reported hits (with Fluid Gore on the server, singleplayer and LAN/e4mc worlds included): the server tells
+  every player who can see a body exactly what hit it: the damage done, the weapon that really struck, the path the
+  blow took (another player's exact view instead of the rounded one, an arrow's flight) and the dice for it. Without
+  the mod on the server, each game works it out from what vanilla sends, as before.
+- Arrows with no shooter (dispensers, `/summon`) wound where they strike. They used to leave no wound at all.
+- Demo: `/gore demo arrows`.
+
+### Fixed (with Fluid Gore on the server)
+- A shield block no longer draws blood: a hit the shield stopped is never reported.
+- Hits that absorption hearts or armour soak up no longer wait four ticks before a guessed small bleed.
+- Arrows from a skeleton too far off for your game to know of still wound and bleed the right way.
+
+### Note
+- Players and the server must run the same Fluid Gore version (since 2.16 the Cobble Tank makes this required anyway).
+
 ## [2.17.0]
 
 Ragdoll Physics, polished for killing off cliffs, down stairs and onto slabs; blood read like a spatter analyst reads it.

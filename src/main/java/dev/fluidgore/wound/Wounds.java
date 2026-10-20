@@ -17,6 +17,7 @@ import net.fabricmc.fabric.api.client.rendering.v1.RenderStateDataKey;
 import net.minecraft.client.model.Model;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.util.Mth;
@@ -107,11 +108,14 @@ public final class Wounds {
 	}
 
 	/**
-	 * A blow reported by the server. Uses the player's own aim if they swung at this entity, then another player's
-	 * swing along where the server says they are looking, otherwise a ray from the attacker to the middle of the victim.
+	 * A blow reported by the server. Uses the player's own aim if they swung at this entity (or their own view), then
+	 * the path the server says the blow took ({@code rayFrom}/{@code rayDir}: a player's exact view, an arrow's flight;
+	 * null on a server without Fluid Gore), then another player's swing along where the server says they are looking,
+	 * otherwise a ray from the attacker to the middle of the victim.
 	 */
-	public @Nullable Strike onDamage(LivingEntity victim, @Nullable Entity attacker, boolean melee, Weapon weapon, float damage) {
-		if (attacker == null || !applies(victim)) {
+	public @Nullable Strike onDamage(LivingEntity victim, @Nullable Entity attacker, boolean melee, Weapon weapon, float damage,
+			@Nullable Vec3 rayFrom, @Nullable Vec3 rayDir) {
+		if (attacker == null && (rayFrom == null || rayDir == null) || !applies(victim)) {
 			return null;
 		}
 
@@ -123,7 +127,31 @@ public final class Wounds {
 			}
 		}
 
-		if (melee && attacker instanceof Player player) {
+		boolean own = melee && attacker instanceof LocalPlayer;
+		if (own) {
+			// This player's swing with no click aimed (a command, a sweep): their view here is exact and current, the
+			// server's a tick old.
+			Strike seen = alongView(victim, (Player) attacker, weapon, damage);
+			if (seen != null) {
+				return seen;
+			}
+		}
+
+		if (rayFrom != null && rayDir != null) {
+			// The body is posed here a little differently than the server's box stood, so near misses are nudged in.
+			double reach = rayFrom.distanceTo(victim.getBoundingBox().getCenter()) + victim.getBbWidth() + victim.getBbHeight() + 1.0;
+			Strike told = alongRay(victim, rayFrom, (float) Math.toDegrees(-Math.asin(Math.clamp(rayDir.y, -1.0, 1.0))),
+					(float) Math.toDegrees(Math.atan2(-rayDir.x, rayDir.z)), reach, weapon, damage);
+			if (told != null) {
+				return told;
+			}
+		}
+
+		if (attacker == null) {
+			return null;
+		}
+
+		if (melee && !own && attacker instanceof Player player) {
 			// Another player's swing: the server sends everyone where each player looks, so it is cast along their
 			// view the way the local player's own swing is, and lands on the same spot on every screen.
 			Strike seen = alongView(victim, player, weapon, damage);
@@ -149,11 +177,13 @@ public final class Wounds {
 	 * two late, so if the exact ray misses, nearby rays within a few degrees are tried before giving up.
 	 */
 	private @Nullable Strike alongView(LivingEntity victim, Player player, Weapon weapon, float damage) {
-		Vec3 eye = player.getEyePosition();
-		float xRot = player.getViewXRot(1.0F);
-		float yRot = player.getViewYRot(1.0F);
+		return alongRay(victim, player.getEyePosition(), player.getViewXRot(1.0F), player.getViewYRot(1.0F), REACH, weapon, damage);
+	}
+
+	/** Casts a blow from {@code from} at pitch {@code xRot}, yaw {@code yRot}, trying nearby rays if it just misses. */
+	private @Nullable Strike alongRay(LivingEntity victim, Vec3 from, float xRot, float yRot, double reach, Weapon weapon, float damage) {
 		for (float[] nudge : VIEW_NUDGES) {
-			Strike strike = strike(victim, eye, Entity.calculateViewVector(xRot + nudge[0], yRot + nudge[1]), REACH, weapon, damage);
+			Strike strike = strike(victim, from, Entity.calculateViewVector(xRot + nudge[0], yRot + nudge[1]), reach, weapon, damage);
 			if (strike != null) {
 				return strike;
 			}

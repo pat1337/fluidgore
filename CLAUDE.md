@@ -13,7 +13,11 @@ Easy follow-up work is listed in **TASKS.md**. Do those one at a time.
    asked for by the user in 2.11 ("a server side mod so i can see my brother chopping up the bits of dead cow"): the
    server half, `server/KeptBodies` (common code, `main` entrypoint `FluidGore`, mixin `LivingEntityDeathMixin`) and
    its one packet `net/GoreAction`. Keep it that small: the server keeps bodies and relays actions; it never works out
-   gore. Every client feature must still work with `GoreSync.serverKeepsBodies()` false. The second exception, asked
+   gore. Every client feature must still work with `GoreSync.serverKeepsBodies()` false. 3.0 starts moving decisions to
+   the server when it has the mod (the user's choice, 2026-10-19: e4mc LAN now, a dedicated server with other mods
+   later): `server/HitReports` (mixin `LivingEntityHurtMixin`) reports each landed hit as `net/HitReport`. The server
+   only says what it knows (damage, weapon stack, ray, seed); the client still makes the gore, and must keep working
+   from health drops when `GoreSync.serverReportsHits()` is false. Server work must stay cheap and capped. The second exception, asked
    for by the user in 2.16 ("It's a real block, so Fluid Gore has to be on the server and on every player who joins.
    Real damage applies for this block only"): the Cobble Tank (`fluidgore:cobble_tank`), `tank/` (block, block entity, flying-tank
    entity, item, recipe, three damage types, packet `net/TankBurstPayload`). Nothing else may register content.
@@ -71,7 +75,14 @@ Mod Menu 21.0.0 (compile-only, soft dependency).
   streams its pose until it settles; others `apply` it. `Evidence` + `EvidenceRecord` + `server/EvidenceStore`: the
   actor uploads a picture of a creature (`WoundCodec`, missing mask, char, plucks, chops; entity attachment `GORE`,
   persistent) and of each moved piece (`dismember/PieceCodec`: the whole model tree, polygons exactly); sent on
-  `START_TRACKING` / when a player comes within 64 blocks of a piece; restored only where this client saw nothing. **A new way of acting on a body must go through
+  `START_TRACKING` / when a player comes within 64 blocks of a piece; restored only where this client saw nothing.
+  `HitReport` (3.0, clientbound; also registered serverbound with a no-op receiver so `GoreSync.serverReportsHits()`
+  can tell a reporting server from an older one): sent from `LivingEntityHurtMixin` (`hurtServer` HEAD health,
+  RETURN if it landed; Fabric's AFTER_DAMAGE skips lethal hits) to `PlayerLookup.tracking` + the victim. Seed is
+  `Fate.seed(victim, healthAfter, cause)`, the same formula as the guessed path. `DamageTracker` with reports ignores
+  damage events and health drops, holds each `Report` until the synced health reaches `healthAfter` (or
+  `REPORT_WAIT` ticks), then plays it with `Fate.begin(seed)`, the server's weapon (unless a demo fakes the held item)
+  and its ray (`Wounds.onDamage`: own click aim, own view, server ray with nudges, others' synced view, guess). **A new way of acting on a body must go through
   `GoreSync.act`, and a piece must be found by `GorePart.key`** (named by `Fate.key()` in `GorePartManager.add`).
 - `FluidGoreClient`: entrypoint; registers events. `GoreSystems`: owns all state, runs it from the client tick,
   and clears it on level change, disconnect, or when a feature is set to Off.
@@ -355,3 +366,8 @@ severable parts; severed heads can't blink.
   `SLIDE` x the pull. Landing strength capped 0.8 (was 0.35). `BloodWorld.landOnFloor(..., vx, vy, vz, ...)`:
   `directionalSpatter` streaks below `SLANT`. Game test: `drops` (cliff onto slabs); `-PragdollOn` runs the picked
   tests with Ragdoll Physics on. No demo (the user waived it for this release).
+- **3.0.0**: server-reported hits, step 1 of the server-authority plan (see rule 1 and `net/` above): `HitReport`,
+  `server/HitReports`, `mixin/LivingEntityHurtMixin`, `Fate.seed`. Ownerless projectiles (dispensers) are PIERCE and
+  wound along their flight. Game test: `hitReports`. Demo: `arrows`. Next steps of the plan: persistence of blood and
+  pieces with the world, server-owned ragdolls for kept bodies (capped for the tick budget), then optional gameplay
+  consequences behind a server setting (off by default).
