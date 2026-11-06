@@ -479,7 +479,6 @@ generators.
 - A server running the Cobble Tank add-on only admits players with the same add-on version, because the tank is a
   registered block. Fluid Gore on its own registers nothing, but joining a Fluid Gore server without the mod has not
   been tested yet.
-- An item held in a severed hand still renders where the hand was.
 - Evidence covers only what a player with the mod did. Gore from hits nobody with the mod made (a skeleton's arrows,
   say) is seen only by those watching. Blood splats and puddles are not saved. Loose pieces live in the server's
   memory and are gone when the world closes. What was done to bodies is saved with them.
