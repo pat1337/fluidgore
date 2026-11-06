@@ -3,6 +3,8 @@ package dev.fluidgore.mixin;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import dev.fluidgore.GoreSystems;
+import dev.fluidgore.blood.Pallor;
+import dev.fluidgore.anatomy.Melt;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.dismember.ModelParts;
@@ -11,10 +13,12 @@ import dev.fluidgore.player.InjuryPose;
 import dev.fluidgore.ragdoll.RigPose;
 import dev.fluidgore.rot.Rot;
 import dev.fluidgore.suffer.BodyPose;
+import dev.fluidgore.suffer.CorpseStrike;
 import dev.fluidgore.suffer.Corpse;
 import dev.fluidgore.suffer.Ragdoll;
 import dev.fluidgore.suffer.SufferPose;
 import dev.fluidgore.wound.BloodyWool;
+import dev.fluidgore.wound.BodyFlames;
 import dev.fluidgore.wound.Burns;
 import dev.fluidgore.wound.Cremation;
 import dev.fluidgore.wound.Wounds;
@@ -27,6 +31,7 @@ import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.animal.chicken.Chicken;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -82,6 +87,13 @@ public abstract class LivingEntityRendererMixin {
 		// Burning: the feathers singe off first, leaving the bird skinny and bare as a plucked one.
 		Cremation.Charred charred = GoreSystems.dismemberment().cremation().look(entity.getId());
 		state.setData(Cremation.KEY, charred);
+		// A person burns down through their own anatomy instead (see MeltRenderer).
+		Melt melt = GoreSystems.dismemberment().melting().look(entity);
+		state.setData(Melt.KEY, melt);
+		if (melt != null) {
+			state.setData(Cremation.KEY, null);
+		}
+
 		if (charred != null && entity instanceof Chicken) {
 			float singed = Math.min(1.0F, charred.bare() * 6.0F);
 			plumage = new BloodyWool.Plumage(Math.max(singed, plumage == null ? 0.0F : plumage.plucked()), plumage == null ? 0.0F : plumage.wet());
@@ -97,19 +109,20 @@ public abstract class LivingEntityRendererMixin {
 		}
 
 		state.setData(Burns.KEY, tint);
+		// Bled white: on the body's own skin only, not its wool, armour or saddle.
+		state.setData(Pallor.KEY, Pallor.look(entity));
 		state.setData(BloodyWool.KEY, GoreSystems.dismemberment().wool().tint(entity.getId()));
+		state.setData(BloodyWool.COAT, GoreSystems.dismemberment().wool().drawn(entity));
 		state.setData(ModelParts.ENTITY_ID, entity.getId());
 		state.setData(Injury.KEY, GoreSystems.suffering().corpse(entity.getId()) == null ? Injury.of(entity) : null);
 
 		Corpse corpse = GoreSystems.suffering().corpse(entity.getId());
 		state.setData(RigPose.KEY, null);
+		state.setData(BodyFlames.KEY, null);
 		if (corpse != null) {
 			Ragdoll body = corpse.body;
 			// The ragdoll does its own falling over; vanilla's scripted tip-over stays off.
 			state.deathTime = 0.0F;
-			// Vanilla draws the flames at the entity's real spot, not where the ragdoll has the body: they hang in the air.
-			// Burns puts flame particles on the body itself.
-			state.displayFireAnimation = false;
 			state.yRot = 0.0F;
 			state.xRot = 0.0F;
 			if (corpse.rig != null) {
@@ -123,6 +136,7 @@ public abstract class LivingEntityRendererMixin {
 				state.setData(BodyPose.KEY, new BodyPose(body.x(partialTicks) - state.x, body.y(partialTicks) - state.y,
 						body.z(partialTicks) - state.z, body.roll(partialTicks), body.joints(partialTicks)));
 			}
+			fluidgore$flames(entity, corpse, state, partialTicks);
 			// It went down at once: no walking legs, only what the dying body does itself.
 			state.walkAnimationSpeed = 0.0F;
 			state.setData(SufferPose.CLOCK, corpse.age + partialTicks);
@@ -137,6 +151,44 @@ public abstract class LivingEntityRendererMixin {
 				state.hasRedOverlay = entity.hurtTime > 0;
 			}
 		}
+	}
+
+	/**
+	 * A burning body wears vanilla's flames, the same sheet of fire a living mob on fire has, but on the body where it
+	 * lies (vanilla would draw them at the entity's own spot, hanging in the air) and as big as the fire on it: low and
+	 * long over a body on its side, tall while its fat burns, small as it catches and on the bones at the end. It stands
+	 * on {@link CorpseStrike#middle}, the same spot the fire's own particles rise from, ragdoll or rig.
+	 */
+	@Unique
+	private static void fluidgore$flames(LivingEntity entity, Corpse corpse, LivingEntityRenderState state, float partialTicks) {
+		state.displayFireAnimation = false;
+		int id = entity.getId();
+		if (GoreSystems.dismemberment().vaporized(id)) {
+			return;
+		}
+
+		// Cremation's fire, when it has one for this body, says how big the flames are: it already counts the server's
+		// on-fire flag as heat, and it knows when the body is out, doused or down to bare bone. The flag alone (cremation
+		// off) gets vanilla's full sheet. Taking the bigger of the two made the sheet jump to full size and back as the
+		// server's fire ticks ran out and were lit again.
+		Cremation cremation = GoreSystems.dismemberment().cremation();
+		float fierce = cremation.tracks(id) ? cremation.flames(id) : !corpse.unloaded && entity.isOnFire() ? 1.0F : 0.0F;
+		if (fierce <= 0.05F) {
+			return;
+		}
+
+		float w = state.boundingBoxWidth;
+		float h = state.boundingBoxHeight;
+		Vec3 middle = CorpseStrike.middle(corpse, partialTicks);
+		double dx = middle.x - state.x;
+		double dy = middle.y - state.y;
+		double dz = middle.z - state.z;
+		float lying = Mth.abs(Mth.sin(corpse.body.roll(partialTicks)));
+		float width = Mth.lerp(lying, w, Math.max(w, h)) * (0.7F + 0.3F * fierce);
+		float height = Mth.lerp(lying, h, w) * (0.5F + 0.5F * fierce);
+		state.displayFireAnimation = true;
+		// From low on the body, so the flames wrap it and rise off its top rather than standing on its middle.
+		state.setData(BodyFlames.KEY, new BodyFlames(dx, dy - height * 0.35, dz, width, height));
 	}
 
 	/**

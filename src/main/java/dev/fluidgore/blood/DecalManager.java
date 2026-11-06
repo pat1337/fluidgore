@@ -163,13 +163,62 @@ public final class DecalManager {
 		decals.subList(write, decals.size()).clear();
 	}
 
-	private static boolean supportIntact(Level level, Decal d) {
+	private boolean supportIntact(Level level, Decal d) {
 		if (d.face == Direction.UP) {
-			return SurfaceProbe.stillSupported(level, d.centerA + d.pieces[0] * 0.5 + d.pieces[2] * 0.5, d.plane + d.pieces[4],
-					d.centerB + d.pieces[1] * 0.5 + d.pieces[3] * 0.5);
+			return trim(level, d);
 		}
 
 		return !level.getBlockState(d.anchor).getCollisionShape(level, d.anchor, CollisionContext.empty()).isEmpty();
+	}
+
+	/** Blood a floor mark of a whole block holds, in pool units, for what runs off where the ground went from under it. */
+	private static final float RUNOFF_PER_BLOCK = 0.02F;
+
+	/**
+	 * Checks every piece of a floor mark, not just one: blocks blown or dug out from under part of it leave that part
+	 * over nothing (a blast's blood lands a moment before its crater is cut). Those pieces go, and while the blood is
+	 * still wet it runs off the new edge and falls. Returns false if nothing of it is left.
+	 */
+	private boolean trim(Level level, Decal d) {
+		int n = d.pieces.length / Decal.PIECE_STRIDE;
+		float[] kept = null;
+		int count = 0;
+		for (int i = 0; i < n; i++) {
+			int o = i * Decal.PIECE_STRIDE;
+			double x = d.centerA + (d.pieces[o] + d.pieces[o + 2]) * 0.5;
+			double y = d.plane + d.pieces[o + 4];
+			double z = d.centerB + (d.pieces[o + 1] + d.pieces[o + 3]) * 0.5;
+			if (SurfaceProbe.stillSupported(level, x, y, z)) {
+				if (kept != null) {
+					System.arraycopy(d.pieces, o, kept, count * Decal.PIECE_STRIDE, Decal.PIECE_STRIDE);
+				}
+
+				count++;
+				continue;
+			}
+
+			if (kept == null) {
+				kept = new float[d.pieces.length];
+				System.arraycopy(d.pieces, 0, kept, 0, i * Decal.PIECE_STRIDE);
+			}
+
+			float wet = 1.0F - d.dryness();
+			float area = (d.pieces[o + 2] - d.pieces[o]) * (d.pieces[o + 3] - d.pieces[o + 1]);
+			if (wet > 0.3F && area > 0.0F) {
+				world.droplets().spawn(x, y, z, 0.0, 0.0, 0.0, RUNOFF_PER_BLOCK * area * wet, d.rgb, 0.05F);
+			}
+		}
+
+		if (kept == null) {
+			return true;
+		}
+
+		if (count == 0) {
+			return false;
+		}
+
+		d.pieces = java.util.Arrays.copyOf(kept, count * Decal.PIECE_STRIDE);
+		return true;
 	}
 
 	/** Removes the oldest decal; returns its serial or -1 if there is none. */

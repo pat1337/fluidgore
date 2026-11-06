@@ -1,0 +1,22 @@
+{
+	"schemaVersion": 1,
+	"id": "cobbletank",
+	"version": "${version}",
+	"name": "Cobble Tank",
+	"description": "An add-on for Fluid Gore: a crafted carbon-overwrapped pressure vessel. It leaks, hisses and frosts, tears loose and flies on a cracked fitting, and bursts under fire or redstone with a real blast wave and traced casing fragments. Fluid Gore plays the gore. Registers a block, so the server and every client need it.",
+	"authors": ["Fluid Gore contributors"],
+	"license": "MIT",
+	"icon": "assets/cobbletank/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": ["dev.fluidgore.cobbletank.CobbleTank"],
+		"client": ["dev.fluidgore.cobbletank.client.TankClient"]
+	},
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.3",
+		"java": ">=25",
+		"fabric-api": "*",
+		"fluidgore": ">=${fluidgore_version}"
+	}
+}

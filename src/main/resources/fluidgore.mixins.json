@@ -9,9 +9,11 @@
 	],
 	"client": [
 		"AbstractContainerScreenAccessor",
+		"ArmedEntityRenderStateMixin",
 		"ClientLevelMixin",
 		"ClientPacketListenerMixin",
 		"EntityRenderDispatcherAccessor",
+		"EntityRenderDispatcherMixin",
 		"GameRendererMixin",
 		"HumanoidArmorLayerAccessor",
 		"LivingEntityMixin",

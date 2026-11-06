@@ -53,13 +53,13 @@ public final class GoreCommand {
 							return 1;
 						}))
 						.then(ClientCommands.argument("name", StringArgumentType.word())
-								.suggests((ctx, builder) -> SharedSuggestionProvider.suggest(Demos.ALL.stream().map(Demo::name), builder))
+								.suggests((ctx, builder) -> SharedSuggestionProvider.suggest(Demos.all().stream().map(Demo::name), builder))
 								.executes(ctx -> play(ctx.getSource(), StringArgumentType.getString(ctx, "name"))))));
 	}
 
 	private static int list(FabricClientCommandSource source) {
 		source.sendFeedback(Component.literal("Fluid Gore demos (click one, or /gore demo <name>):").withStyle(ChatFormatting.GOLD));
-		for (Demo demo : Demos.ALL) {
+		for (Demo demo : Demos.all()) {
 			MutableComponent line = Component.literal(" " + demo.name()).withStyle(Style.EMPTY.withColor(ChatFormatting.RED)
 					.withClickEvent(new ClickEvent.RunCommand("/gore demo " + demo.name()))
 					.withHoverEvent(new HoverEvent.ShowText(Component.literal("Play " + demo.name()))));

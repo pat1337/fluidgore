@@ -23,7 +23,8 @@ public final class Decal {
 	public final int orient;
 	public final int rgb;
 	public final boolean dries;
-	public final float[] pieces;
+	/** Re-trimmed when the ground under some of them goes (see DecalManager): a piece over nothing is dropped. */
+	public float[] pieces;
 	public final BlockPos anchor;
 	/** Base plane along the normal: surface Y for floor decals, the face coordinate for wall decals. */
 	public final double plane;

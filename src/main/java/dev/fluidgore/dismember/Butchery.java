@@ -26,6 +26,7 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.Direction;
 import net.minecraft.core.particles.ItemParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
@@ -70,6 +71,22 @@ public final class Butchery {
 	/** Chops through a carcass already cut to the bone before it splits: the backbone takes a few. */
 	public static final int CHOPS_TO_SPLIT = 3;
 	private static final int BARE_SKIN = 0xF4CBB4;
+	/**
+	 * A sheep's joints, head to tail as shares of the trunk's length, and from the back to the belly as shares of its
+	 * depth: neck, shoulder, rack, breast, loin, flank, chump and leg. A lamb carcass by weight is about a third leg,
+	 * a quarter shoulder, an eighth loin, a tenth rack, an eighth breast and flank, and the neck.
+	 */
+	/** The names of the {@link #LAMB} joints, in order. */
+	private static final String[] JOINTS = {"neck", "shoulder", "rack", "breast", "loin", "flank", "chump_and_leg"};
+	private static final float[][] LAMB = {
+			{0.0F, 0.12F, 0.0F, 1.0F},
+			{0.12F, 0.36F, 0.0F, 1.0F},
+			{0.36F, 0.54F, 0.0F, 0.68F},
+			{0.36F, 0.54F, 0.68F, 1.0F},
+			{0.54F, 0.70F, 0.0F, 0.68F},
+			{0.54F, 0.70F, 0.68F, 1.0F},
+			{0.70F, 1.0F, 0.0F, 1.0F}
+	};
 	private static final RandomSource RANDOM = Fate.stream("butchery");
 
 	private final Int2IntOpenHashMap plucks = new Int2IntOpenHashMap();
@@ -216,7 +233,10 @@ public final class Butchery {
 		}
 
 		dismemberment.parts().add(carcass);
-		if (!cut(blood, level, carcass, look)) {
+		// A sheep is jointed where a butcher joints one; anything else is cut in two.
+		boolean apart = Flesh.of(entity) == Flesh.MUTTON ? joint(blood, level, carcass, Math.abs(torso.getInitialPose().xRot() - Mth.HALF_PI) < 0.2F, look)
+				: cut(blood, level, carcass, look);
+		if (!apart) {
 			carcass.vy += 0.15;
 		}
 
@@ -247,8 +267,24 @@ public final class Butchery {
 	 * cut. Returns false if the piece cannot be cut (bone, or too small).
 	 */
 	public boolean cut(BloodWorld blood, ClientLevel level, GorePart part, Vec3 look) {
+		return cut(blood, level, part, null, look);
+	}
+
+	/**
+	 * {@link #cut(BloodWorld, ClientLevel, GorePart, Vec3)} by a player at {@code eye} (null if not known): an organ is cut
+	 * where they aimed (see {@link #cutOrgan}).
+	 */
+	public boolean cut(BloodWorld blood, ClientLevel level, GorePart part, @Nullable Vec3 eye, Vec3 look) {
 		if (part.bone() || part.shattered) {
 			return false;
+		}
+
+		if (part.organ != null) {
+			return cutOrgan(blood, level, part, eye, look);
+		}
+
+		if (part.section != null && part.section.half() == 0 && halve(blood, level, part, look)) {
+			return true;
 		}
 
 		List<ModelPart.Cube> cubes = ((ModelPartAccessor) (Object) part.model).fluidgore$getCubes();
@@ -284,11 +320,237 @@ public final class Butchery {
 
 			// The new face, where the knife went through, is raw; so is every face the piece was already cut on.
 			int raw = part.rawFaces | 1 << axis * 2 + (side == 0 ? 1 : 0);
-			piece(part, cube, lo, hi, raw, rotation, look, 1.0F);
+			piece(part, cube, lo, hi, raw, rotation, look, 1.0F, false);
 		}
 
 		part.shattered = true;
 		juice(blood, level, part, 6);
+		return true;
+	}
+
+	/**
+	 * A beast's whole head split down its middle, as a butcher splits one for the brain and the tongue: two halves, each
+	 * showing on its cut face the skull, the jaw and the nasal bones open to their marrow, the brain to its grey and white
+	 * matter, the tongue, the larynx and the throat, each where it lies (see {@link HeadSection}). The cut goes through the
+	 * same place on every screen. Returns false if the head is not one block.
+	 */
+	private boolean halve(BloodWorld blood, ClientLevel level, GorePart part, Vec3 look) {
+		List<ModelPart.Cube> cubes = ((ModelPartAccessor) (Object) part.model).fluidgore$getCubes();
+		HeadSection section = part.section;
+		if (section == null || cubes.size() != 1 || !((ModelPartAccessor) (Object) part.model).fluidgore$getChildren().isEmpty()) {
+			return false;
+		}
+
+		ModelPart.Cube cube = cubes.getFirst();
+		float[] min = {cube.minX, cube.minY, cube.minZ};
+		float[] max = {cube.maxX, cube.maxY, cube.maxZ};
+		float at = section.middle();
+		Quaternionf rotation = new Quaternionf(part.rotation);
+		for (int side = 0; side < 2; side++) {
+			float[] lo = min.clone();
+			float[] hi = max.clone();
+			if (side == 0) {
+				hi[0] = at;
+			} else {
+				lo[0] = at;
+			}
+
+			int raw = part.rawFaces | 1 << (side == 0 ? 1 : 0);
+			GorePart made = piece(part, cube, lo, hi, raw, rotation, look, 0.6F, true);
+			made.section = section.halved(side == 0 ? -1 : 1);
+			made.label = GorePart.named(part.owner, "half_head");
+		}
+
+		part.shattered = true;
+		juice(blood, level, part, 6);
+		level.playLocalSound(part.x, part.y, part.z, SoundEvents.BONE_BLOCK_BREAK, SoundSource.NEUTRAL, 0.8F, 1.2F + RANDOM.nextFloat() * 0.2F, false);
+		return true;
+	}
+
+	/** Most times an organ is cut, whole to portion to portion of that: each cut leaves about half, so past this it is mince. */
+	private static final int ORGAN_CUTS = 5;
+
+	/**
+	 * A blade through a whole organ or a portion of one (see {@link OrganModel}): it comes apart in two portions, each the
+	 * cubes on its side of the cut, those the blade went through clipped there, each still showing its own tissue where
+	 * it was and the inside of the organ where it was cut (a liver's dark parenchyma and veins, a lung's pink sponge and
+	 * bronchi). The blade stands upright along the player's line of sight, so the organ falls in two across it as they
+	 * see it, through the point of the line nearest its middle; a portion is never less than a quarter of it across the
+	 * cut. Each portion is one loose piece, still the organ it was (its name, side, owner, condition, its share of the
+	 * blood), placed where it lay in the whole. Returns false (the knife only scrapes) for a portion cut
+	 * {@link #ORGAN_CUTS} times already, or one too small or too complex to cut again (see {@link OrganModel#split}).
+	 */
+	private boolean cutOrgan(BloodWorld blood, ClientLevel level, GorePart part, @Nullable Vec3 eye, Vec3 look) {
+		if (part.cuts >= ORGAN_CUTS) {
+			return false;
+		}
+
+		List<OrganModel.Block> blocks = OrganModel.blocks(part.model, part.tissue != null ? part.tissue : dev.fluidgore.anatomy.Anatomy.Kind.MUSCLE);
+		float[] b = OrganModel.bounds(blocks);
+		// Back from the world into the piece's own pixels: its turn undone, then the model's flip (x and y the other way).
+		Quaternionf inverse = new Quaternionf(part.rotation).conjugate();
+		Vector3f normal = new Vector3f((float) -look.z, 0.0F, (float) look.x);
+		inverse.transform(normal);
+		normal.mul(-1.0F, -1.0F, 1.0F);
+		Integer[] axes = {0, 1, 2};
+		java.util.Arrays.sort(axes, (i, j) -> Float.compare(Math.abs(normal.get(j)), Math.abs(normal.get(i))));
+		if (look.x * look.x + look.z * look.z < 0.04) {
+			// Straight down on it: across its longest side.
+			java.util.Arrays.sort(axes, (i, j) -> Float.compare(b[3 + j] - b[j], b[3 + i] - b[i]));
+		}
+
+		Vector3f aim = null;
+		if (eye != null) {
+			Vec3 centre = new Vec3(part.x, part.y, part.z);
+			Vec3 nearest = eye.add(look.scale(Math.max(0.0, centre.subtract(eye).dot(look))));
+			aim = new Vector3f((float) (nearest.x - centre.x), (float) (nearest.y - centre.y), (float) (nearest.z - centre.z));
+			inverse.transform(aim);
+			aim.mul(-1.0F, -1.0F, 1.0F).mul(16.0F / part.scale).add(new Vector3f(part.localCenter).mul(16.0F));
+		}
+
+		for (int axis : axes) {
+			float length = b[3 + axis] - b[axis];
+			if (length < 4.0F * OrganModel.THINNEST) {
+				continue;
+			}
+
+			float at = aim != null ? aim.get(axis) : b[axis] + length * 0.5F;
+			at = Mth.clamp(at, b[axis] + length * 0.25F, b[3 + axis] - length * 0.25F);
+			List<List<OrganModel.Block>> sides = OrganModel.split(blocks, axis, at);
+			if (sides == null) {
+				continue;
+			}
+
+			// The blood the blade lets out comes out of what the organ holds; the rest is shared between the portions.
+			float spilt = GorePartManager.blood(part, 0.03F);
+			float whole = OrganModel.volume(blocks);
+			Quaternionf rotation = new Quaternionf(part.rotation);
+			for (List<OrganModel.Block> side : sides) {
+				portion(part, side, whole, rotation, look);
+			}
+
+			part.shattered = true;
+			Vec3 where = new Vec3(part.x, part.y, part.z);
+			if (spilt > 0.0F) {
+				BloodEmitter.burst(blood, level, where, part.bloodRgb, spilt, 6);
+			}
+
+			level.playLocalSound(where.x, where.y, where.z, SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 0.6F, 1.2F, false);
+			level.playLocalSound(where.x, where.y, where.z, SoundEvents.SLIME_SQUISH_SMALL, SoundSource.NEUTRAL, 0.8F, 0.6F + RANDOM.nextFloat() * 0.3F, false);
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * A portion of the organ {@code part}, the blocks {@code blocks} of it ({@code whole}: the volume of all of it), made a
+	 * loose piece where those blocks were in it: the same organ, side, owner, tissue and condition, one cut more, and its
+	 * share by volume of the blood the organ still held. Added to the dismemberment's parts.
+	 */
+	private GorePart portion(GorePart part, List<OrganModel.Block> blocks, float whole, Quaternionf rotation, Vec3 look) {
+		float[] b = OrganModel.bounds(blocks);
+		Vector3f centre = new Vector3f((b[0] + b[3]) / 32.0F, (b[1] + b[4]) / 32.0F, (b[2] + b[5]) / 32.0F);
+		Vector3f extents = new Vector3f((b[3] - b[0]) / 32.0F, (b[4] - b[1]) / 32.0F, (b[5] - b[2]) / 32.0F).mul(part.scale);
+		GorePart piece = new GorePart(OrganModel.assemble(blocks), part.texture, centre, extents, part.scale, part.bloodRgb, Math.max(part.lifetime - part.age, 400));
+		piece.tint = part.tint;
+		piece.condition.set(part.condition);
+		piece.rot = part.rot;
+		piece.arid = part.arid;
+		piece.light = part.light;
+		piece.owner = part.owner;
+		piece.organ = part.organ;
+		piece.side = part.side;
+		piece.tissue = part.tissue;
+		piece.cuts = part.cuts + 1;
+		piece.event = part.event;
+		piece.eventSource = part.eventSource;
+		piece.label = GorePart.organLabel(piece.owner, piece.organ, piece.side, piece.cuts);
+		// Where the portion's middle is in the world: the old pivot moved by the shift to the new, through the piece's flip,
+		// scale and turn, as the renderer applies them.
+		Vector3f shift = new Vector3f(centre).sub(part.localCenter).mul(-part.scale, -part.scale, part.scale);
+		rotation.transform(shift);
+		piece.x = piece.prevX = part.x + shift.x;
+		piece.y = piece.prevY = part.y + shift.y;
+		piece.z = piece.prevZ = part.z + shift.z;
+		piece.rotation.set(rotation);
+		piece.prevRotation.set(rotation);
+		Vector3f apart = new Vector3f(shift).normalize();
+		if (!apart.isFinite()) {
+			apart.set(RANDOM.nextFloat() - 0.5F, 0.0F, RANDOM.nextFloat() - 0.5F);
+		}
+
+		// The two halves fall a little apart where they were cut.
+		piece.vx = part.vx + apart.x * 0.03 + look.x * 0.01;
+		piece.vy = Math.max(part.vy, 0.0) + 0.04 + RANDOM.nextDouble() * 0.03;
+		piece.vz = part.vz + apart.z * 0.03 + look.z * 0.01;
+		piece.spinAxis.set(RANDOM.nextFloat() - 0.5F, RANDOM.nextFloat() - 0.5F, RANDOM.nextFloat() - 0.5F).normalize();
+		if (!piece.spinAxis.isFinite()) {
+			piece.spinAxis.set(1.0F, 0.0F, 0.0F);
+		}
+
+		piece.spinSpeed = 0.05F + RANDOM.nextFloat() * 0.08F;
+		float share = Mth.clamp(OrganModel.volume(blocks) / Math.max(1.0E-4F, whole), 0.0F, 1.0F);
+		piece.bleedLeft = part.bleedLeft * share;
+		piece.condition.fluid = part.condition.fluid * share;
+		GoreSystems.dismemberment().parts().add(piece);
+		return piece;
+	}
+
+	/**
+	 * A sheep's carcass jointed as a butcher joints one, at the lines between the cuts rather than anywhere: across the
+	 * spine into the neck, the shoulder (with the first ribs), the rack (the best end of the ribs), the loin (the saddle)
+	 * and the chump end with the top of the leg; and the breast and the flank, the thin belly wall under the ribs and the
+	 * loin, taken off below them. Each cut face is raw, and those through the spine and the ribs show bone. The joints
+	 * fall apart where they were cut; cut again with a blade, each comes in two down the spine (two racks, two loins, two
+	 * shoulders), and so on down to chops.
+	 *
+	 * <p>{@code turned}: a grown sheep's trunk, whose cube runs head to tail along its y with the belly at its least z;
+	 * a lamb's runs along z with the belly at its greatest y. Returns false if the piece is not a whole trunk.
+	 */
+	private boolean joint(BloodWorld blood, ClientLevel level, GorePart part, boolean turned, Vec3 look) {
+		List<ModelPart.Cube> cubes = ((ModelPartAccessor) (Object) part.model).fluidgore$getCubes();
+		if (part.bone() || part.shattered || cubes.size() != 1) {
+			return false;
+		}
+
+		ModelPart.Cube cube = cubes.getFirst();
+		float[] min = {cube.minX, cube.minY, cube.minZ};
+		float[] max = {cube.maxX, cube.maxY, cube.maxZ};
+		int spine = turned ? 1 : 2;
+		int deep = turned ? 2 : 1;
+		Quaternionf rotation = new Quaternionf(part.rotation);
+		for (int n = 0; n < LAMB.length; n++) {
+			float[] joint = LAMB[n];
+			float[] lo = min.clone();
+			float[] hi = max.clone();
+			lo[spine] = Mth.lerp(joint[0], min[spine], max[spine]);
+			hi[spine] = Mth.lerp(joint[1], min[spine], max[spine]);
+			// Depth from the back (0) to the belly (1).
+			float back = joint[2];
+			float belly = joint[3];
+			if (turned) {
+				lo[deep] = Mth.lerp(1.0F - belly, min[deep], max[deep]);
+				hi[deep] = Mth.lerp(1.0F - back, min[deep], max[deep]);
+			} else {
+				lo[deep] = Mth.lerp(back, min[deep], max[deep]);
+				hi[deep] = Mth.lerp(belly, min[deep], max[deep]);
+			}
+
+			int raw = part.rawFaces;
+			raw |= joint[0] > 0.0F ? 1 << spine * 2 : 0;
+			raw |= joint[1] < 1.0F ? 1 << spine * 2 + 1 : 0;
+			raw |= lo[deep] > min[deep] + 1.0E-3F ? 1 << deep * 2 : 0;
+			raw |= hi[deep] < max[deep] - 1.0E-3F ? 1 << deep * 2 + 1 : 0;
+			// Every joint is sawn through the spine or the ribs (the breast holds the rib ends); only the flank has no bone.
+			GorePart made = piece(part, cube, lo, hi, raw, rotation, look, 0.5F, joint[2] == 0.0F || joint[0] < 0.54F);
+			made.label = GorePart.named(part.owner, JOINTS[n]);
+		}
+
+		part.shattered = true;
+		juice(blood, level, part, 8);
+		level.playLocalSound(part.x, part.y, part.z, SoundEvents.BONE_BLOCK_BREAK, SoundSource.NEUTRAL, 0.8F, 1.1F + RANDOM.nextFloat() * 0.2F, false);
+		level.playLocalSound(part.x, part.y, part.z, SoundEvents.BONE_BLOCK_HIT, SoundSource.NEUTRAL, 0.7F, 0.8F + RANDOM.nextFloat() * 0.2F, false);
 		return true;
 	}
 
@@ -308,7 +570,7 @@ public final class Butchery {
 		for (int i = 0; i < blocks.size(); i++) {
 			float[] b = blocks.get(i);
 			// Where each block was joined to the rest is not known, so it comes apart with its skin on; the knife opens it.
-			piece(part, sources.get(i), new float[]{b[0], b[1], b[2]}, new float[]{b[3], b[4], b[5]}, 0, rotation, look, 0.6F);
+			piece(part, sources.get(i), new float[]{b[0], b[1], b[2]}, new float[]{b[3], b[4], b[5]}, 0, rotation, look, 0.6F, false);
 		}
 
 		part.shattered = true;
@@ -332,9 +594,10 @@ public final class Butchery {
 	/**
 	 * A new loose piece cut from {@code part}: the box {@code lo}..{@code hi} (the piece's own pixels) skinned like
 	 * {@code skin}, raw on the faces in {@code raw}, placed where that box was on the old piece and falling away from its
-	 * middle. {@code fling} scales how hard it moves apart. Added to the dismemberment's parts.
+	 * middle. {@code fling} scales how hard it moves apart; {@code bone}: its cut faces show bone whatever its size (a
+	 * joint sawn through the spine). Added to the dismemberment's parts.
 	 */
-	private void piece(GorePart part, ModelPart.Cube skin, float[] lo, float[] hi, int raw, Quaternionf rotation, Vec3 look, float fling) {
+	private GorePart piece(GorePart part, ModelPart.Cube skin, float[] lo, float[] hi, int raw, Quaternionf rotation, Vec3 look, float fling, boolean bone) {
 		float[] texture = textureOf(skin);
 		ModelPart.Cube block = new ModelPart.Cube(Math.round(texture[0]), Math.round(texture[1]), lo[0], lo[1], lo[2], hi[0] - lo[0], hi[1] - lo[1],
 				hi[2] - lo[2], 0.0F, 0.0F, 0.0F, false, texture[2], texture[3], EnumSet.allOf(Direction.class));
@@ -344,14 +607,19 @@ public final class Butchery {
 		GorePart piece = new GorePart(model, part.texture, centre, extents, part.scale, part.bloodRgb, Math.max(part.lifetime - part.age, 400));
 		Flesh flesh = part.wounds != null ? part.wounds.flesh() : Flesh.MEAT;
 		piece.tint = part.tint;
+		// Cut from a burnt piece, it is as burnt (as dry, as hot, as alight) as what it was cut from.
+		piece.condition.set(part.condition);
 		piece.rot = part.rot;
 		piece.arid = part.arid;
 		piece.light = part.light;
 		piece.rawFaces = raw;
+		piece.owner = part.owner;
+		// A cut of whatever it was cut from.
+		piece.label = part.label == null ? null : Component.translatable("fluidgore.organ.cut_of", part.label);
 		// Diced meat is meat through and through; only a big piece still has bone in its cut faces. Kept even with no
 		// raw face yet, so the piece remembers what it is made of.
 		float smallest = Math.min(hi[0] - lo[0], Math.min(hi[1] - lo[1], hi[2] - lo[2]));
-		piece.wounds = Wounds.cutFaces(model, block, flesh, part.bloodRgb, raw, smallest >= BONE_IN ? 1.0F : 0.7F);
+		piece.wounds = Wounds.cutFaces(model, block, flesh, part.bloodRgb, raw, bone || smallest >= BONE_IN ? 1.0F : 0.7F);
 		// Where the piece's centre is in the world: the old pivot, moved by the shift from the old centre to the new,
 		// through the same flip, scale and rotation the renderer applies.
 		Vector3f shift = new Vector3f(centre).sub(part.localCenter).mul(-part.scale, -part.scale, part.scale);
@@ -376,8 +644,26 @@ public final class Butchery {
 		}
 
 		piece.spinSpeed = (0.08F + RANDOM.nextFloat() * 0.12F) * fling;
-		piece.bleedLeft = 0.04F * GoreConfig.get().goreLevel.puddles;
+		// The blood still in what was cut is shared out by size: cutting makes no more of it.
+		float share = Mth.clamp((hi[0] - lo[0]) * (hi[1] - lo[1]) * (hi[2] - lo[2]) / Math.max(1.0E-4F, volume(part.model)), 0.0F, 1.0F);
+		piece.bleedLeft = part.bleedLeft * share;
+		piece.condition.fluid = part.condition.fluid * share;
 		GoreSystems.dismemberment().parts().add(piece);
+		return piece;
+	}
+
+	/** Volume of every cube of {@code part} and its children, in cubic model pixels. */
+	private static float volume(ModelPart part) {
+		float v = 0.0F;
+		for (ModelPart.Cube cube : ((ModelPartAccessor) (Object) part).fluidgore$getCubes()) {
+			v += (cube.maxX - cube.minX) * (cube.maxY - cube.minY) * (cube.maxZ - cube.minZ);
+		}
+
+		for (ModelPart child : ((ModelPartAccessor) (Object) part).fluidgore$getChildren().values()) {
+			v += volume(child);
+		}
+
+		return v;
 	}
 
 	/** The wet of a cut: blood, scraps of raw meat flicked off the knife, and the squelch of it. */
@@ -388,6 +674,7 @@ public final class Butchery {
 		ItemParticleOption meat = new ItemParticleOption(ParticleTypes.ITEM, switch (flesh) {
 			case POULTRY -> Items.CHICKEN;
 			case PORK -> Items.PORKCHOP;
+			case MUTTON -> Items.MUTTON;
 			case ENDER -> Items.ENDER_PEARL;
 			case ROTTEN -> Items.ROTTEN_FLESH;
 			default -> Items.BEEF;

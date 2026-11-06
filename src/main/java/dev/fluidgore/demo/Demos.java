@@ -5,6 +5,7 @@ import dev.fluidgore.blood.Cleaning;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.GorePart;
 import dev.fluidgore.dismember.ModelParts;
+import dev.fluidgore.dismember.Viscera;
 import dev.fluidgore.net.GoreAction;
 import dev.fluidgore.net.GoreSync;
 import dev.fluidgore.player.PlayerInjuries;
@@ -29,11 +30,28 @@ import org.jspecify.annotations.Nullable;
  * player. <b>Every release that adds something you can see adds a demo here.</b>
  */
 public final class Demos {
-	public static final List<Demo> ALL = List.of(
+	/** Fluid Gore's own demos. */
+	private static final List<Demo> OWN = List.of(
+			new Demo("underwater", "4.0.0", "TNT under water: a block of TNT goes off at the bottom of a deep pool between two pigs. No flame and no scorch: its gas swells into a bubble, collapses and rebounds, the water rushing out and back with it, then bursts out of the surface in a plume of spray that rains back down. The pig beside it is torn apart inside the bubble and its blood clouds out in the water; the one further along only coughs blood from its lungs", true, Demos::underwater),
+			new Demo("deadblast", "4.0.0", "A blast on bodies already dead: two cows killed, then a block of TNT beside them. The body next to it comes apart, and the one further off is thrown limp by the wave", true, Demos::deadBlast),
+			new Demo("wetpieces", "4.0.0", "Pieces in water: a sheep blown apart at the bottom of a deep pool. Its blood clouds in the water; the lungs and the fat come up and float, the bones lie on the bottom, and meat and organs sink after them", true, Demos::piecesInWater),
+			new Demo("lying", "4.0.0", "Bodies lying together: four pigs and a sheep packed tight, one stuck first, are killed together. They come to rest side by side, against each other and not through each other, and the stuck one's blood smears the flanks of the bodies against it. With Ragdoll Physics on, they set with their legs locked straight out from the trunk", false, Demos::lying),
+			new Demo("water", "4.0.0", "A body in water: a pig killed in a deep pool sinks slowly to the bottom, its blood clouding round it. Then ten days are skipped: with Rot on (Extreme), the bloated body comes up and floats low in the water", true, Demos::water),
+			new Demo("coats", "4.0.0", "Blood on the animals and in water: a pig stuck beside a sheep and a cow spatters their coats; its pool runs under the sheep, and blood climbs the wool of its legs higher than it reaches on the pig's hide. Then a pig stuck standing in a trough of water: its blood clouds out in the water, sinks and thins away", true, Demos::coats),
+			new Demo("pallor", "4.0.0", "Pallor: two pigs side by side, and one is stuck and bled out. As the blood leaves it the pink flush goes out of its skin, and it lies a washed-out, pale pink beside the one that never bled", false, Demos::pallor),
+			new Demo("stuckpig", "4.0.0", "A pig stuck with a sword: the blade to its head goes into the throat, and the blood pours down its chest and the fronts of both forelegs. It bleeds out, goes down, and the blood runs on across the side it lies on. Then a punch on another pig: a bruise, a red flush under unbroken skin", false, Demos::stuckPig),
+			new Demo("headsplit", "4.0.0", "A sheep's head and a lamb's, cut off and split down the middle with a cleaver: each half falls open, cut face up, showing the skull and jaw open to their marrow, the brain's grey and white matter, the tongue, the larynx and the throat where they lie. The lamb's is smaller. Look at a half to see what it is, pick it up, or cut it on down", false, Demos::headSplit),
+			new Demo("resolution", "4.0.0", "Anatomy detail side by side: four shorn ewes opened raw, their insides cut at 1x (a cube a pixel), 2x (half pixels), 4x (quarter pixels) and mixed (2x with the heart, great vessels and kidneys at 4x, the anatomy every sheep has), each name-tagged, to compare by eye. Skin, fat and muscle stay a cell a pixel on all four", false, Demos::resolution),
+			new Demo("coworgans", "3.3.1", "Cow-specific anatomy: an opened cow beside a sheep, then a cow's liver, both lungs and both kidneys laid out as named, shaped pieces. Pick them up, throw them, or cut them with a blade", false, Demos::cowOrgans),
+			new Demo("organs", "3.3.0", "A sheep's liver and lungs out of the body and handled: beside a ewe opened to show them in place, the liver and both lungs of another are taken out whole, each its own piece of the lobes it is made of, as it lay. A blade cuts the liver in two, dark glossy parenchyma and veins on the cut, and a lung, pink sponge and airways; a portion is thrown onto a campfire, cooks, chars and catches, and water puts it out. Pick them up and throw them (use), punch them, cut them again with a blade; look at one to see what it is", true, Demos::organs),
+			new Demo("charred", "3.3.0", "Three shorn sheep burnt three ways: one on its own fat leaves a charred, mottled skeleton, brown and black, as an ordinary fire does; one on a campfire that goes on under its bare bones greys them and slowly chalks them white; one in lava calcines fast. Broken up, the charred bones crumble to black char and the calcined ones to pale dust", true, Demos::charred),
+			new Demo("blast", "3.3.0", "A block of TNT (about 8 kg of real explosive) under a cow, and cows at 3, 5, 8 and 12 metres, each in its own direction: the one over the charge comes apart into its own named organs and bones, the near side first and fastest; at 3 m the legs facing the blast tear off and the belly bursts; at 5 m blast lung kills it whole, blood from the mouth and nose; at 8 and 12 m they live, ears bleeding. Look at any piece to see what it is", true, Demos::blast),
+			new Demo("beasts", "3.3.0", "A sheep, a pig and a cow set on fire: the fleece smoulders under white smoke and chars off in black patches while the pig's bare hide blisters at once; dead, they burn on through their own anatomy, the sheep's hard white suet, the pig's soft lard and the cow's yellow fat running, the meat cooking from red to brown, the ribs, lungs, heart, stomachs and guts showing, down to skeletons standing on charred hooves", false, Demos::beasts),
+			new Demo("lamb", "3.3.0", "A sheep killed and jointed as a butcher joints one: neck, shoulder, rack, loin and leg across the spine, breast and flank off the belly, dark red mutton under hard white fat; then the joints split down the spine and cut into chops", false, Demos::lamb),
+			new Demo("burn", "3.2.0", "A glass pen of long grass, hay and a plank wall, and a pig and a cow set on fire: the panicking pig lights the grass it runs through, the fire climbs the wall, and with Fluid Gore on the server the bodies that died burning burn on, on their own fat, lighting what they lie against; then it is put out", true, Demos::burn),
+			new Demo("melt", "3.2.0", "Two husks, shaped like players, set on fire: the skin reddens, blisters and chars as the fire takes their health; dead, they burn on their own fat, the skin through to the yellow fat that melts and drips, then the muscle, the ribs and organs, down to a charred and then white skeleton that breaks up under blows", false, Demos::melt),
 			new Demo("sponge", "3.1.0", "A pig's blood and guts cleaned up: a clean sponge lifts the blood, a bloody one smears it along the stroke and squashes the guts into streaks, a soaked one leaves red wipes on a clean floor, and the blood clouds out of it when it is washed", false, Demos::sponge),
 			new Demo("arrows", "3.0.0", "Arrows with no one behind them, as from a dispenser, at a cow side-on: with Fluid Gore on the server each wounds exactly where it strikes (leg, flank, neck), the same on every screen", false, Demos::arrows),
-			new Demo("tank", "2.16.0", "The Cobble Tank, for real: a pinhole leak hisses and frosts and costs you your hearing, a cracked tank tears loose and flies, and a full one (600 litres at 10,000 psi, about 21 kg of TNT) lit with redstone 30 blocks off kills to 8 m, bursts eardrums to 15, blows a gate open and the glass out", true, Demos::tank),
-			new Demo("roadster", "2.15.0", "A 2x2 of TNT as the Roadster's pressure vessel (200 litres at 10,000 psi, about 7 kg of TNT) with animals in rings round it: shredded, torn apart, lungs burst, fragments driven in, each by the real overpressure where it stood; 9 blocks off, you are deafened and your ears ring", true, Demos::roadster),
 			new Demo("cremation", "2.14.0", "A chicken, a sheep and a cow set alight where they lie: each burns on its own fat, the heavier the longer and smokier, down to the bone; the cow is put out half burnt, its char knocked off and its bones broken up into ash", true, Demos::cremation),
 			new Demo("chickens", "2.13.0", "Chickens killed three ways (wrung neck, cut throat, beheaded) flap themselves to death; feathers fly bloody, a hen in the rain goes dark and slick, and the feathers lie where they fell", false, Demos::chickens),
 			new Demo("stairs", "2.13.0", "A sheep and a pig killed at the top of a narrow stair: the bodies slump over the edge and tumble down step by step", true, Demos::stairs),
@@ -64,11 +82,27 @@ public final class Demos {
 			new Demo("headless", "1.1.0", "A beheaded cow drops and kicks hard while the neck pumps", false, Demos::headless),
 			new Demo("beating", "1.1.0", "A cow beaten to death in front of its herd", false, Demos::beating));
 
+	/** Demos added by add-ons (the Cobble Tank), listed after Fluid Gore's own. */
+	private static final List<Demo> ADDED = new java.util.concurrent.CopyOnWriteArrayList<>();
+
 	private Demos() {
 	}
 
+	/** Every demo: Fluid Gore's own, newest first, then each add-on's. */
+	public static List<Demo> all() {
+		List<Demo> all = new ArrayList<>(OWN);
+		all.addAll(ADDED);
+		return all;
+	}
+
+	/** Adds an add-on's demo; its name must not already be taken. */
+	public static void add(Demo demo) {
+		if (get(demo.name()) != null) throw new IllegalArgumentException("Demo name taken: " + demo.name());
+		ADDED.add(demo);
+	}
+
 	public static @Nullable Demo get(String name) {
-		for (Demo demo : ALL) {
+		for (Demo demo : all()) {
 			if (demo.name().equals(name)) {
 				return demo;
 			}
@@ -393,7 +427,7 @@ public final class Demos {
 		s.client(mc -> {
 			Corpse corpse = nearest(mc);
 			if (corpse != null) {
-				GoreSync.act(GoreAction.of(GoreAction.CLEAN, corpse.entity.getId(), 0L, mc.player.getEyePosition(), mc.player.getViewVector(1.0F), 0, 0.0F));
+				GoreSync.act(GoreAction.of(GoreAction.CLEAN, corpse.entity.getId(), 0L, mc.player.getEyePosition(), mc.player.getViewVector(1.0F), 0, 1.0F));
 			}
 		}).pause(60);
 	}
@@ -467,7 +501,7 @@ public final class Demos {
 		s.client(mc -> {
 			for (Corpse corpse : new ArrayList<>(GoreSystems.suffering().corpses())) {
 				if (corpse.entity.distanceToSqr(mc.player) < 16.0 * 16.0) {
-					GoreSync.act(GoreAction.of(GoreAction.CLEAN, corpse.entity.getId(), 0L, mc.player.getEyePosition(), mc.player.getViewVector(1.0F), 0, 0.0F));
+					GoreSync.act(GoreAction.of(GoreAction.CLEAN, corpse.entity.getId(), 0L, mc.player.getEyePosition(), mc.player.getViewVector(1.0F), 0, 1.0F));
 				}
 			}
 		}).pause(40);
@@ -635,7 +669,449 @@ public final class Demos {
 		s.pause(200);
 	}
 
-	/** Set alight where they stand: they char as they burn, writhe, and lie charred and smoking. */
+	/**
+	 * 3.2 burning bodies set fire to what they touch, from the game test's pen: a glass box (so the fire stays in it) of
+	 * long grass, hay and a plank wall, a pig that runs about burning and a cow that stands. The fire is put out at the
+	 * end. Cleared to nine blocks up: fire reaches four blocks above itself, and the wall burns three up.
+	 */
+	private static void burn(Script s, Stage st) {
+		s.say("A glass pen of long grass, with hay and a plank wall");
+		s.cmd("fill " + st.block(-6, 0, 2) + " " + st.block(6, 9, 14) + " minecraft:air");
+		s.cmd("fill " + st.block(-5, -1, 3) + " " + st.block(5, 5, 13) + " minecraft:glass hollow");
+		s.cmd("fill " + st.block(-4, -1, 4) + " " + st.block(4, -1, 12) + " minecraft:grass_block");
+		s.cmd("fill " + st.block(3, 0, 4) + " " + st.block(4, 2, 12) + " minecraft:oak_planks");
+		s.cmd("fill " + st.block(-1, 0, 10) + " " + st.block(0, 0, 11) + " minecraft:hay_block");
+		s.cmd("fill " + st.block(-4, 0, 4) + " " + st.block(2, 0, 12) + " minecraft:short_grass replace air");
+		s.summon(st, "pig", "fgd_burn_pig", 1.5, 0, 6.5, 90.0F, "Fire:900s");
+		s.summon(st, "cow", "fgd_burn_cow", -3.0, 0, 8.5, 90.0F, "Fire:900s");
+		// Summoned still, as every demo mob is; the pig is let loose to run.
+		s.cmd("data merge entity @e[tag=fgd_burn_pig,limit=1] {NoAI:0b}");
+		s.pause(40).say("A pig and a cow, set on fire. In Vanilla a burning animal lights nothing; this one is a torch").pause(140);
+		s.say("Running in a panic, the pig lights the dry grass it brushes past").pause(200);
+		s.say("It is real fire: it climbs the plank wall, and water or rain puts it out").pause(200);
+		s.say("With Fluid Gore on the server, a body that died burning burns on, on its own fat, and lights what it lies against").pause(300);
+		s.say("Put out");
+		s.cmd("fill " + st.block(-4, 0, 4) + " " + st.block(4, 4, 12) + " minecraft:air replace minecraft:fire").pause(60);
+	}
+
+	/** 3.3: a block of TNT and cows at real distances from it, read like a scene afterwards. */
+	private static void blast(Script s, Stage st) {
+		double[] metres = {0.0, 3.0, 5.0, 8.0, 12.0};
+		double[] angle = {0.0, 0.5, 2.1, 3.6, 5.2};
+		for (int i = 0; i < metres.length; i++) {
+			s.summon(st, "cow", "fgd_blast" + i, Math.cos(angle[i]) * metres[i], 0, 14 + Math.sin(angle[i]) * metres[i], 90.0F, "");
+		}
+
+		s.pause(20).say("A block of TNT is about 8 kg of real explosive. One under a cow; others at 3, 5, 8 and 12 metres");
+		s.cmd("summon minecraft:tnt " + st.pos(0, 0, 14) + " {fuse:80}").pause(90);
+		s.say("Over the charge the cow comes apart into its own organs and bones: the underside first and fastest").pause(100);
+		s.say("At 3 m the legs that faced the blast are torn off and the belly bursts").pause(80);
+		s.say("At 5 m it dies whole: blast lung, blood from the mouth and nose").pause(80);
+		s.say("At 8 and 12 m they live. Their eardrums burst").pause(80);
+		s.say("Every piece keeps its name: walk the scene and look at them, they read out over your hotbar").pause(200);
+	}
+
+	/** 3.3: a sheep, a pig and a cow burning alive and burning on, each through its own anatomy. */
+	private static void beasts(Script s, Stage st) {
+		s.summon(st, "sheep", "fgd_beast_sheep", -3.0, 0, 4.5, 90.0F, "");
+		s.summon(st, "pig", "fgd_beast_pig", 0.0, 0, 4.5, 90.0F, "");
+		s.summon(st, "cow", "fgd_beast_cow", 3.5, 0, 4.5, 90.0F, "");
+		s.pause(20).say("A sheep, a pig and a cow, set on fire");
+		for (String role : new String[] {"fgd_beast_sheep", "fgd_beast_pig", "fgd_beast_cow"}) {
+			s.cmd("execute as @e[tag=" + role + "] run data merge entity @s {Fire:2000s}");
+		}
+
+		s.pause(60).say("Wool hardly burns: the fleece smoulders under white smoke, scorches and chars off in black patches");
+		s.pause(80).say("The pig has no fleece to shield it: its hide reddens, blisters and splits at once").pause(100);
+		s.say("Dead, they burn on their own fat: the sheep's hard white suet, the pig's soft lard, the cow's yellow fat").pause(300);
+		s.say("The meat under it cooks from red to grey-brown and shrinks onto the bone; the legs draw up").pause(300);
+		s.say("Through the ribs: the lungs and the heart; behind them the cow's and the sheep's great rumen, the pig's one stomach").pause(300);
+		s.say("At the end, skeletons: the bones charred, then grey, then white, still standing on their hooves of horn").pause(400);
+		s.hold("minecraft:stone_shovel").say("And the bones break up under blows");
+		for (int i = 0; i < 8; i++) {
+			s.client(mc -> beatPyre(mc, EntityTypes.SHEEP)).pause(8);
+		}
+
+		s.pause(60);
+	}
+
+	/** Cow-specific trunk beside a sheep, with five loose organs using the existing player controls. */
+	private static void cowOrgans(Script s, Stage st) {
+		s.summon(st, "cow", "fgd_coworgans_open", -1.8, 0, 4, 90.0F, "Invulnerable:1b");
+		s.summon(st, "sheep", "fgd_coworgans_sheep", 1.8, 0, 4, 90.0F, "Sheared:1b,Invulnerable:1b");
+		s.pause(25).say("A cow and a sheep: each now has its own trunk anatomy");
+		for (int i = 0; i < 20; i++) {
+			s.client(mc -> {
+				LivingEntity cow = st.find(mc.level, EntityTypes.COW, -1.8, 0, 4);
+				LivingEntity sheep = st.find(mc.level, EntityTypes.SHEEP, 1.8, 0, 4);
+				if (cow != null) GoreSystems.dismemberment().melting().set(cow, 0.6F);
+				if (sheep != null) GoreSystems.dismemberment().melting().set(sheep, 0.6F);
+			}).pause(10);
+		}
+		s.summon(st, "cow", "fgd_coworgans_donor", 0, 0, 6.5, 90.0F, "Invulnerable:1b");
+		s.pause(20).say("The cow's liver and gallbladder, two lungs, and two lobulated kidneys, out whole");
+		s.client(mc -> {
+			LivingEntity cow = st.find(mc.level, EntityTypes.COW, 0, 0, 6.5);
+			if (cow == null) return;
+			var made = Viscera.lift(mc.level, GoreSystems.dismemberment().giblets(), cow, java.util.Set.of("liver", "lung", "kidney"), new Vec3(0, 0.25, 0));
+			int i = 0;
+			for (GorePart p : made) {
+				Vec3 at = st.at(-1.8 + i++ * 0.9, 0.8, 2.5);
+				p.x = p.prevX = at.x;
+				p.y = p.prevY = at.y;
+				p.z = p.prevZ = at.z;
+			}
+		}).pause(80);
+		s.say("Look at a piece to identify it. Use to carry and throw; strike with a blade to cut it into portions").pause(100);
+	}
+
+	/** The four grains of a sheep's inside, left to right, for {@link #resolution}. */
+	private static final dev.fluidgore.anatomy.Anatomy.Detail[] GRAINS = dev.fluidgore.anatomy.Anatomy.Detail.values();
+	private static final String[] GRAIN_NAMES = {"1x", "2x", "4x", "Mixed (now)"};
+
+	/**
+	 * 4.0: the same shorn ewe opened four times side by side, raw, with its inside cut at each grain (see
+	 * {@link dev.fluidgore.anatomy.Anatomy.Detail}), to choose the look by eye. Skin, fat and muscle stay a cell a pixel on all four.
+	 */
+	private static void resolution(Script s, Stage st) {
+		for (int i = 0; i < GRAINS.length; i++) {
+			s.summon(st, "sheep", "fgd_resolution_" + i, grainAt(i), 0, 3.5, 90.0F,
+					"Sheared:1b,Invulnerable:1b,Silent:1b,CustomNameVisible:1b,CustomName:\"" + GRAIN_NAMES[i] + "\"");
+		}
+
+		s.pause(20).say("Four shorn ewes, the same anatomy cut four ways. Skin, fat and muscle are a cell a pixel on all of them");
+		grains(s, st, 0.45F, 8);
+		s.say("Opened further: the ribs, lungs, heart and rumen. Walk round them and look close");
+		grains(s, st, 0.65F, 12);
+		s.say("Down to the organs: 1x is blocky like the wool was, 2x keeps the organs apart, 4x shows loops and every rib");
+		grains(s, st, 0.85F, 16);
+		s.say("Mixed, every sheep's anatomy now, keeps 2x but cuts the heart, great vessels and kidneys at 4x. They stay opened: compare as long as you like");
+		grains(s, st, 0.85F, 4);
+	}
+
+	/** Where grain {@code i}'s ewe stands, right of the player in blocks: a body and a half apart. */
+	private static double grainAt(int i) {
+		return (i - (GRAINS.length - 1) * 0.5) * 1.8;
+	}
+
+	/** {@code tenths} half-seconds, keeping every ewe of {@link #resolution} opened {@code bare} deep at its own grain. */
+	private static void grains(Script s, Stage st, float bare, int tenths) {
+		for (int t = 0; t < tenths; t++) {
+			s.client(mc -> {
+				for (int i = 0; i < GRAINS.length; i++) {
+					LivingEntity e = st.find(mc.level, EntityTypes.SHEEP, grainAt(i), 0, 3.5);
+					if (e != null) {
+						GoreSystems.dismemberment().melting().sample(e, bare, GRAINS[i]);
+					}
+				}
+			}).pause(10);
+		}
+	}
+
+	/** Sheep organs through ejection, cutting, fire and water; stage-relative so it can be replayed anywhere. */
+	private static void organs(Script s, Stage st) {
+		s.summon(st, "sheep", "fgd_organs_open", -1.6, 0, 3.5, 90.0F, "Sheared:1b,Invulnerable:1b");
+		s.summon(st, "sheep", "fgd_organs_out", 1.6, 0, 3.5, 90.0F, "Sheared:1b,Invulnerable:1b");
+		s.pause(20).say("Two shorn ewes. The left one opened: the liver and lungs in place behind the ribs");
+		hold(s, st, 6);
+		s.say("From the right one, the liver and both lungs, taken out whole");
+		s.client(mc -> {
+			LivingEntity donor = st.find(mc.level, EntityTypes.SHEEP, 1.6, 0, 3.5);
+			if (donor != null) {
+				// Up and a little towards the player, to land on the grass in front of the ewe.
+				Vec3 toward = st.at(0, 0, 0).subtract(st.at(0, 0, 1)).scale(0.06).add(0.0, 0.3, 0.0);
+				Viscera.lift(mc.level, GoreSystems.dismemberment().giblets(), donor, java.util.Set.of("liver", "lung"), toward);
+			}
+		});
+		hold(s, st, 8);
+		s.say("Each its own piece, as it lay in the body: the liver's lobes and green gallbladder, each lung's lobes");
+		hold(s, st, 8);
+		s.say("A blade through the liver: two portions, still liver, the cut dark and glossy with the veins showing");
+		s.client(mc -> cut(mc, "liver"));
+		hold(s, st, 8);
+		s.say("And through a lung: pink sponge, and the airways cut across");
+		s.client(mc -> cut(mc, "lung"));
+		hold(s, st, 8);
+		s.say("A portion of lung onto a campfire: it steams, cooks grey, chars and catches");
+		s.cmd("setblock " + st.block(0, 0, 2) + " minecraft:campfire[lit=true]");
+		s.client(mc -> onto(mc, "lung", st.at(0, 0.5, 2)));
+		hold(s, st, 24);
+		s.say("Water puts it out");
+		s.cmd("setblock " + st.block(0, 0, 2) + " minecraft:water");
+		hold(s, st, 8);
+		s.cmd("setblock " + st.block(0, 0, 2) + " minecraft:air");
+		s.say("Pick them up and throw them with use, punch them, cut them again with a blade; look at one to see what it is");
+		hold(s, st, 10);
+	}
+
+	/** {@code tenths} half-seconds, keeping the left ewe opened meanwhile. */
+	private static void hold(Script s, Stage st, int tenths) {
+		for (int i = 0; i < tenths; i++) {
+			s.client(mc -> openUp(mc, st, -1.6)).pause(10);
+		}
+	}
+
+	/**
+	 * The player cuts the biggest piece of a sheep's organ called {@code name} with a blade, from where they stand: the same
+	 * action their own cut sends (see {@code PartInteraction}), so every screen cuts it the same.
+	 */
+	private static void cut(Minecraft mc, String name) {
+		GorePart target = biggest(name);
+		if (target != null && mc.player != null) {
+			Vec3 eye = mc.player.getEyePosition();
+			Vec3 look = new Vec3(target.x, target.y, target.z).subtract(eye).normalize();
+			GoreSync.act(GoreAction.of(GoreAction.CUT, -1, target.key, eye, look, 0, 0.0F));
+		}
+	}
+
+	/** Throws the biggest piece of a sheep's organ called {@code name} in an arc to land on {@code spot}, as the player would. */
+	private static void onto(Minecraft mc, String name, Vec3 spot) {
+		GorePart p = biggest(name);
+		if (p == null) {
+			return;
+		}
+
+		dev.fluidgore.net.PieceSync.moved(p);
+		p.resting = false;
+		p.restTicks = 0;
+		p.restTarget = null;
+		// About a second's flight.
+		p.vx = (spot.x - p.x) / 20.0;
+		p.vz = (spot.z - p.z) / 20.0;
+		p.vy = 0.55 + (spot.y - p.y) / 20.0;
+	}
+
+	/** The piece of a sheep's organ called {@code name} with the most cubes, or null. */
+	private static @Nullable GorePart biggest(String name) {
+		GorePart best = null;
+		int most = 0;
+		for (GorePart p : GoreSystems.dismemberment().parts().parts()) {
+			if (name.equals(p.organ) && p.owner == EntityTypes.SHEEP && !p.shattered) {
+				int cubes = dev.fluidgore.dismember.OrganModel.cubes(p.model);
+				if (cubes > most) {
+					most = cubes;
+					best = p;
+				}
+			}
+		}
+
+		return best;
+	}
+
+	/** Keeps the sheep at stage spot {@code right} opened to its organs (a living body heals its burns; this holds them). */
+	private static void openUp(Minecraft mc, Stage st, double right) {
+		LivingEntity e = st.find(mc.level, EntityTypes.SHEEP, right, 0, 3.5);
+		if (e != null) {
+			GoreSystems.dismemberment().melting().set(e, 0.6F);
+		}
+	}
+
+	/** 3.3: a sheep jointed into its cuts, then the cuts split down the spine and cut to chops. */
+	private static void lamb(Script s, Stage st) {
+		s.summon(st, "sheep", "fgd_lamb", 0, 0, 3.5, 90.0F, "");
+		s.pause(20).hold("minecraft:iron_axe").say("A sheep, killed and opened");
+		s.hit("fgd_lamb", 100).pause(70);
+		s.say("Jointed as a butcher does it: neck, shoulder, rack, loin and leg, the breast and flank off the belly");
+		s.client(mc -> {
+			for (Corpse c : new ArrayList<>(GoreSystems.suffering().corpses())) {
+				ModelParts.Posed posed = ModelParts.pose(c.entity);
+				if (posed != null && c.entity.getType() == EntityTypes.SHEEP) {
+					GoreSystems.dismemberment().butchery().split(GoreSystems.blood(), mc.level, c, ModelParts.torso(posed.model()), new Vec3(0, -1, 0));
+				}
+			}
+		}).pause(100);
+		s.say("Dark red mutton under a rim of hard white fat; the spine and ribs sawn through");
+		s.pause(60).say("Each joint split down the spine: two racks, two loins, two shoulders");
+		s.client(Demos::cutAll).pause(80);
+		s.say("And on down to chops");
+		s.client(Demos::cutAll).pause(40);
+		s.client(Demos::cutAll).pause(120);
+	}
+
+	/** 4.0: a sheep's head and a lamb's split down the middle, the skull, brain and tongue on the cut faces. */
+	private static void headSplit(Script s, Stage st) {
+		s.summon(st, "sheep", "fgd_split_ewe", -0.8, 0, 3.5, 90.0F, "Sheared:1b");
+		s.summon(st, "sheep", "fgd_split_lamb", 0.8, 0, 3.5, 90.0F, "Sheared:1b,Age:-2000000000");
+		s.pause(20).hold("minecraft:iron_axe").say("A sheep and a lamb: their heads off with a cleaver");
+		s.client(mc -> {
+			for (var e : mc.level.entitiesForRendering()) {
+				if (e instanceof LivingEntity living && e.getType() == EntityTypes.SHEEP && living.isAlive() && e.distanceTo(mc.player) < 8.0F) {
+					GoreSystems.dismemberment().severPart(GoreSystems.blood(), mc.level, living, BodyPart.HEAD, living::position, living.yBodyRot, 0.0F, null);
+				}
+			}
+		}).pause(5);
+		s.hit("fgd_split_ewe", 100.0F).hit("fgd_split_lamb", 100.0F).pause(80);
+		s.say("Each head split down the middle, as a butcher splits one for the brain and the tongue");
+		s.client(mc -> {
+			for (GorePart p : new ArrayList<>(GoreSystems.dismemberment().parts().parts())) {
+				if (!p.shattered && p.section != null && p.section.half() == 0) {
+					Vec3 mid = new Vec3(p.x, p.y, p.z);
+					Vec3 eye = mid.add(0.0, 1.2, -0.3);
+					GoreSync.act(GoreAction.of(GoreAction.CUT, -1, p.key, eye, mid.subtract(eye).normalize(), 0, 0.0F));
+				}
+			}
+		}).pause(60);
+		s.say("The halves fall open: the skull and jaw cut to their marrow, the brain grey outside and white within");
+		s.pause(100).say("The tongue, the larynx and the throat run back along the floor of the head; the lamb's is smaller");
+		s.pause(140);
+	}
+
+	/** 4.0: pallor. From the game test {@code pallor}. */
+	private static void pallor(Script s, Stage st) {
+		s.summon(st, "pig", "fgd_pale", -1.2, 0, 3.0, 90.0F, "");
+		s.summon(st, "pig", "fgd_ruddy", 1.2, 0, 3.0, 90.0F, "");
+		s.pause(20).hold("minecraft:iron_sword").say("Two pigs, both pink with the blood in their skin");
+		s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.PIG, -1.2, 0, 3.0), BodyPart.HEAD));
+		s.hit("fgd_pale", 4.0F).pause(30);
+		s.cmd("damage @e[tag=fgd_pale,limit=1] 100 minecraft:generic");
+		s.hold("minecraft:air").say("One is stuck and bleeds out: as the blood leaves it, the flush goes out of its skin").pause(200);
+		s.say("Bled out, it lies a washed-out, pale pink beside the one that never bled").pause(160);
+	}
+
+	/** 4.0: a blast on bodies already dead. From the game test {@code deadBlast}. */
+	private static void deadBlast(Script s, Stage st) {
+		s.summon(st, "cow", "fgd_db_near", -1.0, 0, 6.0, 90.0F, "");
+		s.summon(st, "cow", "fgd_db_far", 3.0, 0, 6.0, 90.0F, "");
+		s.pause(20).say("Two cows, killed where they stand");
+		s.cmd("damage @e[tag=fgd_db_near,limit=1] 30 minecraft:generic").cmd("damage @e[tag=fgd_db_far,limit=1] 30 minecraft:generic").pause(120);
+		s.say("A block of TNT goes off beside the bodies");
+		s.cmd("summon minecraft:tnt " + st.pos(-2.0, 0, 6.0) + " {fuse:40}").pause(50);
+		s.say("The wave reaches the dead as it does the living: the body beside it comes apart, the one further off is thrown limp").pause(160);
+	}
+
+	/** 4.0: TNT under water. From the game test {@code underwaterBlast}. */
+	private static void underwater(Script s, Stage st) {
+		s.cmd("fill " + st.block(-3, -4, 3) + " " + st.block(9, -1, 8) + " minecraft:water");
+		s.summon(st, "pig", "fgd_uw_near", -1.0, -4.0, 5.5, 90.0F, "");
+		s.summon(st, "pig", "fgd_uw_far", 8.5, -4.0, 5.5, 90.0F, "");
+		s.pause(30).say("Two pigs at the bottom of a deep pool, and a block of TNT beside one of them");
+		s.cmd("summon minecraft:tnt " + st.pos(0.5, -4.0, 5.5) + " {fuse:40}").pause(45);
+		s.say("No flame and no scorch: the gas swells into a bubble, the water is crushed back in and it rebounds, rising").pause(40);
+		s.say("It bursts out of the surface in a plume of spray, which rains back down").pause(80);
+		s.say("The pig beside it was inside the bubble: torn apart, its blood clouding out in the water").pause(100);
+		s.say("The one further along took the shock through the water: blood from its mouth and nose, from the lungs").pause(120);
+	}
+
+	/** 4.0: pieces in water. From the game test {@code piecesInWater}. */
+	private static void piecesInWater(Script s, Stage st) {
+		s.cmd("fill " + st.block(-2, -4, 3) + " " + st.block(2, -1, 7) + " minecraft:water");
+		s.summon(st, "sheep", "fgd_wet_sheep", 0, -4.0, 5.0, 90.0F, "");
+		s.pause(30).say("A sheep at the bottom of a deep pool, blown apart");
+		s.client(mc -> {
+			LivingEntity sheep = st.find(mc.level, EntityTypes.SHEEP, 0, -4.0, 5.0);
+			if (sheep != null) {
+				GoreSystems.dismemberment().vaporize(GoreSystems.blood(), mc.level, sheep, sheep.position().add(0.3, -0.2, 0.2));
+			}
+		});
+		s.pause(60).say("Its blood clouds in the water. The lungs, full of air, and the fat come up and float").pause(160);
+		s.say("Bone sinks to the bottom; meat and organs follow it down more slowly").pause(160);
+	}
+
+	/** 4.0: bodies lying together, side by side, smearing each other. From the game test {@code lying}. */
+	private static void lying(Script s, Stage st) {
+		double[][] at = {{-0.4, 3.0}, {0.4, 3.1}, {-0.5, 3.8}, {0.5, 3.9}, {0.0, 3.45}};
+		for (int i = 0; i < at.length; i++) {
+			s.summon(st, i == 4 ? "sheep" : "pig", "fgd_lie" + i, at[i][0], 0, at[i][1], i * 23 % 90, "");
+		}
+
+		// Living, they would shove each other apart before they died: vanilla pushes the living, not the dead.
+		s.cmd("team add fgd_lie").cmd("team modify fgd_lie collisionRule never").cmd("team join fgd_lie @e[tag=" + Script.TAG + "]");
+		s.pause(20).hold("minecraft:iron_sword").say("Four pigs and a sheep packed tight, as at a trough");
+		s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.PIG, at[0][0], 0, at[0][1]), BodyPart.HEAD));
+		s.hit("fgd_lie0", 4.0F).pause(40);
+		for (int i = 0; i < at.length; i++) {
+			s.cmd("damage @e[tag=fgd_lie" + i + ",limit=1] 12 minecraft:generic");
+		}
+
+		s.hold("minecraft:air").say("They go down together, and come to rest side by side, against each other, not through each other").pause(160);
+		s.say("The blood of the stuck one comes off on the flanks of the bodies against it").pause(120);
+		s.say("With Ragdoll Physics on, they set with their legs locked straight out from the trunk").pause(120);
+		s.cmd("team remove fgd_lie");
+	}
+
+	/** 4.0: blood on the animals' coats, and blood in water. From the game test {@code bloodyCoats}. */
+	private static void coats(Script s, Stage st) {
+		s.summon(st, "pig", "fgd_coat_pig", -0.6, 0, 3.0, 90.0F, "");
+		s.summon(st, "sheep", "fgd_coat_sheep", 0.6, 0, 3.0, 90.0F, "");
+		s.summon(st, "cow", "fgd_coat_cow", 2.1, 0, 3.8, 90.0F, "");
+		s.pause(20).hold("minecraft:iron_sword").say("A pig stuck beside a sheep and a cow");
+		s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.PIG, -0.6, 0, 3.0), BodyPart.HEAD));
+		s.hit("fgd_coat_pig", 4.0F).pause(40);
+		s.say("Its blood spatters the coats of the sheep and the cow").pause(60);
+		s.cmd("damage @e[tag=fgd_coat_pig,limit=1] 100 minecraft:generic");
+		s.hold("minecraft:air").say("It bleeds out where it stands, and the pool runs under the sheep").pause(160);
+		s.say("Blood climbs the wool of the sheep's legs, higher than it reaches on the pig's hide").pause(200);
+		s.cmd("fill " + st.block(-2, -1, 6) + " " + st.block(2, -1, 8) + " minecraft:water");
+		s.summon(st, "pig", "fgd_coat_wet", 0, -0.6, 7.0, 90.0F, "");
+		s.pause(20).hold("minecraft:iron_sword").say("A pig stuck standing in a trough of water");
+		s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.PIG, 0, -0.6, 7.0), BodyPart.HEAD));
+		s.hit("fgd_coat_wet", 4.0F).pause(20);
+		s.cmd("damage @e[tag=fgd_coat_wet,limit=1] 100 minecraft:generic");
+		s.hold("minecraft:air").say("Its blood clouds out in the water, sinks and thins away").pause(300);
+	}
+
+	/**
+	 * 4.0: a body sinks in water, and floats once it bloats. From the game test {@code bodiesInWater}. Ten days are
+	 * skipped (/time add, so this world's day count moves on); the float needs the Extreme gore level and Bodies Rot.
+	 */
+	private static void water(Script s, Stage st) {
+		s.cmd("fill " + st.block(-2, -3, 3) + " " + st.block(2, -1, 7) + " minecraft:water");
+		s.summon(st, "pig", "fgd_water_pig", 0, -1.2, 5.0, 90.0F, "");
+		s.pause(20).hold("minecraft:iron_sword").say("A pig in a deep pool");
+		s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.PIG, 0, -1.2, 5.0), null));
+		s.hit("fgd_water_pig", 4.0F).pause(20);
+		s.cmd("damage @e[tag=fgd_water_pig,limit=1] 100 minecraft:generic");
+		s.hold("minecraft:air").say("Dead, it sinks slowly to the bottom, its blood clouding round it").pause(300);
+		s.say("Ten days later").cmd("time add 240000").pause(120);
+		s.say("Bloated with the gas of its rot, it comes up and floats low in the water (Extreme, with Bodies Rot on)").pause(300);
+	}
+
+	/** 4.0: sticking, blood running down the skin, and a fresh bruise. From the game test {@code stuckPig}. */
+	private static void stuckPig(Script s, Stage st) {
+		s.summon(st, "pig", "fgd_stuck", 0, 0, 2.5, 160.0F, "");
+		s.pause(20).hold("minecraft:iron_sword").say("A pig stuck: a blade to the head goes into the throat, low in the neck, just ahead of the breastbone");
+		s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.PIG, 0, 0, 2.5), BodyPart.HEAD));
+		s.hit("fgd_stuck", 4.0F).pause(60);
+		s.say("The blood pours from it down the chest and the fronts of both forelegs").pause(100);
+		s.cmd("damage @e[tag=fgd_stuck,limit=1] 100 minecraft:generic");
+		s.say("It bleeds out and goes down, and the blood runs on across the side it lies on").pause(180);
+		s.summon(st, "pig", "fgd_bruised", 1.8, 0, 3.0, 90.0F, "");
+		s.pause(20).hold("minecraft:air").say("A punch: a bruise, a red flush under the unbroken skin");
+		s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.PIG, 1.8, 0, 3.0), null));
+		s.hit("fgd_bruised", 1.0F).pause(120);
+	}
+
+	/** Every loose piece not cut yet is cut once. */
+	private static void cutAll(Minecraft mc) {
+		for (GorePart p : new ArrayList<>(GoreSystems.dismemberment().parts().parts())) {
+			if (!p.shattered) {
+				GoreSystems.dismemberment().butchery().cut(GoreSystems.blood(), mc.level, p, mc.player.getViewVector(1.0F));
+			}
+		}
+	}
+
+	/** 3.2: people burning, on husks (they do not burn in the sun, so only the fire put to them burns them). */
+	private static void melt(Script s, Stage st) {
+		s.summon(st, "husk", "fgd_melt_left", -1.2, 0, 3.5, 180.0F, "");
+		s.summon(st, "husk", "fgd_melt_right", 1.2, 0, 3.5, 160.0F, "");
+		s.pause(20).say("Two husks: shaped like players, they burn just as a player does");
+		s.cmd("execute as @e[tag=fgd_melt_left] run data merge entity @s {Fire:2000s}");
+		s.cmd("execute as @e[tag=fgd_melt_right] run data merge entity @s {Fire:2000s}").pause(60);
+		s.say("On fire: the hair and clothes singe off, the skin reddens and blisters").pause(100);
+		s.say("The deeper the fire takes their health, the deeper the burns: the skin chars and splits");
+		s.cmd("damage @e[tag=fgd_melt_left,limit=1] 9 minecraft:on_fire");
+		s.cmd("damage @e[tag=fgd_melt_right,limit=1] 9 minecraft:on_fire").pause(120);
+		s.say("Dead, the body burns on its own fat: the skin goes, the yellow fat melts and drips").pause(260);
+		s.say("Then the muscle cooks and shrinks onto the bone; the ribs and the organs show, the jaw drops").pause(300);
+		s.say("At the end a charred skeleton, going grey, then white").pause(240);
+		s.hold("minecraft:stone_shovel").say("And the bones break up under blows, until only ash is left");
+		for (int i = 0; i < 9; i++) {
+			s.client(mc -> beatPyre(mc, EntityTypes.HUSK)).pause(8);
+		}
+
+		s.pause(60);
+	}
+
 	/**
 	 * Three bodies of three weights burnt where they fell: a chicken, a sheep and a cow, lit with a flint and steel. The
 	 * cow is put out with a splash of water half burnt; when the others are bones, its char is knocked off and all three
@@ -659,7 +1135,7 @@ public final class Demos {
 		s.cmd("fill " + st.block(3, 0, 3) + " " + st.block(5, 0, 5) + " minecraft:water replace air").pause(5);
 		s.cmd("fill " + st.block(2, 0, 2) + " " + st.block(6, 1, 6) + " minecraft:air replace water").pause(10);
 		s.cmd("fill " + st.block(2, 0, 2) + " " + st.block(6, 1, 6) + " minecraft:air replace water").pause(400);
-		s.say("The sheep has burnt to the bone: black first, then grey, then white").pause(140);
+		s.say("The sheep has burnt to the bone on its own fat: scorched brown and charred black, mottled, not white").pause(140);
 		s.hold("minecraft:stone_shovel").say("Hit the charred cow: the char comes off the bone in black crumbs");
 		for (int i = 0; i < 6; i++) {
 			s.client(mc -> beatPyre(mc, EntityTypes.COW)).pause(10);
@@ -681,6 +1157,41 @@ public final class Demos {
 		s.say("Cleared away. Bones and char never drag at your legs like a carcass does").pause(100);
 	}
 
+	/** 3.3: how far bones burn is the fire under them, not the flesh gone: charred on their own fat, white only under a long fire. */
+	private static void charred(Script s, Stage st) {
+		s.summon(st, "sheep", "fgd_bones_own", -3.0, 0, 4.5, 90.0F, "Sheared:1b");
+		s.summon(st, "sheep", "fgd_bones_campfire", 0.0, 0, 4.5, 90.0F, "Sheared:1b");
+		s.summon(st, "sheep", "fgd_bones_lava", 3.0, 0, 4.5, 90.0F, "Sheared:1b");
+		s.pause(20).hold("minecraft:iron_sword").say("Three shorn sheep, killed where they stand");
+		s.hit("fgd_bones_own", 100.0F).hit("fgd_bones_campfire", 100.0F).hit("fgd_bones_lava", 100.0F).pause(60);
+		s.say("One on the bare ground, one on a campfire, one in lava");
+		s.cmd("setblock " + st.block(0.0, -1, 4.5) + " minecraft:campfire");
+		s.cmd("setblock " + st.block(3.0, -1, 4.5) + " minecraft:lava").pause(20);
+		s.hold("minecraft:flint_and_steel").say("Fire put to each");
+		s.client(mc -> {
+			for (Corpse corpse : GoreSystems.suffering().corpses()) {
+				GoreSync.act(GoreAction.of(GoreAction.IGNITE, corpse.entity.getId(), 0L, mc.player.getEyePosition(), mc.player.getViewVector(1.0F), 0, 0.0F));
+			}
+		}).pause(300);
+		s.say("In lava the flesh is gone fast, and the heat goes on into the bare bones: grey, then chalk white").pause(400);
+		s.say("On its own fat the left one burns out on a charred skeleton, brown and black and mottled: what an ordinary fire leaves").pause(400);
+		s.say("The campfire goes on under the middle one's bare bones: grey patches first, the thin bones ahead of the thick").pause(700);
+		s.say("White, calcined bone means long, hot burning: lava, a pyre, a fire kept going under the bones").pause(200);
+		Vec3 own = st.at(-3.0, 0, 4.5);
+		Vec3 lava = st.at(3.0, 0, 4.5);
+		s.hold("minecraft:stone_shovel").say("Broken up, charred bone crumbles to black char; calcined bone to pale dust");
+		for (int i = 0; i < 12; i++) {
+			s.client(mc -> beatAt(mc, own)).pause(8);
+		}
+
+		s.cmd("setblock " + st.block(3.0, -1, 4.5) + " minecraft:stone").pause(10);
+		for (int i = 0; i < 12; i++) {
+			s.client(mc -> beatAt(mc, lava)).pause(8);
+		}
+
+		s.cmd("setblock " + st.block(0.0, -1, 4.5) + " minecraft:stone").pause(60);
+	}
+
 	/** A blunt blow, through GoreSync, on the burnt body of {@code type} nearest the player. */
 	private static void beatPyre(Minecraft mc, EntityType<?> type) {
 		for (Corpse corpse : GoreSystems.suffering().corpses()) {
@@ -696,6 +1207,22 @@ public final class Demos {
 		}
 	}
 
+	/** A blunt blow, through GoreSync, on the burnt body lying within a block and a half of {@code near}. */
+	private static void beatAt(Minecraft mc, Vec3 near) {
+		for (Corpse corpse : GoreSystems.suffering().corpses()) {
+			if (GoreSystems.dismemberment().vaporized(corpse.entity.getId()) || CorpseStrike.centre(corpse).distanceToSqr(near.x, CorpseStrike.centre(corpse).y, near.z) > 2.25) {
+				continue;
+			}
+
+			Vec3 centre = CorpseStrike.centre(corpse);
+			Vec3 eye = centre.add(mc.player.position().subtract(centre).multiply(1.0, 0.0, 1.0).normalize().scale(1.2)).add(0.0, 1.0, 0.0);
+			lookAt(mc, centre);
+			GoreSync.act(GoreAction.of(GoreAction.STRIKE, corpse.entity.getId(), 0L, eye, centre.subtract(eye).normalize(), Weapon.BLUNT.ordinal(), 5.0F));
+			return;
+		}
+	}
+
+	/** Set alight where they stand: they char as they burn, writhe, and lie charred and smoking. */
 	private static void burnt(Script s, Stage st) {
 		s.summon(st, "chicken", "fgd_chicken", -1, 0, 3, 90.0F, "");
 		s.summon(st, "pig", "fgd_pig", 1.5, 0, 3.5, 90.0F, "");
@@ -733,53 +1260,6 @@ public final class Demos {
 		}
 
 		s.say("When it goes, it pops: head, legs and scraps to kick around").pause(500);
-	}
-
-	/**
-	 * The tank block. A pinhole leak 6 blocks ahead, its crack towards the player: it hisses and frosts, and standing by it
-	 * costs hearing. A cracked tank 20 ahead and 15 to the right tears loose and flies off away from the player. Then a full tank 30 ahead,
-	 * lit with redstone: cows at 3, 7 and 12 m from it (shredded, killed, hurt), a gate 18 m to its side and a row of glass
-	 * 20 m beyond it; the player, 30 m off, is only deafened.
-	 */
-	private static void tank(Script s, Stage st) {
-		Vec3 back = st.at(0, 0, -1).subtract(st.at(0, 0, 0));
-		// The crack faces the player, so the jet comes their way and the thrust pushes the tank away from them.
-		String towards = String.format(java.util.Locale.ROOT, "JetX:%.0ff,JetY:0f,JetZ:%.0ff", back.x, back.z);
-		s.say("The Cobble Tank: TNT with cobblestone on four sides. 600 litres of air at 10,000 psi");
-		s.cmd("setblock " + st.block(-4, 0, 6) + " fluidgore:cobble_tank[leak=pinhole,scars=3]{Damage:0.6f,Crack:0.05f," + towards + "}");
-		s.pause(20).say("A pinhole: it hisses for minutes, frost grows at the crack. Standing this close, your hearing goes");
-		s.pause(140);
-		s.cmd("setblock " + st.block(15, 0, 20) + " fluidgore:cobble_tank[leak=cracked,scars=3]{Damage:0.8f,Crack:0.6f," + towards + "}");
-		s.say("A cracked fitting: 5 kN of thrust on a 400 kg tank. It tears loose and flies");
-		s.pause(120);
-		s.cmd("setblock " + st.block(0, 0, 30) + " fluidgore:cobble_tank");
-		s.summon(st, "cow", "fgd_tank_cow", 0.5, 0, 33.5, 90.0F, "");
-		s.summon(st, "cow", "fgd_tank_cow2", 7.5, 0, 30.5, 0.0F, "");
-		s.summon(st, "cow", "fgd_tank_cow3", -12.0, 0, 30.5, 45.0F, "");
-		s.cmd("setblock " + st.block(-18, 0, 30) + " minecraft:oak_fence_gate");
-		s.cmd("fill " + st.block(-6, 0, 50) + " " + st.block(6, 2, 50) + " minecraft:glass_pane");
-		s.pause(40).say("A full one, 30 blocks off. Cows at 3, 7 and 12 m from it; a gate at 18 m, glass at 20 m beyond. Lit...");
-		s.cmd("setblock " + st.block(0, 1, 30) + " minecraft:redstone_block");
-		s.pause(100).say("Gone at 3 m. Dead at 7. Hurt at 12. The gate blown open, the glass out. Read the chat for yours").pause(200);
-		s.say("You were 30 m away: 11 kPa, enough to ring your ears").pause(200);
-	}
-
-	/**
-	 * A 2x2 of TNT 9 to 10 blocks ahead is the Roadster's pressure vessel, lit with redstone. Animals stand in rings
-	 * round it (2, 3, 4.5 and 7 m); the player, 9 m off and out of the TNT's reach, still gets about 45 kPa: burst eardrums.
-	 */
-	private static void roadster(Script s, Stage st) {
-		s.say("A 2x2 of TNT is the Roadster's tank: 200 litres of gas at 10,000 psi, about 7 kg of TNT");
-		s.cmd("fill " + st.block(0, 0, 9) + " " + st.block(1, 0, 10) + " minecraft:tnt");
-		s.summon(st, "cow", "fgd_vessel_cow", 0.5, 0, 11.5, 90.0F, "");
-		s.summon(st, "sheep", "fgd_vessel_sheep", 3.5, 0, 9.5, 0.0F, "");
-		s.summon(st, "pig", "fgd_vessel_pig", -3.5, 0, 12.0, 45.0F, "");
-		s.summon(st, "cow", "fgd_vessel_far_cow", 0.5, 0, 16.5, 90.0F, "");
-		s.pause(40).say("2 m: a cow. 3 m: a sheep. 4.5 m: a pig. 7 m: another cow. You: 9 m");
-		s.pause(60).say("Lit. Four seconds...");
-		s.cmd("fill " + st.block(0, 1, 9) + " " + st.block(1, 1, 10) + " minecraft:redstone_block");
-		s.pause(90).say("Gone at 2 m. Torn apart at 3. Lungs burst at 4.5. Eardrums and fragments at 7. Read the chat for yours").pause(200);
-		s.say("Your hearing comes back slowly; the ringing goes last").pause(300);
 	}
 
 	/** A raised floor with pigs and TNT on it; after the blast what is left of the floor is removed. */

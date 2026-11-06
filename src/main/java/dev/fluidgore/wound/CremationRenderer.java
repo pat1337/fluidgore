@@ -16,8 +16,9 @@ import org.joml.Vector3f;
  * Paints a burning body, drawn right after its model in the same part transforms, with the wound tiles (see
  * {@code WoundRenderer}). Every face of every cube gets a patch, centred by the body's dice, that goes through the fire
  * at its own pace: the blackened skin splits over cracks that glow while it burns, the roasted meat shows in them and
- * goes black, then bone comes through and spreads until the face is bone, charred black first and calcined white at
- * the end. Once the flesh is gone, the trunk shows its ribs.
+ * goes black, then bone comes through and spreads until the face is bone, each patch of it burnt as far as its own
+ * exposure takes it ({@link BurntBone}): brown and black after an ordinary fire, grey and white only after a long one
+ * under it. Once the flesh is gone, the trunk shows its ribs.
  */
 public final class CremationRenderer {
 	/** One layer of a patch: its row in wounds.png, when it opens (flesh gone after the patch starts) and how it grows. */
@@ -36,7 +37,7 @@ public final class CremationRenderer {
 	/** Outward lift per layer, in model pixels: under the wounds, which start at 0.02. */
 	private static final float LIFT = 0.0035F;
 	private static final float TILE_U = 1.0F / 8.0F;
-	private static final float TILE_V = 1.0F / 18.0F;
+	private static final float TILE_V = WoundRenderer.TILE_V;
 
 	private static final Vector3f POS = new Vector3f();
 	private static final Vector3f NORMAL = new Vector3f();
@@ -105,7 +106,6 @@ public final class CremationRenderer {
 		float bare = charred.bare();
 		int crust = 0xFF120C08;
 		int meat = 0xFF000000 | lerp(0x6A2A16, 0x2C1A12, Cremation.ramp(charred.burn(), 0.3F, 0.8F));
-		int bone = 0xFF000000 | bone(charred.burn());
 		float glow = charred.glow();
 		int embers = 0xFF000000 | lerp(0x3A1408, 0xFF6A1C, glow);
 		for (int face = 0; face < 6; face++) {
@@ -138,6 +138,8 @@ public final class CremationRenderer {
 			}
 
 			patch(buffer, pose, part, a, b, c, sign, depth + sign * LIFT * 3, MEAT, q, radius, pu, pv, variant, meat, light, overlay);
+			// One face of bone lies open to the heat and the next in the shelter of the body: the same on every screen.
+			int bone = 0xFF000000 | BurntBone.color(BurntBone.local(charred.bone(), rand(seed, patch, 6)));
 			patch(buffer, pose, part, a, b, c, sign, depth + sign * LIFT * 4, BONE, q, radius, pu, pv, (variant + 3) & 7, bone, light, overlay);
 			if (torso && a != spine && bare > 0.75F) {
 				ribs(buffer, pose, part, a, b, c, depth + sign * LIFT * 5, spine, variant, bone, light, overlay);
@@ -202,15 +204,6 @@ public final class CremationRenderer {
 				vertex(buffer, m, a, b, c, d, MIN[b], s1, color, tu, tv + TILE_V, light, overlay);
 			}
 		}
-	}
-
-	/** Bone in a fire: charred black, then grey, then white once it is calcined. */
-	static int bone(float burn) {
-		if (burn < 0.6F) {
-			return 0x3A2A20;
-		}
-
-		return burn < 0.85F ? lerp(0x3A2A20, 0x6E675E, (burn - 0.6F) / 0.25F) : lerp(0x6E675E, 0xDCD6CA, (burn - 0.85F) / 0.15F);
 	}
 
 	/** A number in [0, 1) from the body's seed, the patch and which draw it is: the same on every screen and frame. */

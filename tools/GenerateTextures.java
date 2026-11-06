@@ -51,14 +51,12 @@ public final class GenerateTextures {
 		ImageIO.write(flesh(), "png", new File(misc, "flesh.png"));
 		ImageIO.write(hurt(), "png", new File(misc, "hurt.png"));
 		ImageIO.write(feathers(), "png", new File(misc, "feather.png"));
+		ImageIO.write(anatomy(), "png", new File(misc, "anatomy.png"));
+		ImageIO.write(waterCloud(), "png", new File(misc, "water_cloud.png"));
 
 		File block = new File(root, "textures/block");
 		if (!block.isDirectory() && !block.mkdirs()) {
 			throw new IOException("Cannot create " + block);
-		}
-
-		for (int stage = 1; stage <= 3; stage++) {
-			ImageIO.write(scars(stage), "png", new File(block, "cobble_tank_scars_" + stage + ".png"));
 		}
 
 		File item = new File(root, "textures/item");
@@ -72,6 +70,19 @@ public final class GenerateTextures {
 		}
 
 		ImageIO.write(icon(), "png", new File(root, "icon.png"));
+
+		// The Cobble Tank add-on's textures, in its own assets (by default beside Fluid Gore's source set, in src/tank).
+		File tankRoot = new File(args.length > 1 ? args[1] : new File(root, "../../../../tank/resources/assets/cobbletank").getPath());
+		File tankBlock = new File(tankRoot, "textures/block");
+		if (!tankBlock.isDirectory() && !tankBlock.mkdirs()) {
+			throw new IOException("Cannot create " + tankBlock);
+		}
+
+		for (int stage = 1; stage <= 3; stage++) {
+			ImageIO.write(scars(stage), "png", new File(tankBlock, "cobble_tank_scars_" + stage + ".png"));
+		}
+
+		ImageIO.write(tankIcon(), "png", new File(tankRoot, "icon.png"));
 		System.out.println("Wrote textures to " + root.getAbsolutePath());
 	}
 
@@ -518,10 +529,11 @@ public final class GenerateTextures {
 
 
 	/**
-	 * wounds.png: an 8x18 grid of 16px pixel-art tiles, greyscale with hard alpha; the game tints each by the body's
+	 * wounds.png: an 8x21 grid of 16px pixel-art tiles, greyscale with hard alpha; the game tints each by the body's
 	 * flesh and blood. Eight variants per row.
 	 * <ul>
-	 * <li>Rows 0-3, round wounds (lacerations from fists, clubs, teeth, points): bruise, gash, open meat, bone.</li>
+	 * <li>Rows 0-3, round wounds (lacerations from fists, clubs, teeth, points): bruise (a soft, dithered flush), gash,
+	 *     open meat, bone.</li>
 	 * <li>Rows 4-8, slashes (incised and chop wounds), long and narrow along the cut: bruised margin, the yellow rim of
 	 *     fat under the skin, the dark split, muscle in the depth, a line of bone. Column {@code c} runs at
 	 *     {@code (c % 4) * 45} degrees, so the game can lay a slash along the swing.</li>
@@ -533,10 +545,13 @@ public final class GenerateTextures {
 	 * <li>Rows 14-17, the cut face of a piece of meat, as on a butcher's block: the whole face of muscle with its grain,
 	 *     the marbling (veins and flecks of fat), a rim of fat along one edge (column % 4 says which), and wet smears of
 	 *     blood (also the blood soaked into a sheep's wool).</li>
+	 * <li>Row 18, blood running down the skin from a wound (see {@link #runTile}).</li>
+	 * <li>Row 19, blood soaked into a coat, in eight nested levels (see {@link #coatSoakTiles}).</li>
+	 * <li>Row 20, blood wicked up a coat from below to a ragged line (see {@link #coatTideTile}).</li>
 	 * </ul>
 	 */
 	private static BufferedImage wounds() {
-		BufferedImage image = new BufferedImage(128, 288, BufferedImage.TYPE_INT_ARGB);
+		BufferedImage image = new BufferedImage(128, 336, BufferedImage.TYPE_INT_ARGB);
 		for (int v = 0; v < 8; v++) {
 			for (int layer = 0; layer < 4; layer++) {
 				woundTile(image, layer, v, new Random(11000 + layer * 1000 + v));
@@ -555,9 +570,161 @@ public final class GenerateTextures {
 			marbleTile(image, v, new Random(37000 + v));
 			rimTile(image, v, new Random(38000 + v));
 			stainTile(image, v, new Random(39000 + v));
+			runTile(image, v, new Random(40000 + v));
+			coatTideTile(image, v, new Random(42000 + v));
 		}
 
+		coatSoakTiles(image);
 		return image;
+	}
+
+	/**
+	 * Row 19, blood soaked into a coat (hide, wool or feathers): eight nested levels of the same mottled stain, column
+	 * {@code k} covering about {@code (k + 1) / 8} of the tile. Every level holds all of the one before it, so a coat
+	 * soaking up more blood only ever spreads its stain. One shared field, so the levels nest.
+	 */
+	private static void coatSoakTiles(BufferedImage image) {
+		Random random = new Random(41000);
+		double[] field = new double[256];
+		// Blots of different sizes: where blood landed and spread through the hair.
+		double[][] blots = new double[14][3];
+		for (double[] blot : blots) {
+			blot[0] = random.nextDouble() * 16.0;
+			blot[1] = random.nextDouble() * 16.0;
+			blot[2] = 1.5 + random.nextDouble() * 4.0;
+		}
+
+		for (int y = 0; y < 16; y++) {
+			for (int x = 0; x < 16; x++) {
+				double best = 1.0;
+				for (double[] blot : blots) {
+					// Wrapped, so a stain cut anywhere from the tile has no hard seam.
+					double dx = Math.min(Math.abs(x + 0.5 - blot[0]), 16.0 - Math.abs(x + 0.5 - blot[0]));
+					double dy = Math.min(Math.abs(y + 0.5 - blot[1]), 16.0 - Math.abs(y + 0.5 - blot[1]));
+					best = Math.min(best, Math.sqrt(dx * dx + dy * dy) / (blot[2] * 2.2));
+				}
+
+				field[y * 16 + x] = Math.min(0.999, best * 0.8 + random.nextDouble() * 0.2);
+			}
+		}
+
+		// Rank the pixels, so level k holds exactly the (k + 1) / 8 most soaked of them.
+		Integer[] order = new Integer[256];
+		for (int i = 0; i < 256; i++) {
+			order[i] = i;
+		}
+
+		java.util.Arrays.sort(order, (a, b) -> Double.compare(field[a], field[b]));
+		int[] rank = new int[256];
+		for (int i = 0; i < 256; i++) {
+			rank[order[i]] = i;
+		}
+
+		for (int k = 0; k < 8; k++) {
+			int ox = k * 16;
+			int oy = 19 * 16;
+			int covered = (k + 1) * 32;
+			for (int i = 0; i < 256; i++) {
+				// Darkest where it is thickest: the first pixels to take blood hold the most.
+				double light = 0.62 + 0.38 * rank[i] / 255.0 - (random.nextDouble() < 0.15 ? 0.08 : 0.0);
+				image.setRGB(ox + i % 16, oy + i / 16, rank[i] < covered ? argb(1.0, light) : 0);
+			}
+		}
+	}
+
+	/**
+	 * Row 20, blood wicked up a coat from below (legs that stood in a pool, the side a body lay on): solid from the bottom
+	 * of the tile to a ragged line in its top third, with fingers of blood climbing past it and spots above. The game
+	 * lays the line at the height the blood has climbed to.
+	 */
+	private static void coatTideTile(BufferedImage image, int variant, Random random) {
+		int ox = variant * 16;
+		int oy = 20 * 16;
+		double[] edge = new double[16];
+		double level = 4.0 + random.nextDouble();
+		for (int x = 0; x < 16; x++) {
+			level = Math.max(2.5, Math.min(6.0, level + (random.nextDouble() - 0.5) * 1.6));
+			edge[x] = level;
+		}
+
+		// A few fingers where the fibres drew it higher.
+		for (int i = 0; i < 2 + random.nextInt(2); i++) {
+			int x = random.nextInt(16);
+			double up = 1.5 + random.nextDouble() * 2.0;
+			edge[x] = Math.max(0.0, edge[x] - up);
+			if (x + 1 < 16) {
+				edge[x + 1] = Math.max(0.0, edge[x + 1] - up * 0.5);
+			}
+		}
+
+		for (int y = 0; y < 16; y++) {
+			for (int x = 0; x < 16; x++) {
+				boolean wet = y >= edge[x] || y >= edge[x] - 2.0 && random.nextDouble() < 0.12;
+				double light = 0.66 + random.nextDouble() * 0.22 - (y > 12 ? 0.1 : 0.0);
+				image.setRGB(ox + x, oy + y, wet ? argb(1.0, light) : 0);
+			}
+		}
+	}
+
+	/** A 4x4 ordered-dither threshold matrix, 0-15. */
+	private static final int[][] BAYER = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
+
+	/**
+	 * Row 18, blood running down skin from a wound: a sheet at the top where it leaves the wound, splitting into
+	 * rivulets that narrow as they run and end in a bead. Columns 0-3 run down the tile, 4-7 across it (the same
+	 * runs turned), so the game can lay one along either axis of a face.
+	 */
+	private static void runTile(BufferedImage image, int variant, Random random) {
+		int ox = variant * 16;
+		int oy = 18 * 16;
+		int[] mask = new int[256];
+		double[] shade = new double[256];
+		// Two to four rivulets: where across the tile, how far down, how wide at the top.
+		int count = 2 + random.nextInt(3);
+		for (int k = 0; k < count; k++) {
+			double centre = 2.5 + random.nextDouble() * 11.0;
+			double reach = 7.0 + random.nextDouble() * 9.0;
+			double width = 1.2 + random.nextDouble() * 2.2;
+			double wander = (random.nextDouble() - 0.5) * 2.0;
+			for (int y = 0; y < 16; y++) {
+				if (y > reach) {
+					break;
+				}
+
+				double t = y / reach;
+				double x0 = centre + wander * t * t;
+				double half = Math.max(0.5, width * (1.0 - 0.6 * t)) + (y >= reach - 1.5 ? 0.6 : 0.0);
+				for (int x = 0; x < 16; x++) {
+					if (Math.abs(x + 0.5 - x0) <= half) {
+						mask[y * 16 + x] = 1;
+						// Wet on the left edge of each rivulet, where the light catches it.
+						shade[y * 16 + x] = x + 0.5 < x0 - half * 0.4 ? 1.0 : 0.78 + random.nextDouble() * 0.12;
+					}
+				}
+			}
+		}
+
+		// The top rows are a sheet: blood leaving the wound before it splits.
+		for (int y = 0; y < 3; y++) {
+			for (int x = 1; x < 15; x++) {
+				if (y < 2 || random.nextDouble() < 0.6) {
+					mask[y * 16 + x] = 1;
+					shade[y * 16 + x] = 0.75 + random.nextDouble() * 0.15;
+				}
+			}
+		}
+
+		for (int y = 0; y < 16; y++) {
+			for (int x = 0; x < 16; x++) {
+				int i = y * 16 + x;
+				int rgb = mask[i] == 0 ? 0 : argb(1.0, shade[i]);
+				if (variant < 4) {
+					image.setRGB(ox + x, oy + y, rgb);
+				} else {
+					image.setRGB(ox + y, oy + x, rgb);
+				}
+			}
+		}
 	}
 
 	private static void woundTile(BufferedImage image, int layer, int variant, Random random) {
@@ -587,9 +754,11 @@ public final class GenerateTextures {
 				boolean inside;
 				switch (layer) {
 					case 0 -> {
-						// Bruise: a mottled blob whose rim breaks up into scattered pixels.
-						inside = r < 0.75 || r < 0.98 && noise < 0.45;
-						light = 0.55 + noise * 0.35 - r * 0.2;
+						// Bruise: blood pooled under unbroken skin. A solid flush, darkest over the blow, thinning out
+						// through an ordered dither, so the edge is soft and has no stray pixels.
+						double fade = 1.0 - (r - 0.72) / 0.26;
+						inside = (r < 0.72 || r < 0.98 && fade > (BAYER[y & 3][x & 3] + 0.5) / 16.0) && dx * dx + dy * dy < 0.78;
+						light = 0.68 + r * 0.3 + (noise - 0.5) * 0.08;
 					}
 					case 1 -> {
 						// Gash: a lens along the cut, dark at the split, ragged raised edges.
@@ -1099,6 +1268,51 @@ public final class GenerateTextures {
 	 * stone to the metal, each with a dark lip. Stage 2 adds more and chips knocked out. Stage 3 adds a gouge across the
 	 * face down to the black weave of the carbon overwrap. Same seed for every stage, so each keeps the last one's marks.
 	 */
+	/**
+	 * The Cobble Tank's mod icon: the tank as it sits in the world, 16 pixels upscaled to 128 so the pixels match a
+	 * block's. A black carbon-fibre body in a two-tone weave, two iron bands, a copper fitting on top and a scratch.
+	 */
+	private static BufferedImage tankIcon() {
+		int[][] px = new int[16][16];
+		for (int y = 3; y < 15; y++) {
+			for (int x = 3; x < 13; x++) {
+				// The weave: alternating 2x2 cells, the left side lit, the right side in shade.
+				boolean weave = ((x / 2) + (y / 2)) % 2 == 0;
+				int base = weave ? 34 : 24;
+				int light = x < 6 ? 12 : x > 10 ? -8 : 0;
+				int v = base + light;
+				px[y][x] = argb(255, v, v, v + 3);
+			}
+		}
+
+		for (int band : new int[] {5, 12}) {
+			for (int x = 3; x < 13; x++) {
+				int v = x < 6 ? 214 : x > 10 ? 150 : 186;
+				px[band][x] = argb(255, v, v, v);
+			}
+		}
+
+		// The copper fitting and its valve stem.
+		for (int y = 1; y < 3; y++) {
+			for (int x = 6; x < 10; x++) {
+				px[y][x] = x < 8 ? argb(255, 226, 124, 84) : argb(255, 176, 88, 58);
+			}
+		}
+
+		px[0][7] = argb(255, 238, 150, 104);
+		px[0][8] = argb(255, 190, 100, 66);
+		// A bright scratch through the fibre.
+		px[8][5] = px[9][6] = px[9][7] = argb(255, 200, 200, 206);
+		BufferedImage image = new BufferedImage(128, 128, BufferedImage.TYPE_INT_ARGB);
+		for (int y = 0; y < 128; y++) {
+			for (int x = 0; x < 128; x++) {
+				image.setRGB(x, y, px[y / 8][x / 8]);
+			}
+		}
+
+		return image;
+	}
+
 	private static BufferedImage scars(int stage) {
 		BufferedImage image = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
 		Random random = new Random(12_000);
@@ -1161,6 +1375,40 @@ public final class GenerateTextures {
 		return a << 24 | r << 16 | g << 8 | b;
 	}
 
+	/**
+	 * Blood clouding out in water (water_cloud.png): a 16x16 pixel-art puff, a few lobes of a soft blob, its alpha in four
+	 * steps from a dense middle out to ragged single pixels at the edge, like vanilla's own smoke and cloud particles.
+	 * White and grey, so the blood's colour tints it; no hard rim, so many of them overlap into one cloud.
+	 */
+	private static BufferedImage waterCloud() {
+		BufferedImage image = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+		Random random = new Random(12_100);
+		double[][] lobes = {{7.5, 7.5, 5.2}, {5.0, 6.0, 3.4}, {10.4, 6.6, 3.2}, {7.0, 10.2, 3.6}, {9.6, 9.8, 3.0}};
+		int[] alphas = {0, 34, 76, 124, 176};
+		for (int y = 0; y < 16; y++) {
+			for (int x = 0; x < 16; x++) {
+				double field = 0.0;
+				for (double[] l : lobes) {
+					double dx = (x + 0.5 - l[0]) / l[2];
+					double dy = (y + 0.5 - l[1]) / l[2];
+					double d = dx * dx + dy * dy;
+					field += d < 1.0 ? (1.0 - d) * (1.0 - d) : 0.0;
+				}
+
+				double v = field * 1.15 + (random.nextDouble() - 0.5) * 0.35;
+				int step = v > 1.45 ? 4 : v > 0.95 ? 3 : v > 0.5 ? 2 : v > 0.16 ? 1 : 0;
+				if (step == 0) {
+					continue;
+				}
+
+				int grey = 200 + random.nextInt(4) * 16;
+				image.setRGB(x, y, argb(alphas[step], grey, grey, grey));
+			}
+		}
+
+		return image;
+	}
+
 	private static BufferedImage feathers() {
 		BufferedImage image = new BufferedImage(64, 32, BufferedImage.TYPE_INT_ARGB);
 		for (int variant = 0; variant < 4; variant++) {
@@ -1220,6 +1468,623 @@ public final class GenerateTextures {
 		}
 
 		return image;
+	}
+
+	/**
+	 * anatomy.png (3.2), 128x128: the inside of a person (and from 3.3 of a sheep, a pig and a cow), burning down layer by layer
+	 * ({@code dev.fluidgore.anatomy}). Eight 16px tiles a row at one texel per model pixel, like a skin, in full colour:
+	 * the game multiplies a cooking tint in. The chest, back and face tiles are laid out for the 8x12 and 8x8 faces they
+	 * cover, from their top left corner. Tile order must match {@code Anatomy.Kind}:
+	 * <ol start="0">
+	 * <li>bone, bone end, skull, teeth, socket, eye, cartilage, vertebra</li>
+	 * <li>muscle, chest, back, face, tongue, fat, dermis, blister</li>
+	 * <li>lung, heart, aorta, liver, stomach, small intestine, colon, kidney</li>
+	 * <li>spleen, bladder, trachea, char, ember, calcined bone, molten fat, brain</li>
+	 * <li>the bones of a hand or foot; cooked muscle, chest, back and face; heat-fixed viscera; suet; lard</li>
+	 * <li>mutton, pork, beef; hoof, horn; rumen; cooked mutton, cooked pork</li>
+	 * <li>cooked beef; gallbladder, reticulum, vein; cut liver, cut lung; gland, testis</li>
+	 * <li>cut heart, cut brain, cut kidney, cut bone</li>
+	 * </ol>
+	 */
+	private static BufferedImage anatomy() {
+		BufferedImage image = new BufferedImage(128, 128, BufferedImage.TYPE_INT_ARGB);
+		Random random = new Random(21000);
+		// Bone: ivory, a grain along its length, pores.
+		paint(image, 0, (x, y) -> {
+			double n = random.nextDouble();
+			int c = n < 0.12 ? 0xD2C5A5 : n > 0.94 ? 0xF1EBDA : 0xE3D9C0;
+			if (x % 5 == 2 && random.nextDouble() < 0.4) {
+				c = 0xCDBF9F;
+			}
+
+			return random.nextDouble() < 0.025 ? 0xB3A482 : c;
+		});
+		// The ends of a long bone: spongy.
+		paint(image, 1, (x, y) -> {
+			double n = random.nextDouble();
+			return n < 0.16 ? 0xB8A67F : n < 0.21 ? 0x9E8C66 : n > 0.92 ? 0xEDE5CF : 0xDCCFB0;
+		});
+		// Skull: smooth ivory with the zigzag sutures, sagittal down the middle and coronal across.
+		paint(image, 2, (x, y) -> {
+			boolean sagittal = Math.abs(x - 8 - ((y / 2) % 2)) == 0;
+			boolean coronal = Math.abs(y - 5 - ((x / 2) % 2)) == 0;
+			double n = random.nextDouble();
+			return sagittal || coronal ? 0xA4957A : n < 0.1 ? 0xD6CAAD : n > 0.95 ? 0xF2ECDC : 0xE6DDC6;
+		});
+		// Teeth, read at two texels a pixel: each tooth two wide with a dark line between, the gum line at the root.
+		paint(image, 3, (x, y) -> {
+			if (y == 0 || y == 15) {
+				return 0xB86860;
+			}
+
+			if (x % 3 == 2) {
+				return 0x7E6F57;
+			}
+
+			return y > 11 ? 0xDCD3B8 : x % 3 == 0 ? 0xF4F0E1 : 0xE6E0CC;
+		});
+		// An empty socket or cavity: dark.
+		paint(image, 4, (x, y) -> {
+			double n = random.nextDouble();
+			return n < 0.3 ? 0x1E0F0D : n < 0.8 ? 0x2B1714 : 0x3D201A;
+		});
+		// An eye, read at four texels a pixel from the middle: white, a few veins, a blue-grey iris and the pupil.
+		paint(image, 5, (x, y) -> {
+			double d = Math.hypot(x - 7.5, y - 7.5);
+			if (d < 1.3) {
+				return 0x111111;
+			}
+
+			if (d < 2.8) {
+				return d < 2.0 ? 0x3E5C8A : 0x2E4566;
+			}
+
+			return random.nextDouble() < 0.05 ? 0xD39A9A : random.nextDouble() < 0.2 ? 0xE2DFD5 : 0xEFEDE6;
+		});
+		// Cartilage: pearly, bluish.
+		paint(image, 6, (x, y) -> {
+			double n = random.nextDouble();
+			return n < 0.2 ? 0xB3C1C5 : n > 0.85 ? 0xDDE7E9 : 0xC8D4D6;
+		});
+		// A vertebra: bone, with the darker disc under each one.
+		paint(image, 7, (x, y) -> {
+			if (y % 4 == 3) {
+				return x % 2 == 0 ? 0xBBA98A : 0xC4B396;
+			}
+
+			double n = random.nextDouble();
+			return n < 0.12 ? 0xCFC1A1 : n > 0.93 ? 0xF0E8D4 : 0xE0D5BA;
+		});
+		// Muscle: red, in bundles of fibres running down its length, with dark seams and the odd streak of white fascia.
+		paint(image, 8, (x, y) -> muscle(random, x, 0.0));
+		// The front of the trunk, for its 8x12 face: the two pectorals with their fibres running up to the shoulders, a
+		// shadow under them, the six blocks of the rectus between its tendons, the obliques at the sides.
+		paint(image, 9, (x, y) -> {
+			if (y < 5) {
+				if (y == 4 && x > 0 && x < 7) {
+					return 0x711A16;
+				}
+
+				boolean cleft = x == 3 || x == 4;
+				int c = muscle(random, x + (x < 4 ? y : -y), 0.08);
+				return cleft ? shade(c, 0.82) : c;
+			}
+
+			if (x == 0 || x == 7) {
+				return shade(muscle(random, x + y, 0.0), 0.86);
+			}
+
+			if (y == 7 || y == 9 || y == 11) {
+				return random.nextDouble() < 0.3 ? 0xA34C40 : 0xB0574A;
+			}
+
+			int c = shade(muscle(random, x, 0.0), 1.06);
+			return x == 3 || x == 4 ? shade(c, 0.8) : c;
+		});
+		// The back, for its 8x12 face: the trapezius fanning in to the spine above, the lats below it, the pale sheet of
+		// fascia over the small of the back, the groove of the spine down the middle.
+		paint(image, 10, (x, y) -> {
+			if (x == 3 || x == 4) {
+				return y > 8 ? 0xBE9A84 : shade(muscle(random, x, 0.0), 0.7);
+			}
+
+			if (y > 8 && x > 1 && x < 6) {
+				return random.nextDouble() < 0.25 ? 0xA98470 : 0xB98E78;
+			}
+
+			if (y < 5) {
+				return shade(muscle(random, x + (x < 4 ? -y : y), 0.05), 1.08);
+			}
+
+			return muscle(random, x + (x < 4 ? y : -y), 0.03);
+		});
+		// The face, for its 8x8 face: the brow muscle over the forehead, the rings round the eyes and the mouth (the
+		// eyes and lips themselves burn through first), the cheek muscles, the chin.
+		paint(image, 11, (x, y) -> {
+			if (y < 3) {
+				return muscle(random, x, 0.03);
+			}
+
+			if (y == 4 && (x == 1 || x == 2 || x == 5 || x == 6) || y == 6 && x > 1 && x < 6) {
+				return 0x2B1714;
+			}
+
+			if (y == 3 || y == 5 && (x < 3 || x > 4)) {
+				return shade(muscle(random, x + y, 0.0), 0.88);
+			}
+
+			return shade(muscle(random, x + y * 2, 0.0), 1.04);
+		});
+		// The tongue: rough with papillae, a groove down the middle.
+		paint(image, 12, (x, y) -> x == 7 || x == 8 ? 0xA2464E : random.nextDouble() < 0.18 ? 0xD47A80 : 0xC05A62);
+		// Fat: pale yellow lobules with darker walls between them and a shine on each.
+		paint(image, 13, lobules(random, 11, 0xEED48A, 0xCCA85A, 0xF8EBC0));
+		// Raw dermis where the skin has peeled: wet pink-red.
+		paint(image, 14, (x, y) -> {
+			double n = random.nextDouble();
+			return n < 0.15 ? 0xA63A45 : n > 0.88 ? 0xE07C84 : 0xC64E58;
+		});
+		// A burn blister: pale fluid under lifted skin, bright on top, darker at its rim.
+		paint(image, 15, (x, y) -> {
+			double d = Math.hypot((x % 8) - 3.5, (y % 8) - 3.5);
+			return d > 3.2 ? 0xD4C08E : d < 1.6 && (x % 8) < 4 && (y % 8) < 4 ? 0xFFF7E2 : 0xF0E4BE;
+		});
+		// Lung: pink, the lobules outlined, flecked with black.
+		paint(image, 16, lobules(random, 9, 0xD88A93, 0xB86B76, 0xEAA6AE));
+		speckle(image, 16, random, 0x5A4A4E, 0.04);
+		// Heart: dark red muscle, the coronary vessels branching over it, yellow fat along the groove at the top.
+		paint(image, 17, (x, y) -> {
+			if (y < 3 && random.nextDouble() < 0.6) {
+				return random.nextDouble() < 0.5 ? 0xD9B860 : 0xC9A54E;
+			}
+
+			double n = random.nextDouble();
+			return n < 0.2 ? 0x6A181B : n > 0.9 ? 0x922A2C : 0x7D2023;
+		});
+		vessels(image, 17, random, 0x4E0F12, 3);
+		vessels(image, 17, random, 0xA33333, 2);
+		// The aorta: a pale tube with lines along it.
+		paint(image, 18, (x, y) -> x % 4 == 0 ? 0xB06A64 : x % 4 == 1 ? 0xDE9C94 : 0xC8807A);
+		// Liver: smooth, dark red-brown, glossy.
+		paint(image, 19, (x, y) -> {
+			double n = random.nextDouble();
+			return n < 0.25 ? 0x5A1C1A : n > 0.93 ? 0x8E3A33 : 0x6C2320;
+		});
+		// Stomach: pinkish beige, the folds of its lining in waves, a few vessels.
+		paint(image, 20, (x, y) -> (y + (x / 3) % 2) % 3 == 0 ? 0xB57A68 : random.nextDouble() < 0.03 ? 0xB34B48 : 0xD39C88);
+		// Small intestine: loops of pink tube, lit on top and shadowed under, packed together.
+		paint(image, 21, (x, y) -> 0x8F5546);
+		coils(image, 21, random);
+		// Colon: tan, pouched in bands, a stripe of muscle along it.
+		paint(image, 22, (x, y) -> x == 7 ? 0xD8B09C : y % 3 == 2 ? 0xA06C59 : random.nextDouble() < 0.1 ? 0xB37E69 : 0xC48E78);
+		// Kidney: dark red, smooth.
+		paint(image, 23, (x, y) -> {
+			double n = random.nextDouble();
+			return n < 0.25 ? 0x63231F : n > 0.9 ? 0x96443E : 0x7B2F2B;
+		});
+		// Spleen: purple.
+		paint(image, 24, (x, y) -> {
+			double n = random.nextDouble();
+			return n < 0.25 ? 0x55203A : n > 0.9 ? 0x84405C : 0x6A2C46;
+		});
+		// Bladder: pale, a few veins.
+		paint(image, 25, (x, y) -> random.nextDouble() < 0.2 ? 0xCDAE8C : 0xE0C6A6);
+		vessels(image, 25, random, 0xC88E86, 2);
+		// Trachea: rings of cartilage with the membrane between.
+		paint(image, 26, (x, y) -> y % 2 == 0 ? (random.nextDouble() < 0.2 ? 0xC5CCCB : 0xD9DEDD) : 0xC4A6A0);
+		// Char: black crust, cracked, with dull glints.
+		paint(image, 27, (x, y) -> {
+			double n = random.nextDouble();
+			return n < 0.5 ? 0x1B1311 : n < 0.85 ? 0x261A16 : n < 0.95 ? 0x3D2A22 : 0x0C0807;
+		});
+		vessels(image, 27, random, 0x0A0605, 4);
+		// Embers: orange fire in the cracks.
+		paint(image, 28, (x, y) -> {
+			double n = random.nextDouble();
+			return n < 0.25 ? 0xC84A12 : n < 0.7 ? 0xFF7A1C : n < 0.93 ? 0xFFAA3C : 0xFFD27A;
+		});
+		// Calcined bone: chalk white, checked with the cracks of the heat.
+		paint(image, 29, (x, y) -> random.nextDouble() < 0.2 ? 0xD7D2C7 : 0xE9E5DC);
+		vessels(image, 29, random, 0xA8A296, 5);
+		// Molten fat: amber, glossy.
+		paint(image, 30, (x, y) -> {
+			double n = random.nextDouble();
+			return n < 0.25 ? 0xB27A1E : n > 0.85 ? 0xF2C45C : 0xD49A2C;
+		});
+		// Brain: pinkish grey, the folds wandering over it.
+		paint(image, 31, (x, y) -> random.nextDouble() < 0.15 ? 0xC99B9B : 0xD8A8A8);
+		vessels(image, 31, random, 0xAE7C7C, 6);
+		// The bones of a hand or foot, read at two texels a pixel: a finger a pixel wide, the dark seam between two, the
+		// knuckles across.
+		paint(image, 32, (x, y) -> {
+			if (x % 4 == 3) {
+				return 0x8A7A5E;
+			}
+
+			if (y % 5 == 4) {
+				return 0xC4B494;
+			}
+
+			return random.nextDouble() < 0.12 ? 0xD2C5A5 : 0xE3D9C0;
+		});
+		// Cooked muscle, the plain, chest, back and face tiles again: past about 60 C the red of the meat goes, and it is
+		// the grey-brown of well-done meat, its fibres and seams where they were.
+		for (int k = 0; k < 4; k++) {
+			cookedCopy(image, 8 + k, 33 + k);
+		}
+
+		// Heat-fixed viscera: an organ cooked through is firm and grey-brown, mottled darker, whatever it was.
+		paint(image, 37, (x, y) -> {
+			double n = random.nextDouble();
+			return n < 0.2 ? 0x6A5244 : n > 0.9 ? 0xA48A76 : 0x8A6E5C;
+		});
+		vessels(image, 37, random, 0x4E3A30, 3);
+		// Beasts (3.3), from their own seed so the tiles above stay as they were.
+		Random beasts = new Random(33000);
+		// Suet: a sheep's hard fat, chalk white and crumbly, in lumps with faint cream seams and a dull bloom.
+		paint(image, 38, lobules(beasts, 14, 0xF2EFE6, 0xD9D2BE, 0xFBFAF4));
+		speckle(image, 38, beasts, 0xE4DECD, 0.12);
+		// Lard: a pig's soft fat, smooth glossy white with a faint pink, the lobules barely showing.
+		paint(image, 39, lobules(beasts, 6, 0xF7F0EC, 0xE8D8D2, 0xFFFDFB));
+		// Mutton: dark brick red, close-grained, the seams of fat between its muscles hard and white.
+		paint(image, 40, (x, y) -> {
+			if (Math.floorMod(x + y / 6, 7) == 6 && beasts.nextDouble() < 0.8) {
+				return 0xEDE8DA;
+			}
+
+			int bundle = Math.floorMod(x, 2);
+			double n = beasts.nextDouble();
+			return n < 0.15 ? 0x6E1A1E : n > 0.93 ? 0xA8343A : bundle == 0 ? 0x8A2329 : 0x942830;
+		});
+		// Pork: pale pink-red lean, soft, a little grey, with fine pale seams.
+		paint(image, 41, (x, y) -> {
+			if (Math.floorMod(x, 4) == 3 && beasts.nextDouble() < 0.5) {
+				return 0xE8C2BC;
+			}
+
+			double n = beasts.nextDouble();
+			return n < 0.15 ? 0xC4676A : n > 0.92 ? 0xF0A2A0 : 0xDA8584;
+		});
+		// Beef: cherry red, coarse-grained, flecked through with creamy marbling.
+		paint(image, 42, (x, y) -> {
+			if (beasts.nextDouble() < 0.07) {
+				return beasts.nextBoolean() ? 0xF4E6C6 : 0xEAD8B0;
+			}
+
+			int c = muscle(beasts, x, 0.0);
+			return shade(c, 1.12);
+		});
+		// Hoof: dark grey-black horn with the growth rings across it and a pale line at the sole.
+		paint(image, 43, (x, y) -> {
+			if (y == 15) {
+				return 0x9A8E7A;
+			}
+
+			double n = beasts.nextDouble();
+			int c = y % 3 == 0 ? 0x2A2624 : 0x3A3532;
+			return n < 0.1 ? 0x504840 : c;
+		});
+		// Horn: cream at the root darkening to grey-brown at the tip, ringed.
+		paint(image, 44, (x, y) -> {
+			int c = y < 6 ? 0xD8CCB0 : y < 11 ? 0xB0A288 : 0x6E6252;
+			return y % 3 == 2 ? shade(c, 0.85) : beasts.nextDouble() < 0.1 ? shade(c, 1.08) : c;
+		});
+		// Rumen: the lining shaggy with papillae, brown and grey, green with the cud showing between them.
+		paint(image, 45, (x, y) -> {
+			double n = beasts.nextDouble();
+			if (n < 0.18) {
+				return beasts.nextBoolean() ? 0x5C6A2E : 0x4A5A26;
+			}
+
+			return n < 0.55 ? 0x7A6A52 : n < 0.85 ? 0x8E7C60 : 0x5E5040;
+		});
+		// The beasts' lean cooked: mutton and beef grey-brown, pork pale grey-white, as well-done meat goes.
+		cookedCopy(image, 40, 46);
+		// Pork cooks pale: grey-white, its grain still showing (too light for cookedCopy, which keeps only the darker range).
+		paint(image, 47, (x, y) -> {
+			int rgb = image.getRGB(1 * 16 + x, 5 * 16 + y);
+			double l = 0.3 * (rgb >> 16 & 0xFF) + 0.59 * (rgb >> 8 & 0xFF) + 0.11 * (rgb & 0xFF);
+			int r = (int) Math.min(255, Math.round(l * 0.75 + 70));
+			int g = (int) Math.min(255, Math.round(l * 0.7 + 58));
+			int b = (int) Math.min(255, Math.round(l * 0.62 + 48));
+			return r << 16 | g << 8 | b;
+		});
+		cookedCopy(image, 42, 48);
+		// The sheep's generated anatomy (SheepTrunk), from their own seed so the tiles above stay as they were.
+		Random organs = new Random(34000);
+		// Gallbladder: dark olive green bile through a thin glossy wall, a bluish sheen on top.
+		paint(image, 49, (x, y) -> {
+			double n = organs.nextDouble();
+			if (y < 4 && n < 0.25) {
+				return 0x6F8C7A;
+			}
+
+			return n < 0.25 ? 0x2F4A24 : n > 0.9 ? 0x5C7A46 : 0x3F5D30;
+		});
+		// Reticulum: the honeycomb, dark ridged cells with paler walls.
+		paint(image, 50, lobules(organs, 16, 0x4E4128, 0x958461, 0x655436));
+		// Vein: a collapsed vein, dark purple-red, its wall a little paler along the edges.
+		paint(image, 51, (x, y) -> {
+			if (x == 0 || x == 15) {
+				return 0x62405E;
+			}
+
+			double n = organs.nextDouble();
+			return n < 0.2 ? 0x3A2038 : n > 0.9 ? 0x6A4466 : 0x4D2E4B;
+		});
+		// Cut faces of an organ thrown out and cut with a blade (3.3), from their own seed so every tile above stays as it was.
+		Random sections = new Random(35000);
+		// The cut liver: smooth, glossy, dark red-brown parenchyma with faint lobules, and the round holes of the veins and
+		// portal vessels cut across, each with a paler wall.
+		int[][] veins = {{4, 5, 2}, {11, 3, 1}, {9, 11, 2}, {2, 12, 1}, {13, 13, 1}};
+		paint(image, 52, (x, y) -> {
+			for (int[] v : veins) {
+				double d = Math.hypot(x - v[0], y - v[1]);
+				if (d < v[2] - 0.4) {
+					return 0x240807;
+				}
+
+				if (d < v[2] + 0.6) {
+					return 0x7A3A30;
+				}
+			}
+
+			double n = sections.nextDouble();
+			// Lobules: a paler dot at every fourth texel or so, where the hepatic venules sit.
+			if ((x * 7 + y * 3) % 5 == 0 && n < 0.5) {
+				return 0x6E2620;
+			}
+
+			return n < 0.08 ? 0x8C3E36 : n < 0.3 ? 0x4A1612 : 0x5A1C17;
+		});
+		// The cut lung: spongy and pink-red, speckled with air spaces and pockets of blood, a bronchus cut across with its
+		// ring of pale cartilage round a dark lumen.
+		paint(image, 53, (x, y) -> {
+			double d = Math.hypot(x - 10.5, y - 5.5);
+			if (d < 1.4) {
+				return 0x3A2228;
+			}
+
+			if (d < 2.6) {
+				return 0xE6D6CC;
+			}
+
+			double small = Math.hypot(x - 3.5, y - 11.5);
+			if (small < 0.9) {
+				return 0x4A2A30;
+			}
+
+			if (small < 1.8) {
+				return 0xD8C0B8;
+			}
+
+			double n = sections.nextDouble();
+			return n < 0.06 ? 0x8A2030 : n < 0.3 ? 0xA45464 : n > 0.85 ? 0xE2A2AC : 0xC77A88;
+		});
+		// Gland (pancreas, thymus, salivary glands, thyroid, adrenals), from its own seed: small pale pink-cream lobules
+		// packed together, the thin seams of connective tissue between them a little darker.
+		paint(image, 54, lobules(new Random(36000), 22, 0xD9A894, 0xA8705E, 0xEAC4B2));
+		// Testis, from its own seed: the tough glossy white tunic, fine red-purple vessels winding over it.
+		Random testis = new Random(37000);
+		paint(image, 55, (x, y) -> {
+			double wind = Math.sin(x * 0.9 + 2.0 * Math.sin(y * 0.55)) + 0.6 * Math.sin(y * 1.3 + x * 0.2);
+			double n = testis.nextDouble();
+			if (Math.abs(wind) < 0.12 && n < 0.8) {
+				return n < 0.3 ? 0x8E3E4E : 0xA8566A;
+			}
+
+			return n < 0.1 ? 0xD8CCC8 : n > 0.9 ? 0xFAF4F0 : 0xECE2DE;
+		});
+		// More cut faces (a blade through an organ), each from its own seed. The heart cut across its ventricles: the thick
+		// round wall of the left ventricle about its lumen, the thin crescent of the right one against the septum, dark
+		// clotted blood in both, pale endocardium lining them, a little white coronary fat at the top.
+		Random heart = new Random(38000);
+		paint(image, 56, (x, y) -> {
+			double cx = x + 0.5;
+			double cy = y + 0.5;
+			double left = Math.hypot(cx - 10.5, cy - 8.5);
+			double right = Math.hypot(cx - 3.5, cy - 8.5);
+			double n = heart.nextDouble();
+			if (left < 2.4) {
+				return n < 0.3 ? 0x1E0604 : 0x2C0A07;
+			}
+
+			if (left < 3.1) {
+				return 0xC98A80;
+			}
+
+			if (right < 3.4 && left > 5.6) {
+				return n < 0.3 ? 0x24070A : 0x320C0C;
+			}
+
+			if (right < 4.0 && left > 5.0) {
+				return 0xC98A80;
+			}
+
+			if (cy < 2.2 && n < 0.6) {
+				return n < 0.2 ? 0xE2CC94 : 0xF0E2B8;
+			}
+
+			return n < 0.12 ? 0x6E1E1A : n > 0.9 ? 0xA43A32 : 0x8A2A24;
+		});
+		// The brain cut through: pinkish grey matter folded about branching white matter, a dark line in each fold.
+		Random brain = new Random(39000);
+		paint(image, 57, (x, y) -> {
+			double v = Math.sin(x * 0.85 + 1.7 * Math.sin(y * 0.45)) + Math.sin(y * 0.7 + 0.8 * Math.sin(x * 0.6));
+			double n = brain.nextDouble();
+			if (Math.abs(v) < 0.26) {
+				return n < 0.2 ? 0xE2D8D0 : 0xF0E8E0;
+			}
+
+			if (v > 1.55 && n < 0.85) {
+				return 0x7E5E5A;
+			}
+
+			return n < 0.15 ? 0xA48884 : n > 0.9 ? 0xC8AEA8 : 0xB89A94;
+		});
+		// The kidney cut lengthwise: the dark granular cortex outside, the striped pyramids of the medulla, the pale pelvis
+		// and its fat at the hilus in the middle.
+		Random kidney = new Random(40000);
+		paint(image, 58, (x, y) -> {
+			double dx = x + 0.5 - 8.0;
+			double dy = y + 0.5 - 9.5;
+			double d = Math.hypot(dx, dy * 1.2);
+			double n = kidney.nextDouble();
+			if (d < 2.4) {
+				return n < 0.3 ? 0xE0CDB8 : 0xEFE2D2;
+			}
+
+			if (d < 5.6) {
+				boolean stripe = Math.floorMod((int) Math.round(Math.atan2(dy, dx) * 5.0), 2) == 0;
+				return stripe ? (n < 0.3 ? 0x7A2E28 : 0x8E3E36) : (n < 0.3 ? 0x9C4C42 : 0xA85A4E);
+			}
+
+			return n < 0.2 ? 0x4E1612 : n > 0.9 ? 0x6E2A22 : 0x5E1E19;
+		});
+		// Bone sawn or cut through: ivory struts of spongy bone round red marrow.
+		paint(image, 59, lobules(new Random(41000), 9, 0xA8443A, 0xE6DABF, 0xC0584C));
+		return image;
+	}
+
+	/** Tile {@code to} is tile {@code from} cooked: the red gone, grey-brown by how light each texel was. */
+	private static void cookedCopy(BufferedImage image, int from, int to) {
+		for (int y = 0; y < 16; y++) {
+			for (int x = 0; x < 16; x++) {
+				int rgb = image.getRGB((from % 8) * 16 + x, (from / 8) * 16 + y);
+				// Pale fascia cooks to a dull tan, not a bright one.
+				double l = Math.min(130.0, 0.3 * (rgb >> 16 & 0xFF) + 0.59 * (rgb >> 8 & 0xFF) + 0.11 * (rgb & 0xFF));
+				int r = (int) Math.min(255, Math.round(l * 1.1 + 42));
+				int g = (int) Math.min(255, Math.round(l * 0.92 + 30));
+				int b = (int) Math.min(255, Math.round(l * 0.76 + 22));
+				image.setRGB((to % 8) * 16 + x, (to / 8) * 16 + y, 0xFF000000 | r << 16 | g << 8 | b);
+			}
+		}
+	}
+
+	private interface Texel {
+		int at(int x, int y);
+	}
+
+	/** Fills anatomy tile {@code tile} (eight to a row) pixel by pixel, opaque. */
+	private static void paint(BufferedImage image, int tile, Texel texel) {
+		int ox = (tile % 8) * 16;
+		int oy = (tile / 8) * 16;
+		for (int y = 0; y < 16; y++) {
+			for (int x = 0; x < 16; x++) {
+				image.setRGB(ox + x, oy + y, 0xFF000000 | texel.at(x, y));
+			}
+		}
+	}
+
+	/** A texel of muscle in fibre bundle {@code column}: bundles three wide, a seam between them, now and then fascia. */
+	private static int muscle(Random random, int column, double fascia) {
+		int bundle = Math.floorMod(column, 3);
+		if (bundle == 2 && random.nextDouble() < 0.85) {
+			return 0x7A1C18;
+		}
+
+		if (random.nextDouble() < 0.02 + fascia) {
+			return 0xD8B0A0;
+		}
+
+		double n = random.nextDouble();
+		return n < 0.12 ? 0x8E251F : n > 0.94 ? 0xC2433A : bundle == 0 ? 0xA8302A : 0xB5382F;
+	}
+
+	private static int shade(int rgb, double f) {
+		int r = (int) Math.min(255, Math.round((rgb >> 16 & 0xFF) * f));
+		int g = (int) Math.min(255, Math.round((rgb >> 8 & 0xFF) * f));
+		int b = (int) Math.min(255, Math.round((rgb & 0xFF) * f));
+		return r << 16 | g << 8 | b;
+	}
+
+	/** Cells round {@code count} random points: walls where two cells meet, a shine towards each cell's top left. */
+	private static Texel lobules(Random random, int count, int body, int wall, int shine) {
+		double[] px = new double[count];
+		double[] py = new double[count];
+		for (int i = 0; i < count; i++) {
+			px[i] = random.nextDouble() * 16.0;
+			py[i] = random.nextDouble() * 16.0;
+		}
+
+		return (x, y) -> {
+			double first = Double.MAX_VALUE;
+			double second = Double.MAX_VALUE;
+			int nearest = 0;
+			for (int i = 0; i < count; i++) {
+				// Wrapped, so the tile repeats without a seam.
+				double dx = Math.abs(x + 0.5 - px[i]);
+				double dy = Math.abs(y + 0.5 - py[i]);
+				double d = Math.hypot(Math.min(dx, 16.0 - dx), Math.min(dy, 16.0 - dy));
+				if (d < first) {
+					second = first;
+					first = d;
+					nearest = i;
+				} else if (d < second) {
+					second = d;
+				}
+			}
+
+			if (second - first < 0.9) {
+				return wall;
+			}
+
+			boolean lit = x + 0.5 < px[nearest] && y + 0.5 < py[nearest] && first < 1.8;
+			return lit ? shine : body;
+		};
+	}
+
+	private static void speckle(BufferedImage image, int tile, Random random, int rgb, double share) {
+		int ox = (tile % 8) * 16;
+		int oy = (tile / 8) * 16;
+		for (int y = 0; y < 16; y++) {
+			for (int x = 0; x < 16; x++) {
+				if (random.nextDouble() < share) {
+					image.setRGB(ox + x, oy + y, 0xFF000000 | rgb);
+				}
+			}
+		}
+	}
+
+	/** {@code count} wandering lines across a tile: vessels, cracks or folds. */
+	private static void vessels(BufferedImage image, int tile, Random random, int rgb, int count) {
+		int ox = (tile % 8) * 16;
+		int oy = (tile / 8) * 16;
+		for (int i = 0; i < count; i++) {
+			int x = random.nextInt(16);
+			int y = random.nextInt(16);
+			int dx = random.nextBoolean() ? 1 : -1;
+			int dy = random.nextBoolean() ? 1 : 0;
+			for (int step = 0; step < 14; step++) {
+				image.setRGB(ox + Math.floorMod(x, 16), oy + Math.floorMod(y, 16), 0xFF000000 | rgb);
+				if (random.nextDouble() < 0.4) {
+					int t = dx;
+					dx = random.nextBoolean() ? dy : -dy;
+					dy = t;
+				}
+
+				x += dx == 0 && dy == 0 ? 1 : dx;
+				y += dy;
+			}
+		}
+	}
+
+	/** The loops of the small intestine: bands of tube winding over the dark between them. */
+	private static void coils(BufferedImage image, int tile, Random random) {
+		int ox = (tile % 8) * 16;
+		int oy = (tile / 8) * 16;
+		double phase = random.nextDouble() * 6.0;
+		for (int y = 0; y < 16; y++) {
+			for (int x = 0; x < 16; x++) {
+				// A tube is where the wave is near a whole number: three rows of loops, wobbling.
+				double wave = y / 5.0 + 0.45 * Math.sin(x * 0.85 + phase + y * 0.3);
+				double f = wave - Math.floor(wave);
+				if (f < 0.62) {
+					int c = f < 0.16 ? 0xF2C1B1 : f > 0.48 ? 0xB87766 : 0xE3A592;
+					image.setRGB(ox + x, oy + y, 0xFF000000 | c);
+				}
+			}
+		}
 	}
 
 	private static int argb(double alpha, double light) {

@@ -11,13 +11,13 @@ import dev.fluidgore.dismember.Giblets;
 import dev.fluidgore.net.Evidence;
 import dev.fluidgore.net.GoreAction;
 import dev.fluidgore.net.GoreSync;
+import dev.fluidgore.physics.BodyMass;
 import dev.fluidgore.suffer.Corpse;
 import dev.fluidgore.suffer.CorpseStrike;
 import dev.fluidgore.trigger.EntityFilter;
 import dev.fluidgore.trigger.Fate;
 import io.netty.buffer.ByteBuf;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
-import java.util.Map;
 import net.fabricmc.fabric.api.client.rendering.v1.RenderStateDataKey;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -58,8 +58,10 @@ import org.jspecify.annotations.Nullable;
  * <li>Once the fat under the skin melts it feeds the fire itself and the body burns on its own, even with the fire
  *     under it gone: thick, black, greasy smoke, fat dripping and spitting, the skin splitting over glowing cracks. The
  *     heat shortens the muscles and draws the limbs in (the pugilistic, boxer's pose of every burnt body).</li>
- * <li>The flesh burns away and the bones come through, charred black at first, then grey, then white (calcined), and
- *     the body shrinks to a charred skeleton: ribs, skull and long bones. The fire burns down to embers and ash.</li>
+ * <li>The flesh burns away and the bones come through, scorched brown and charred black, and the body shrinks to a
+ *     charred skeleton: ribs, skull and long bones. The fire burns down to embers and ash. Only a fire that goes on
+ *     under the bare bones (a campfire, a pyre, lava) burns them on to grey and at last calcined white
+ *     ({@link BurntBone}).</li>
  * </ol>
  * How long it takes and how big the fire and its smoke are goes with the body's weight ({@link #kilograms}): a
  * chicken flares and is bones in a quarter of a minute under a wisp of smoke, a sheep burns for most of a minute, a
@@ -81,14 +83,18 @@ public final class Cremation {
 	 * What a burnt body looks like, for the renderer.
 	 *
 	 * @param bare how much of the flesh is gone, burnt or knocked off, 0..1
-	 * @param burn how long it burnt, 0..1: how calcined (white) its bones are
+	 * @param burn how long it burnt, 0..1: how roasted its meat is
+	 * @param bone how burnt its bones are, 0..1 (see {@link BurntBone})
 	 * @param glow the embers in its cracks, 0..1
 	 * @param seed the body's own dice for where the char splits, from its UUID
 	 */
-	public record Charred(float bare, float burn, float glow, long seed) {
-		/** How far the heat has drawn the limbs in, 0..1. */
+	public record Charred(float bare, float burn, float bone, float glow, long seed) {
+		/**
+		 * How far the heat has drawn the limbs in, 0..1. It is the muscle shortening as it cooks, so it comes once the fire
+		 * is through the hide, not while only the hair singes (see {@code Melt.flex}).
+		 */
 		public float flex() {
-			return ramp(bare, 0.08F, 0.45F);
+			return ramp(bare, 0.15F, 0.5F);
 		}
 
 		/** How far the body has shrunk to its bones, 0..1. */
@@ -96,9 +102,12 @@ public final class Cremation {
 			return ramp(bare, 0.25F, 1.0F);
 		}
 
-		/** The wool (or the hair) has burnt off. */
+		/**
+		 * The wool has burnt off. Wool hardly burns: it chars black and smoulders where it lies on the hide (the burn
+		 * tint darkens it) and is gone only once the skin under it is burning.
+		 */
 		public boolean shorn() {
-			return bare > 0.05F;
+			return bare > 0.2F;
 		}
 	}
 
@@ -107,7 +116,7 @@ public final class Cremation {
 	/** Ticks a flame put to it, or a fire it lay in, keeps it alight until it catches: vanilla's eight seconds and two. */
 	private static final int KINDLE = 200;
 	/** Seconds to burn to the bone per cube root of the body's kilograms, at a speed of 100%. */
-	private static final float SECONDS = 12.0F;
+	private static final float SECONDS = BodyMass.SECONDS;
 	/** Ticks a body that went out smokes on. */
 	private static final int SMOULDER = 900;
 	/** Ticks the embers in a body take to go cold after the flames are gone. */
@@ -116,37 +125,23 @@ public final class Cremation {
 	private static final float CHARRED = 0.25F;
 	/** Flesh this far gone leaves only bone: blows break it. */
 	private static final float BONE = 0.97F;
+	/** Flesh this far gone has laid the bones bare to a fire under them. */
+	private static final float BONE_SHOWS = 0.5F;
+	/** A fire under bare bone takes this many times as long as the flesh took to burn to calcine them (lava a third of it). */
+	private static final float CALCINING = 3.0F;
 	private static final double RANGE_SQ = 64.0 * 64.0;
 	private static final double SOUND_SQ = 24.0 * 24.0;
 	/** The bones break in this order; the trunk (ribs and spine) is last, and then the skeleton is gone. */
 	private static final BodyPart[] BONES = {BodyPart.RIGHT_LEG, BodyPart.LEFT_LEG, BodyPart.RIGHT_ARM, BodyPart.LEFT_ARM, BodyPart.HEAD};
 	private static final BlockParticleOption CHAR = new BlockParticleOption(ParticleTypes.BLOCK, Blocks.COAL_BLOCK.defaultBlockState());
 	private static final BlockParticleOption CINDER = new BlockParticleOption(ParticleTypes.FALLING_DUST, Blocks.BLACKSTONE.defaultBlockState());
-	private static final DustParticleOptions SOOT = new DustParticleOptions(0x1A1410, 1.4F);
-	private static final DustParticleOptions BONE_ASH = new DustParticleOptions(0xBDB8AE, 1.2F);
+	private static final DustParticleOptions SOOT = new DustParticleOptions(0x1A1410, 0.5F);
 	/** The grey ash a pyre leaves on the ground. */
 	private static final int ASH = 0x5E5A55;
 	/** Where the char splits and how the bits fly: the same on every screen (see {@link Fate}). */
 	private static final RandomSource RANDOM = Fate.stream("cremation");
 	/** Smoke and flames: this screen's own. */
 	private static final RandomSource FX = RandomSource.create();
-	/**
-	 * What animals weigh, roughly, grown: what decides how long they burn and how much smoke they make. A mob not
-	 * listed is weighed by its size.
-	 */
-	private static final Map<String, Float> KILOGRAMS = Map.ofEntries(
-			Map.entry("chicken", 2.5F), Map.entry("rabbit", 2.0F), Map.entry("parrot", 0.4F), Map.entry("bat", 0.05F), Map.entry("frog", 0.5F),
-			Map.entry("axolotl", 0.3F), Map.entry("cat", 4.5F), Map.entry("ocelot", 12.0F), Map.entry("fox", 7.0F), Map.entry("armadillo", 5.0F),
-			Map.entry("wolf", 40.0F), Map.entry("goat", 60.0F), Map.entry("sheep", 70.0F), Map.entry("pig", 110.0F), Map.entry("panda", 110.0F),
-			Map.entry("turtle", 150.0F), Map.entry("llama", 150.0F), Map.entry("trader_llama", 150.0F), Map.entry("dolphin", 150.0F),
-			Map.entry("donkey", 250.0F), Map.entry("hoglin", 250.0F), Map.entry("mule", 350.0F), Map.entry("polar_bear", 400.0F),
-			Map.entry("zombie_horse", 450.0F), Map.entry("horse", 500.0F), Map.entry("camel", 550.0F), Map.entry("cow", 650.0F),
-			Map.entry("mooshroom", 650.0F), Map.entry("sniffer", 900.0F), Map.entry("villager", 70.0F), Map.entry("wandering_trader", 70.0F),
-			Map.entry("player", 75.0F), Map.entry("zombie", 70.0F), Map.entry("husk", 60.0F), Map.entry("drowned", 70.0F),
-			Map.entry("pillager", 75.0F), Map.entry("vindicator", 80.0F), Map.entry("evoker", 70.0F), Map.entry("witch", 65.0F),
-			Map.entry("piglin", 80.0F), Map.entry("spider", 30.0F), Map.entry("cave_spider", 8.0F), Map.entry("squid", 20.0F)
-	);
-
 	private static final class Fire {
 		final float kg;
 		/** Cube root of the kilograms: how big the fire and its smoke are, and how long it takes. */
@@ -159,11 +154,15 @@ public final class Cremation {
 		float glow;
 		int kindle;
 		boolean lit;
-		/** Burnt to the bone: the flames die. */
-		boolean calcined;
+		/** Burnt to the bone: nothing left to feed the flames, they die. */
+		boolean spent;
+		/** How burnt the bones are, 0..1 (see {@link BurntBone}): not how much flesh is gone. */
+		float bone;
 		boolean flared;
 		/** Put out with water or rain: wet through, it does not catch again on its own, only from a fire or a flame put to it. */
 		boolean doused;
+		/** It was burning before it died (it came here from Melting): its burns have the redness of a living body's. */
+		boolean alive;
 		/** Ticks since it went out. */
 		int out = SMOULDER;
 		/** Blows on the bare bones. */
@@ -188,24 +187,14 @@ public final class Cremation {
 	private int tick;
 	private int lastUse = -100;
 
-	/** What a body weighs, in kilograms: its own kind's weight, a fraction of it for the young. */
+	/** What a body weighs, in kilograms (see {@link BodyMass}). */
 	public static float kilograms(LivingEntity entity) {
-		String id = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).getPath();
-		Float kg = KILOGRAMS.get(id);
-		if (kg == null) {
-			// Mostly water, and an animal fills only part of its box.
-			float width = entity.getBbWidth();
-			kg = Mth.clamp(width * width * entity.getBbHeight() * 350.0F, 0.05F, 2000.0F);
-		} else if (entity.isBaby()) {
-			kg *= 0.15F;
-		}
-
-		return kg;
+		return BodyMass.kilograms(entity);
 	}
 
 	/** Seconds {@code entity} takes to burn to the bone in a fire, at the speed set. */
 	public static float seconds(LivingEntity entity) {
-		return SECONDS * (float) Math.cbrt(kilograms(entity)) * 100.0F / GoreConfig.get().cremationSpeedPercent;
+		return BodyMass.seconds(entity);
 	}
 
 	/** How much of a body's flesh is gone, burnt or knocked off: 0 for one that never burnt. */
@@ -214,16 +203,46 @@ public final class Cremation {
 		return fire == null ? 0.0F : fire.bare();
 	}
 
+	/** True if the body was burning while it was still alive (see {@code Melt.vital}). */
+	public boolean burntAlive(int entityId) {
+		Fire fire = fires.get(entityId);
+		return fire != null && fire.alive;
+	}
+
 	/** How long it has burnt, 0..1 (1: to the bone). */
 	public float burn(int entityId) {
 		Fire fire = fires.get(entityId);
 		return fire == null ? 0.0F : fire.burn;
 	}
 
+	/** How burnt its bones are, 0..1 (see {@link BurntBone}). */
+	public float bone(int entityId) {
+		Fire fire = fires.get(entityId);
+		return fire == null ? 0.0F : fire.bone;
+	}
+
+	/** True if this body has a fire here (alight, out or burnt down): then {@link #flames} alone says how it burns. */
+	public boolean tracks(int entityId) {
+		return fires.containsKey(entityId);
+	}
+
 	/** True while the body is burning: its own flames, smoke and sounds are drawn here, not {@link Burns}'. */
 	public boolean burning(int entityId) {
 		Fire fire = fires.get(entityId);
 		return fire != null && fire.lit;
+	}
+
+	/**
+	 * How big the flames on a burning body are, 0 (out) to 1: small as it catches, fiercest while its fat burns, dying
+	 * down on the bare bones.
+	 */
+	public float flames(int entityId) {
+		Fire fire = fires.get(entityId);
+		if (fire == null || !fire.lit) {
+			return 0.0F;
+		}
+
+		return Mth.clamp(fire.glow * (0.45F + 0.75F * Mth.sin(Mth.PI * fire.burn)), 0.0F, 1.0F);
 	}
 
 	/** Bone broken off a burnt skeleton so far. */
@@ -235,7 +254,7 @@ public final class Cremation {
 	/** Render state for the body, or null if it never burnt. */
 	public @Nullable Charred look(int entityId) {
 		Fire fire = fires.get(entityId);
-		return fire == null || fire.bare() <= 0.01F ? null : new Charred(fire.bare(), fire.burn, fire.glow, fire.seed);
+		return fire == null || fire.bare() <= 0.01F ? null : new Charred(fire.bare(), fire.burn, fire.bone, fire.glow, fire.seed);
 	}
 
 	/** Use key with a flint and steel or a fire charge on a body: sets it alight. Returns true if it did. */
@@ -258,7 +277,7 @@ public final class Cremation {
 		}
 
 		Fire fire = fires.get(corpse.entity.getId());
-		if (fire != null && fire.calcined) {
+		if (fire != null && fire.spent) {
 			// Nothing left to burn: the flint lights the ground as it would.
 			return false;
 		}
@@ -281,7 +300,7 @@ public final class Cremation {
 		}
 
 		Fire fire = fires.computeIfAbsent(entity.getId(), id -> new Fire(entity));
-		if (fire.calcined) {
+		if (fire.spent) {
 			return false;
 		}
 
@@ -319,11 +338,17 @@ public final class Cremation {
 			int heat = heat(level, corpse, box);
 			Fire fire = fires.get(id);
 			if (fire == null) {
-				if (heat == 0) {
+				// A person who burnt alive (see Melting) burns on from how far it got; on their own fat if they died on fire.
+				float melted = GoreSystems.dismemberment().melting().handOver(id);
+				if (heat == 0 && melted <= 0.0F) {
 					continue;
 				}
 
 				fire = new Fire(entity);
+				fire.burn = melted;
+				fire.bone = BurntBone.ownFire(melted);
+				fire.alive = melted > 0.0F;
+				fire.doused = melted > 0.0F && heat == 0;
 				fires.put(id, fire);
 			}
 
@@ -338,7 +363,12 @@ public final class Cremation {
 	 * server), 0 for nothing.
 	 */
 	private static int heat(ClientLevel level, Corpse corpse, AABB box) {
-		int heat = !corpse.unloaded && corpse.entity.isOnFire() ? 1 : 0;
+		return Math.max(around(level, box), !corpse.unloaded && corpse.entity.isOnFire() ? 1 : 0);
+	}
+
+	/** The fire under and around the body, not its own: 2 for lava, 1 for a fire or a lit campfire, 0 for none. */
+	private static int around(ClientLevel level, AABB box) {
+		int heat = 0;
 		BlockPos from = BlockPos.containing(box.minX, box.minY - 0.2, box.minZ);
 		BlockPos to = BlockPos.containing(box.maxX, box.maxY, box.maxZ);
 		for (BlockPos pos : BlockPos.betweenClosed(from, to)) {
@@ -370,7 +400,7 @@ public final class Cremation {
 
 		boolean was = fire.lit;
 		// Lava burns through anything; the rain puts out a body burning on its own, and water puts out everything.
-		fire.lit = !fire.calcined && !drenched && (heat == 2 || !rain && (heat > 0 || fire.kindle > 0 || fire.burn >= CATCHES && !fire.doused));
+		fire.lit = !fire.spent && !drenched && (heat == 2 || !rain && (heat > 0 || fire.kindle > 0 || fire.burn >= CATCHES && !fire.doused));
 		if (fire.lit) {
 			float ticks = 20.0F * SECONDS * fire.size * 100.0F / config.cremationSpeedPercent;
 			float pace = heat == 2 ? 3.0F : heat == 1 ? 1.3F : 1.0F;
@@ -380,7 +410,7 @@ public final class Cremation {
 			fire.glow += (0.55F + 0.45F * fat - fire.glow) * 0.05F;
 			GoreSystems.dismemberment().burns().restore(id, Math.min(1.0F, 0.05F + fire.burn * 5.0F));
 			if (fire.burn >= 1.0F) {
-				fire.calcined = true;
+				fire.spent = true;
 				fire.lit = false;
 				burntOut(level, blood, corpse, fire, box);
 			}
@@ -389,9 +419,23 @@ public final class Cremation {
 			fire.glow = Math.max(0.0F, fire.glow - (drenched || rain ? 0.02F : 1.0F / COOLING));
 		}
 
+		// The flesh burning off the bones chars them, and here no further: a game's simplification of a body's own fire
+		// rarely being hot and long enough on its own to calcine them (see BurntBone).
+		fire.bone = Math.max(fire.bone, BurntBone.ownFire(fire.burn));
+		int under = heat > 0 ? around(level, box) : 0;
+		if (under > 0 && !drenched && fire.burn > BONE_SHOWS) {
+			// A fire that goes on under the bare bones burns the carbon out of them, slowly: grey, then chalk white.
+			boolean white = fire.bone >= BurntBone.CALCINED;
+			float ticks = 20.0F * SECONDS * fire.size * CALCINING * 100.0F / config.cremationSpeedPercent;
+			fire.bone = Math.min(1.0F, fire.bone + (under == 2 ? 3.0F : 1.0F) * ramp(fire.burn, BONE_SHOWS, 1.0F) / ticks);
+			if (!white && fire.bone >= BurntBone.CALCINED) {
+				Evidence.touched(id);
+			}
+		}
+
 		if (fire.lit && !was) {
 			caught(level, fire, box);
-		} else if (was && !fire.lit && !fire.calcined) {
+		} else if (was && !fire.lit && !fire.spent) {
 			fire.doused = drenched || rain;
 			fire.kindle = 0;
 			wentOut(level, fire, box, drenched || rain);
@@ -408,18 +452,22 @@ public final class Cremation {
 		}
 	}
 
-	/** Flames take hold: wool and hair go up in a flash. */
+	/**
+	 * Flames take hold. A fleece does not flash up: wool is slow to light and puts itself out, so it scorches and
+	 * smoulders, a thick cloud of white, stinking smoke with a hiss, before the fire gets through it to the skin.
+	 */
 	private static void caught(ClientLevel level, Fire fire, AABB box) {
 		Vec3 c = box.getCenter();
 		level.playLocalSound(c.x, c.y, c.z, SoundEvents.FIRE_AMBIENT, SoundSource.NEUTRAL, Math.min(1.5F, 0.6F + 0.1F * fire.size), 0.9F, false);
 		if (fire.wool && !fire.flared && fire.burn < 0.05F) {
 			fire.flared = true;
-			level.playLocalSound(c.x, c.y, c.z, SoundEvents.FIRECHARGE_USE, SoundSource.NEUTRAL, 0.8F, 0.6F, false);
+			level.playLocalSound(c.x, c.y, c.z, SoundEvents.FIRE_EXTINGUISH, SoundSource.NEUTRAL, 0.5F, 0.6F, false);
 			for (int i = 0; i < 30; i++) {
 				Vec3 p = inside(box, 0.8F);
-				level.addParticle(ParticleTypes.FLAME, p.x, p.y, p.z, FX.nextGaussian() * 0.03, 0.06 + FX.nextDouble() * 0.08, FX.nextGaussian() * 0.03);
-				if (i % 2 == 0) {
-					level.addParticle(ParticleTypes.WHITE_SMOKE, p.x, box.maxY, p.z, 0.0, 0.08, 0.0);
+				level.addParticle(i % 3 == 0 ? ParticleTypes.SMOKE : ParticleTypes.WHITE_SMOKE, p.x, box.maxY - 0.1, p.z, FX.nextGaussian() * 0.01,
+						0.03 + FX.nextDouble() * 0.03, FX.nextGaussian() * 0.01);
+				if (i % 6 == 0) {
+					level.addParticle(ParticleTypes.SMALL_FLAME, p.x, p.y, p.z, 0.0, 0.01, 0.0);
 				}
 			}
 		}
@@ -441,7 +489,7 @@ public final class Cremation {
 		}
 	}
 
-	/** Burnt to the bone: the flames die down on a white skeleton, and grey ash lies under it. */
+	/** Burnt to the bone: the flames die down on a charred skeleton, and grey ash lies under it. */
 	private static void burntOut(ClientLevel level, BloodWorld blood, Corpse corpse, Fire fire, AABB box) {
 		Vec3 c = box.getCenter();
 		level.playLocalSound(c.x, c.y, c.z, SoundEvents.BONE_BLOCK_HIT, SoundSource.NEUTRAL, 0.5F, 0.7F, false);
@@ -481,12 +529,13 @@ public final class Cremation {
 			}
 
 			// Steam and singed hair first, white; then the fat, thick and black; thin and pale once only bone is left.
-			fire.smoke += 0.12F * s * Mth.sqrt(s) * (0.4F + fierce) * particles;
+			// The heat carries it straight up in a plume off the top of the body, so the body itself stays in sight.
+			fire.smoke += 0.045F * s * Mth.sqrt(s) * (0.4F + fierce) * particles;
 			while (fire.smoke >= 1.0F) {
 				fire.smoke -= 1.0F;
-				ParticleOptions smoke = fire.burn < 0.1F ? ParticleTypes.WHITE_SMOKE : fire.burn < 0.85F ? ParticleTypes.LARGE_SMOKE : ParticleTypes.SMOKE;
-				Vec3 p = inside(box, 0.8F);
-				level.addParticle(smoke, p.x, box.maxY - 0.1, p.z, FX.nextGaussian() * 0.01, 0.05 + FX.nextDouble() * 0.05, FX.nextGaussian() * 0.01);
+				ParticleOptions smoke = fire.burn < 0.1F ? ParticleTypes.WHITE_SMOKE : ParticleTypes.SMOKE;
+				Vec3 p = inside(box, 0.45F);
+				level.addParticle(smoke, p.x, box.maxY + 0.2, p.z, FX.nextGaussian() * 0.005, 0.1 + FX.nextDouble() * 0.06, FX.nextGaussian() * 0.005);
 			}
 
 			// A big body sends up a column of smoke that can be seen from far off.
@@ -574,7 +623,7 @@ public final class Cremation {
 			if (fire.blows % per == 0) {
 				breakBone(level, blood, corpse, fire, box, at, look);
 			} else {
-				BoneEmitter.burst(level, at, look, 3, 4, 0.12);
+				BoneEmitter.burnt(level, at, look, 3, 4, 0.12, fire.bone);
 				level.playLocalSound(at.x, at.y, at.z, SoundEvents.BONE_BLOCK_HIT, SoundSource.PLAYERS, 0.7F, 0.9F + RANDOM.nextFloat() * 0.2F, false);
 			}
 		}
@@ -613,7 +662,7 @@ public final class Cremation {
 				level.addParticle(ParticleTypes.FLAME, at.x, at.y, at.z, RANDOM.nextGaussian() * 0.04, 0.05 + RANDOM.nextDouble() * 0.05, RANDOM.nextGaussian() * 0.04);
 			}
 
-			level.addParticle(ParticleTypes.LARGE_SMOKE, at.x, at.y + 0.2, at.z, 0.0, 0.08, 0.0);
+			level.addParticle(ParticleTypes.SMOKE, at.x, at.y + 0.2, at.z, 0.0, 0.08, 0.0);
 		}
 
 		if (GoreConfig.get().goreSounds) {
@@ -626,17 +675,10 @@ public final class Cremation {
 	private static void breakBone(ClientLevel level, BloodWorld blood, Corpse corpse, Fire fire, AABB box, Vec3 at, Vec3 look) {
 		int id = corpse.entity.getId();
 		int missing = GoreSystems.dismemberment().missingMask(id);
-		boolean white = fire.burn > 0.85F;
 		for (BodyPart part : BONES) {
 			if ((missing & part.bit()) == 0) {
 				GoreSystems.dismemberment().restoreMissing(id, part.bit());
-				BoneEmitter.burst(level, at, look, Math.round(10 + fire.size * 2), Math.round(6 + fire.size * 2), 0.18);
-				if (!white) {
-					// Charred bone: black as much as white.
-					for (int i = 0; i < 8; i++) {
-						level.addParticle(CHAR, at.x, at.y, at.z, RANDOM.nextGaussian() * 0.1, 0.1 + RANDOM.nextDouble() * 0.1, RANDOM.nextGaussian() * 0.1);
-					}
-				}
+				BoneEmitter.burnt(level, at, look, Math.round(10 + fire.size * 2), Math.round(6 + fire.size * 2), 0.18, fire.bone);
 
 				level.playLocalSound(at.x, at.y, at.z, SoundEvents.BONE_BLOCK_BREAK, SoundSource.PLAYERS, 1.0F, 0.8F + RANDOM.nextFloat() * 0.3F, false);
 				return;
@@ -645,17 +687,22 @@ public final class Cremation {
 
 		// The ribs and spine: the skeleton falls in on itself, and it is gone.
 		Vec3 c = box.getCenter();
-		BoneEmitter.shatter(level, c, Math.min(3.0F, 0.6F + fire.size * 0.3F));
+		float size = Math.min(3.0F, 0.6F + fire.size * 0.3F);
+		BoneEmitter.burnt(level, c, null, Math.round(14 * size), Math.round(24 * size), 0.3, fire.bone);
+		level.playLocalSound(c.x, c.y, c.z, SoundEvents.BONE_BLOCK_BREAK, SoundSource.PLAYERS, 1.0F, 0.55F, false);
+		// Ash the colour of the bones it came from: black and grey off a charred skeleton, pale only off a calcined one.
+		DustParticleOptions boneAsh = new DustParticleOptions(BurntBone.color(fire.bone), 0.5F);
+		ParticleOptions flakes = fire.bone >= BurntBone.GREY ? ParticleTypes.WHITE_ASH : ParticleTypes.ASH;
 		int n = Math.round(20 + fire.size * 6);
 		for (int i = 0; i < n; i++) {
 			Vec3 p = inside(box, 0.9F);
-			level.addParticle(i % 2 == 0 ? ParticleTypes.WHITE_ASH : BONE_ASH, p.x, p.y, p.z, RANDOM.nextGaussian() * 0.03, 0.02 + RANDOM.nextDouble() * 0.04,
+			level.addParticle(i % 2 == 0 ? flakes : boneAsh, p.x, p.y, p.z, RANDOM.nextGaussian() * 0.03, 0.02 + RANDOM.nextDouble() * 0.04,
 					RANDOM.nextGaussian() * 0.03);
 		}
 
 		level.addParticle(ParticleTypes.POOF, c.x, c.y, c.z, 0.0, 0.02, 0.0);
 		level.playLocalSound(c.x, c.y, c.z, SoundEvents.SAND_BREAK, SoundSource.PLAYERS, 1.0F, 0.7F, false);
-		if (!fire.calcined) {
+		if (!fire.spent) {
 			ash(level, blood, box, 0.6F);
 		}
 
@@ -676,6 +723,7 @@ public final class Cremation {
 		buf.writeFloat(fire == null ? 0.0F : fire.burn);
 		buf.writeFloat(fire == null ? 0.0F : fire.crumble);
 		buf.writeShort(fire == null ? 0 : Math.min(fire.blows, Short.MAX_VALUE));
+		buf.writeFloat(fire == null ? 0.0F : fire.bone);
 	}
 
 	/** Reads what {@link #write} wrote and puts it on a body this client did not see burn. */
@@ -683,6 +731,12 @@ public final class Cremation {
 		float burn = buf.readFloat();
 		float crumble = buf.readFloat();
 		int blows = buf.readShort();
+		// A game from before bone heat sent none: the flesh burning off charred them, no more.
+		float bone = buf.readableBytes() >= 4 ? buf.readFloat() : BurntBone.ownFire(burn);
+		if (!(bone >= 0.0F && bone <= 1.0F)) {
+			bone = BurntBone.ownFire(burn);
+		}
+
 		if (!(burn >= 0.0F && burn <= 1.0F) || !(crumble >= 0.0F && crumble <= 1.0F) || blows < 0 || burn + crumble <= 0.0F
 				|| fires.containsKey(entity.getId())) {
 			return;
@@ -692,11 +746,20 @@ public final class Cremation {
 		fire.burn = burn;
 		fire.crumble = crumble;
 		fire.blows = blows;
-		fire.calcined = burn >= 1.0F;
+		fire.bone = Math.max(bone, BurntBone.ownFire(burn));
+		fire.spent = burn >= 1.0F;
 		// Out when it was pictured: it stays out until fire is put to it again.
 		fire.doused = true;
 		fires.put(entity.getId(), fire);
 		GoreSystems.dismemberment().burns().restore(entity.getId(), Math.min(1.0F, 0.05F + burn * 5.0F));
+	}
+
+	/** The body has a new id (it lies on after its player respawned under the old one). */
+	public void rekey(int from, int to) {
+		Fire fire = fires.remove(from);
+		if (fire != null) {
+			fires.put(to, fire);
+		}
 	}
 
 	public void forget(int entityId) {

@@ -194,6 +194,11 @@ public final class BloodEmitter {
 		}
 
 		spray(world, origin, away != null ? new Vec3(away.x * 0.5, 0.0, away.z * 0.5) : null, scaled, volume * preset.puddles, rgb, 0.5, 0.25, 0.95);
+		if (WaterClouds.inWater(level, origin.x, origin.y, origin.z)) {
+			// Under water there is no mist: the spray clouds out in the water (see DropletSystem).
+			return;
+		}
+
 		int mist = Math.min(40, Math.round(scaled * 0.6F));
 		for (int i = 0; i < mist; i++) {
 			int color = world.vary(rgb, 0.25F);

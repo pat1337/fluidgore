@@ -3,6 +3,7 @@ package dev.fluidgore.dismember;
 import dev.fluidgore.blood.BloodSupply;
 import java.util.HashMap;
 import dev.fluidgore.GoreSystems;
+import dev.fluidgore.anatomy.Melting;
 import dev.fluidgore.mixin.ModelPartAccessor;
 import dev.fluidgore.rot.Rot;
 import dev.fluidgore.blood.BloodEmitter;
@@ -10,17 +11,24 @@ import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.blood.BoneEmitter;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.config.GoreLevel;
+import dev.fluidgore.event.Events;
+import dev.fluidgore.material.Condition;
+import dev.fluidgore.material.Material;
+import dev.fluidgore.wound.BurntBone;
 import dev.fluidgore.suffer.Voice;
 import dev.fluidgore.trigger.EntityFilter;
 import dev.fluidgore.trigger.Fate;
 import dev.fluidgore.wound.BloodyWool;
 import dev.fluidgore.wound.Burns;
 import dev.fluidgore.wound.Cremation;
+import dev.fluidgore.wound.Flesh;
 import dev.fluidgore.wound.WoundSet;
 import dev.fluidgore.wound.Wounds;
 import it.unimi.dsi.fastutil.ints.Int2IntMap;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
+import dev.fluidgore.physics.Blast;
+import net.minecraft.util.Mth;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
@@ -33,6 +41,7 @@ import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Quaternionf;
@@ -59,8 +68,13 @@ public final class Dismemberment {
 	private final Feathers feathers = new Feathers();
 	private final Burns burns = new Burns();
 	private final Cremation cremation = new Cremation();
+	private final Melting melting = new Melting();
 	private final BloodyWool wool = new BloodyWool();
 	private final Butchery butchery = new Butchery();
+	{
+		giblets.bodies(this::bodyCondition);
+	}
+
 	/** Bodies torn to pieces by a blast: not drawn at all any more. */
 	private final IntOpenHashSet vaporized = new IntOpenHashSet();
 	private int tick;
@@ -81,6 +95,10 @@ public final class Dismemberment {
 		return cremation;
 	}
 
+	public Melting melting() {
+		return melting;
+	}
+
 	public Burns burns() {
 		return burns;
 	}
@@ -93,8 +111,54 @@ public final class Dismemberment {
 		return giblets;
 	}
 
+	/**
+	 * How many pieces of {@code owner}'s anatomy called {@code name} are lying about (any owner, any name, with null):
+	 * organs and bones among the giblets, and whole organs and their portions among the loose pieces (see {@link Viscera#whole}).
+	 */
+	public int organs(@Nullable EntityType<?> owner, @Nullable String name) {
+		int n = giblets.organs(owner, name, new int[1]);
+		for (GorePart part : parts.parts()) {
+			if (part.organ != null && !part.shattered && (owner == null || part.owner == owner) && (name == null || name.equals(part.organ))) {
+				n++;
+			}
+		}
+
+		return n;
+	}
+
 	public Feathers feathers() {
 		return feathers;
+	}
+
+	/**
+	 * What {@code entity}'s {@code material} has been through, as a piece of it would carry it off: the char of its
+	 * burns ({@link Burns}), the flesh its own fire has burnt away ({@link Cremation}: cooked through, dried, the fat
+	 * gone; bone as hot as the skeleton got), how deep a living body had burnt ({@link Melting}), and whether it is
+	 * alight now. A body nothing has touched gives a fresh condition.
+	 */
+	public Condition bodyCondition(LivingEntity entity, Material material) {
+		int id = entity.getId();
+		Condition c = new Condition();
+		float charred = burns.charOf(id);
+		float burnt = cremation.burn(id);
+		float bare = melting.bare(id);
+		if (material.bone()) {
+			c.charred = Math.max(cremation.bone(id), BurntBone.ownFire(Math.max(burnt, bare)));
+			c.moisture = 1.0F - 0.9F * Mth.clamp(burnt * 1.5F, 0.0F, 1.0F);
+		} else {
+			c.sear(charred);
+			c.cooked = Math.max(c.cooked, Math.max(Mth.clamp(burnt * 2.0F, 0.0F, 1.0F), bare));
+			c.moisture = Math.min(c.moisture, Math.min(1.0F - 0.9F * Mth.clamp(burnt * 1.5F, 0.0F, 1.0F), 1.0F - 0.7F * bare));
+			c.fuel = Math.min(c.fuel, 1.0F - burnt);
+			c.integrity = Math.min(c.integrity, 1.0F - 0.5F * burnt);
+		}
+
+		c.burning = entity.isOnFire() || cremation.burning(id);
+		if (c.burning) {
+			c.temperature = 300.0F;
+		}
+
+		return c;
 	}
 
 	/** True if this entity was torn apart by a blast; its renderer is skipped. */
@@ -117,11 +181,34 @@ public final class Dismemberment {
 	 * every tissue it is made of, and blood goes everywhere.
 	 */
 	public void vaporize(BloodWorld blood, ClientLevel level, LivingEntity entity, Vec3 from) {
-		if (!vaporized.add(entity.getId())) {
+		vaporize(blood, level, entity, from, Blast.TNT_BLOCK_KG, 1.0F);
+	}
+
+	/**
+	 * A blast of {@code tntKg} at {@code from} tore {@code entity} apart ({@code seen}: how much of it the blast could
+	 * see). A body with an anatomy (a person, a sheep, a pig, a cow) comes apart into its own bones and organs, each
+	 * thrown by the blast where it lay (see {@link Viscera}), with scraps of muscle, fat and hide; anything else into
+	 * pieces of every tissue in their real proportions.
+	 */
+	public void vaporize(BloodWorld blood, ClientLevel level, LivingEntity entity, Vec3 from, double tntKg, float seen) {
+		if (vaporized.contains(entity.getId())) {
 			return;
 		}
 
-		giblets.burst(level, blood, entity, from);
+		// The body bursts over everything standing round it.
+		if (Flesh.of(entity).bleeds()) {
+			wool.blast(level, entity, entity.position().add(0.0, entity.getBbHeight() * 0.5, 0.0), 4.0, EntityFilter.bloodColor(entity));
+		}
+
+		float burnt = burns.charOf(entity.getId());
+		int organs = Viscera.blow(level, blood, giblets, entity, missingMask(entity.getId()), from, tntKg, seen, 0.0F, burnt);
+		vaporized.add(entity.getId());
+		if (organs > 0) {
+			giblets.burstFlesh(level, blood, entity, from, 0.6F);
+		} else {
+			giblets.burst(level, blood, entity, from);
+		}
+
 		int rgb = EntityFilter.bloodColor(entity);
 		Vec3 centre = entity.position().add(0.0, entity.getBbHeight() * 0.5, 0.0);
 		featherCloud(entity, centre, from, 1.0F, rgb);
@@ -153,20 +240,79 @@ public final class Dismemberment {
 	 * {@code force} is how close it was to shredding the body, 0..1.
 	 */
 	public void tear(BloodWorld blood, ClientLevel level, LivingEntity entity, Vec3 from, float force) {
+		tear(blood, level, entity, from, force, Blast.TNT_BLOCK_KG, 1.0F);
+	}
+
+	/**
+	 * A blast of {@code tntKg} at {@code from} close by, but not close enough to shred the body. With an anatomy, the
+	 * limbs that took the blast hardest (by the overpressure on their own bones, see {@link Viscera#limbs}) come off and
+	 * fly, as many as took enough to tear them; the belly wall facing the charge bursts and what took more than it could
+	 * bear inside (gut, liver, a lung, ribs on the near side) is blown out of it. Without one, two to four limbs come
+	 * off at random and the gut spills. {@code force} is how close it was to shredding the body, 0..1.
+	 */
+	public void tear(BloodWorld blood, ClientLevel level, LivingEntity entity, Vec3 from, float force, double tntKg, float seen) {
 		Vec3 centre = entity.position().add(0.0, entity.getBbHeight() * 0.5, 0.0);
+		if (Flesh.of(entity).bleeds()) {
+			wool.blast(level, entity, centre, 3.0, EntityFilter.bloodColor(entity));
+		}
+
 		Vec3 out = centre.subtract(from);
 		Vec3 flat = new Vec3(out.x, 0.0, out.z);
 		flat = flat.lengthSqr() > 1.0E-6 ? flat.normalize() : null;
-		List<BodyPart> candidates = remaining(entity);
-		int count = 2 + RANDOM.nextInt(2) + (force > 0.5F ? 1 : 0);
-		for (int i = 0; i < count && !candidates.isEmpty(); i++) {
-			BodyPart chosen = candidates.remove(RANDOM.nextInt(candidates.size()));
-			// Each piece goes its own way, roughly away from the blast.
-			Vec3 away = flat == null ? null : flat.yRot((float) (RANDOM.nextGaussian() * 0.6));
-			sever(blood, level, entity, chosen, away, entity::position, Float.NaN, 0.0F, 2.5 + 3.0 * force);
+		int missingBefore = missingMask(entity.getId());
+		float[] limbs = Viscera.limbs(entity, missingBefore, from, tntKg, seen);
+		boolean anatomy = false;
+		for (float kPa : limbs) {
+			anatomy |= kPa > 0.0F;
 		}
 
-		giblets.spill(level, blood, entity, from, force);
+		if (anatomy) {
+			// The limbs that took enough to tear them off, worst first; at least the worst, since the body is torn.
+			List<BodyPart> torn = new ArrayList<>();
+			for (BodyPart part : remaining(entity)) {
+				if (limbs[part.ordinal()] >= Blast.TEAR_KPA) {
+					torn.add(part);
+				}
+			}
+
+			torn.sort((a, b) -> Float.compare(limbs[b.ordinal()], limbs[a.ordinal()]));
+			if (torn.isEmpty()) {
+				BodyPart worst = null;
+				for (BodyPart part : remaining(entity)) {
+					if (worst == null || limbs[part.ordinal()] > limbs[worst.ordinal()]) {
+						worst = part;
+					}
+				}
+
+				if (worst != null) {
+					torn.add(worst);
+				}
+			}
+
+			for (BodyPart part : torn) {
+				Vec3 away = flat == null ? null : flat.yRot((float) (RANDOM.nextGaussian() * 0.35));
+				// Thrown by the push of the blast on it: the harder it was hit, the further.
+				float hit = (float) Math.log(Math.max(1.0F, limbs[part.ordinal()]) / Blast.TEAR_KPA);
+				GorePart limb = sever(blood, level, entity, part, away, entity::position, Float.NaN, 0.0F, 2.5 + 2.5 * Mth.clamp(hit, 0.0F, 1.5F));
+				Events.record(Events.Channel.PRESSURE, -1, Events.Effect.IMPULSE, limb != null ? Events.piece(limb.key) : Events.body(entity),
+						String.format(java.util.Locale.ROOT, "%s torn off by %.0f kPa", part, limbs[part.ordinal()]));
+			}
+
+			// The belly wall facing the charge bursts: what took more than it could bear is blown out of it.
+			Viscera.blow(level, blood, giblets, entity, missingMask(entity.getId()), from, tntKg, seen, Blast.TEAR_KPA * 1.6F, burns.charOf(entity.getId()));
+			giblets.spill(level, blood, entity, from, force * 0.5F);
+		} else {
+			List<BodyPart> candidates = remaining(entity);
+			int count = 2 + RANDOM.nextInt(2) + (force > 0.5F ? 1 : 0);
+			for (int i = 0; i < count && !candidates.isEmpty(); i++) {
+				BodyPart chosen = candidates.remove(RANDOM.nextInt(candidates.size()));
+				// Each piece goes its own way, roughly away from the blast.
+				Vec3 away = flat == null ? null : flat.yRot((float) (RANDOM.nextGaussian() * 0.6));
+				sever(blood, level, entity, chosen, away, entity::position, Float.NaN, 0.0F, 2.5 + 3.0 * force);
+			}
+
+			giblets.spill(level, blood, entity, from, force);
+		}
 		int rgb = EntityFilter.bloodColor(entity);
 		featherCloud(entity, centre, from, 0.4F + 0.4F * force, rgb);
 		BloodEmitter.blast(blood, level, centre, out.lengthSqr() > 1.0E-6 ? out.normalize() : null, rgb,
@@ -189,10 +335,8 @@ public final class Dismemberment {
 			Vec3 away = new Vec3(RANDOM.nextGaussian(), 0.0, RANDOM.nextGaussian());
 			GorePart part = sever(blood, level, entity, bodyPart, away.lengthSqr() > 1.0E-6 ? away.normalize() : null, () -> at, yaw, roll, 1.4);
 			if (part != null) {
+				// Its burns came with it (see bodyCondition).
 				part.lifetime = lifetime;
-				if (burnt > 0.0F) {
-					part.tint = Burns.tint(burnt);
-				}
 				part.voice = null;
 				part.twitchTicks = 0;
 			}
@@ -211,6 +355,39 @@ public final class Dismemberment {
 		if (config.goreSounds) {
 			BloodEmitter.burstSound(level, centre, 0.6F);
 		}
+	}
+
+	/** What a severed part of {@code model} is called: a person's arm, a beast's foreleg, a bird's wing. */
+	/**
+	 * What is inside the severed head {@code piece} of a beast (see {@link HeadSection}), so a blade can split it down the
+	 * middle; null for a person, a beast with no anatomy drawn, or a head of more than one block (a pig's snout, a cow's
+	 * horns), which a blade hacks apart instead.
+	 */
+	private static @Nullable HeadSection section(LivingEntity entity, EntityModel<?> model, ModelPart piece) {
+		if (!(model instanceof net.minecraft.client.model.QuadrupedModel<?>) || model instanceof net.minecraft.client.model.animal.sheep.SheepFurModel) {
+			return null;
+		}
+
+		dev.fluidgore.anatomy.Anatomy.Beast beast = dev.fluidgore.anatomy.Anatomy.Beast.of(entity.getType());
+		java.util.List<ModelPart.Cube> cubes = ((dev.fluidgore.mixin.ModelPartAccessor) (Object) piece).fluidgore$getCubes();
+		if (beast == null || cubes.size() != 1 || !((dev.fluidgore.mixin.ModelPartAccessor) (Object) piece).fluidgore$getChildren().isEmpty()) {
+			return null;
+		}
+
+		ModelPart.Cube c = cubes.getFirst();
+		return new HeadSection(beast, dev.fluidgore.anatomy.Anatomy.male(entity.getUUID()), entity.isBaby(), new float[] {c.minX, c.minY, c.minZ, c.maxX, c.maxY, c.maxZ}, 0);
+	}
+
+	private static String limbName(EntityModel<?> model, BodyPart part) {
+		boolean person = model instanceof net.minecraft.client.model.HumanoidModel<?>;
+		boolean bird = model instanceof net.minecraft.client.model.animal.chicken.ChickenModel;
+		return switch (part) {
+			case HEAD -> "head";
+			case RIGHT_ARM -> person ? "right_arm" : bird ? "right_wing" : "right_foreleg";
+			case LEFT_ARM -> person ? "left_arm" : bird ? "left_wing" : "left_foreleg";
+			case RIGHT_LEG -> person || bird ? "right_leg" : "right_hind_leg";
+			case LEFT_LEG -> person || bird ? "left_leg" : "left_hind_leg";
+		};
 	}
 
 	/**
@@ -282,10 +459,16 @@ public final class Dismemberment {
 		int lifetime = Math.max(400, Math.round(GoreConfig.get().partLifetimeSeconds * 20 * GoreConfig.get().goreLevel.duration));
 		GorePart part = new GorePart(model, texture, localCenter, half, scale, EntityFilter.bloodColor(entity), lifetime);
 		inheritRot(part, entity);
+		part.condition.inherit(bodyCondition(entity, part.material()));
+		part.event = Events.current();
+		part.eventSource = Events.source();
+		part.owner = entity.getType();
+		part.label = GorePart.named(part.owner, source == ModelParts.torso(root) ? "carcass" : "remains");
 		Vec3 base = origin.get();
 		part.x = part.prevX = base.x + offset.x;
 		part.y = part.prevY = base.y + offset.y;
 		part.z = part.prevZ = base.z + offset.z;
+		GorePartManager.cloud(part);
 		Quaternionf partRotation = new Quaternionf(bodyRotation).rotateZ(roll);
 		part.rotation.set(partRotation);
 		part.prevRotation.set(partRotation);
@@ -344,6 +527,11 @@ public final class Dismemberment {
 		int maxParts = lethal ? preset.maxPartsPerHit : 1;
 		int count = 1 + (maxParts > 1 ? RANDOM.nextInt(maxParts) : 0);
 		List<BodyPart> candidates = remaining(entity);
+		if (!lethal) {
+			// A body that lives through the blow keeps its head: only a limb can go.
+			candidates.remove(BodyPart.HEAD);
+		}
+
 		for (int i = 0; i < count && !candidates.isEmpty(); i++) {
 			// The head is the most dramatic cut, so it is favoured on kills.
 			BodyPart chosen = lethal && candidates.contains(BodyPart.HEAD) && RANDOM.nextFloat() < 0.45F
@@ -432,8 +620,18 @@ public final class Dismemberment {
 
 		GorePart part = new GorePart(piece, texture, localCenter, half, scale, rgb, lifetime);
 		inheritRot(part, entity);
+		part.condition.inherit(bodyCondition(entity, part.material()));
+		part.event = Events.current();
+		part.eventSource = Events.source();
+		part.owner = entity.getType();
+		part.label = GorePart.named(part.owner, limbName(model, bodyPart));
 		part.wounds = pieceWounds;
+		part.coat = wool.piece(entity, bodyPart);
 		part.armor = ArmorPieces.of(entity, posed, bodyPart);
+		if (bodyPart == BodyPart.HEAD) {
+			part.section = section(entity, model, piece);
+		}
+
 		Integer plucked = butchery.tint(entity.getId());
 		if (plucked != null) {
 			part.tint = plucked;
@@ -442,6 +640,7 @@ public final class Dismemberment {
 		part.x = part.prevX = base.x + offset.x;
 		part.y = part.prevY = base.y + offset.y;
 		part.z = part.prevZ = base.z + offset.z;
+		GorePartManager.cloud(part);
 		Quaternionf partRotation = new Quaternionf(bodyRotation).rotateZ(roll);
 		part.rotation.set(partRotation);
 		part.prevRotation.set(partRotation);
@@ -483,6 +682,7 @@ public final class Dismemberment {
 		giblets.tick(level, blood);
 		feathers.tick(level, blood);
 		burns.tick(level, blood);
+		melting.tick(level, blood);
 		cremation.tick(level, blood);
 		wool.tick(level);
 		if (tick % 8 != 0 || missing.isEmpty()) {
@@ -513,8 +713,33 @@ public final class Dismemberment {
 		wounds.forget(entityId);
 		burns.forget(entityId);
 		cremation.forget(entityId);
+		melting.forget(entityId);
 		wool.forget(entityId);
 		butchery.forget(entityId);
+	}
+
+	/**
+	 * A body lies on under a new id: its player respawned and took the old one back (see {@code Suffering.release}).
+	 * What is missing from it, its wounds, its burns and its fire go with it.
+	 */
+	public void rekey(int from, int to) {
+		if (missing.containsKey(from)) {
+			missing.put(to, missing.remove(from));
+		}
+
+		if (vaporized.remove(from)) {
+			vaporized.add(to);
+		}
+
+		WoundSet set = wounds.get(from);
+		wounds.forget(from);
+		if (set != null) {
+			wounds.restore(to, set);
+		}
+
+		burns.rekey(from, to);
+		cremation.rekey(from, to);
+		melting.rekey(from, to);
 	}
 
 	public void onEntityUnload(int entityId) {
@@ -523,6 +748,7 @@ public final class Dismemberment {
 		wounds.forget(entityId);
 		burns.forget(entityId);
 		cremation.forget(entityId);
+		melting.forget(entityId);
 		wool.forget(entityId);
 		butchery.forget(entityId);
 	}
@@ -536,6 +762,7 @@ public final class Dismemberment {
 		vaporized.clear();
 		burns.clear();
 		cremation.clear();
+		melting.clear();
 		wool.clear();
 		butchery.clear();
 		parts.clear();

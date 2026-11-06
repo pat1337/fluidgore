@@ -16,9 +16,10 @@ import net.minecraft.util.Mth;
 /**
  * The injured player's screen, drawn over the world under the hotbar: the red edge (hurt.png's dithered vignette,
  * stretched so every texel is a big block) and the blots of blood from {@link PlayerInjuries}, each a pixel-art splat
- * with a run creeping down from it, drying darker until it fades. Old-school chunky pixels on purpose, the way the
+ * with a run creeping down from it, drying darker until it fades. keeping beta look with chunky pixels on purpose, the way the
  * game's own hearts and redstone look.
- */
+ **/
+
 public final class HurtScreen {
 	private static final Identifier ID = Identifier.fromNamespaceAndPath("fluidgore", "hurt_screen");
 	private static final Identifier TEXTURE = Identifier.fromNamespaceAndPath("fluidgore", "textures/misc/hurt.png");

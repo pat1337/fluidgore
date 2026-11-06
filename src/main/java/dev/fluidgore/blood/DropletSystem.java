@@ -100,6 +100,14 @@ public final class DropletSystem {
 			return false;
 		}
 
+		if (level.getFluidState(BlockPos.containing(d.x, d.y, d.z)).is(net.minecraft.tags.FluidTags.WATER)) {
+			// Blood let out under water does not fly: the water stops it within a few centimetres and it clouds out
+			// where it left the body, a little way along the way it was going.
+			world.clouds().add(level, d.x + Math.clamp(d.vx, -0.15, 0.15), d.y + Math.clamp(d.vy, -0.15, 0.15), d.z + Math.clamp(d.vz, -0.15, 0.15),
+					d.volume, d.rgb);
+			return false;
+		}
+
 		d.vy -= GRAVITY;
 		d.vx *= DRAG;
 		d.vy *= DRAG;
@@ -117,8 +125,17 @@ public final class DropletSystem {
 				d.light = DecalManager.light(level, BlockPos.containing(d.x, d.y, d.z));
 			}
 
-			// Blood entering water or lava just disperses.
-			return level.getFluidState(BlockPos.containing(d.x, d.y, d.z)).isEmpty();
+			// Blood entering water clouds out in it; in lava it just burns off.
+			net.minecraft.world.level.material.FluidState fluid = level.getFluidState(BlockPos.containing(d.x, d.y, d.z));
+			if (fluid.isEmpty()) {
+				return true;
+			}
+
+			if (fluid.is(net.minecraft.tags.FluidTags.WATER)) {
+				world.clouds().add(level, d.x, d.y, d.z, d.volume, d.rgb);
+			}
+
+			return false;
 		}
 
 		Vec3 at = hit.getLocation();

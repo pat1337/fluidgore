@@ -1,5 +1,6 @@
 package dev.fluidgore.suffer;
 
+import dev.fluidgore.physics.Buoyancy;
 import java.util.List;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.util.Mth;
@@ -36,6 +37,8 @@ public final class Ragdoll {
 	private static final double AIR_DRAG = 0.98;
 	private static final double AIR_FRICTION = 0.91;
 	private static final double GROUND_FRICTION = 0.546;
+	/** Vanilla's hold of water on a mob, per tick. */
+	private static final double WATER_DRAG = 0.8;
 	private static final float TOPPLE_TORQUE = 0.05F;
 	private static final float JOINT_STIFFNESS = 0.16F;
 	private static final float JOINT_DAMPING = 0.14F;
@@ -111,14 +114,26 @@ public final class Ragdoll {
 	 *
 	 * @param box the body's collision box at its current position
 	 */
-	void move(ClientLevel level, AABB box, double driveSpeed) {
+	void move(ClientLevel level, AABB box, double driveSpeed, float lift) {
 		if (driveSpeed > 0.0 && onGround) {
 			float rad = yaw * Mth.DEG_TO_RAD;
 			vx += (-Mth.sin(rad) * driveSpeed - vx) * 0.35;
 			vz += (Mth.cos(rad) * driveSpeed - vz) * 0.35;
 		}
 
-		vy = (vy - GRAVITY) * AIR_DRAG;
+		// In water it sinks or floats by how much of it is under (Buoyancy), the water holding it back like vanilla's,
+		// and a current carries it.
+		double tall = Mth.lerp(Math.abs(Mth.sin(roll)), box.getYsize(), box.getXsize());
+		float wet = Buoyancy.submerged(level, x, box.minY, box.minY + tall, z);
+		if (wet > 0.0F) {
+			Vec3 current = Buoyancy.current(level, x, box.minY + 0.1, z);
+			vy = (vy - GRAVITY * (1.0F - lift * wet)) * WATER_DRAG;
+			vx = current.x + (vx - current.x) * WATER_DRAG;
+			vz = current.z + (vz - current.z) * WATER_DRAG;
+		} else {
+			vy = (vy - GRAVITY) * AIR_DRAG;
+		}
+
 		Vec3 wanted = new Vec3(vx, vy, vz);
 		Vec3 moved = Entity.collideBoundingBox(CollisionContext.empty(), wanted, box, level, List.of());
 		boolean hitX = Math.abs(moved.x - wanted.x) > 1.0E-7;

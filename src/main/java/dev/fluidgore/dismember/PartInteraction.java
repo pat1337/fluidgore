@@ -100,7 +100,11 @@ public final class PartInteraction {
 		target.vz += look.z * 0.55 + (random.nextDouble() - 0.5) * 0.1;
 		spin(target, 0.5F);
 		player.swing(InteractionHand.MAIN_HAND, SwingAnimation.DEFAULT, false);
-		BloodEmitter.burst(blood, level, new Vec3(target.x, target.y, target.z), target.bloodRgb, 0.04F, 6);
+		float squeezed = GorePartManager.blood(target, 0.04F);
+		if (squeezed > 0.0F) {
+			BloodEmitter.burst(blood, level, new Vec3(target.x, target.y, target.z), target.bloodRgb, squeezed, 6);
+		}
+
 		level.playLocalSound(target.x, target.y, target.z, SoundEvents.PLAYER_ATTACK_WEAK, SoundSource.PLAYERS, 0.8F, 0.9F, false);
 		level.playLocalSound(target.x, target.y, target.z, target.bone() ? SoundEvents.BONE_BLOCK_HIT : SoundEvents.SLIME_SQUISH_SMALL, SoundSource.NEUTRAL, 0.8F, 0.7F, false);
 		return true;
@@ -185,9 +189,13 @@ public final class PartInteraction {
 				}
 
 				part.squash = 0.35F;
-				part.bleedLeft += 0.05F;
-				blood.landOnFloor(level, part.x, part.y - r, part.z, 0.12F, part.bloodRgb, blood.decalLifetime());
-				BloodEmitter.burst(blood, level, new Vec3(part.x, part.y, part.z), part.bloodRgb, 0.08F, 14);
+				part.bleedLeft += GorePartManager.blood(part, 0.05F);
+				float burst = GorePartManager.blood(part, 0.12F);
+				if (burst > 0.0F) {
+					blood.landOnFloor(level, part.x, part.y - r, part.z, burst, part.bloodRgb, blood.decalLifetime());
+					BloodEmitter.burst(blood, level, new Vec3(part.x, part.y, part.z), part.bloodRgb, Math.min(0.08F, burst), 14);
+				}
+
 				level.playLocalSound(part.x, part.y, part.z, SoundEvents.SLIME_SQUISH, SoundSource.NEUTRAL, 1.0F, 0.55F, false);
 				continue;
 			}

@@ -8,6 +8,7 @@
 		"fabric-client-gametest": ["dev.fluidgore.test.FluidGoreClientTest"]
 	},
 	"depends": {
-		"fluidgore": "*"
+		"fluidgore": "*",
+		"cobbletank": "*"
 	}
 }

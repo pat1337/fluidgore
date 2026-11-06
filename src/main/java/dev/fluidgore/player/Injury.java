@@ -26,6 +26,11 @@ public record Injury(float rightLeg, float leftLeg, float rightArm, float leftAr
 			return null;
 		}
 
+		if (entity instanceof Player player && PlayerInjuries.spared(player)) {
+			// Creative or spectator: unhurt (see PlayerInjuries.spared).
+			return null;
+		}
+
 		WoundSet set = GoreSystems.dismemberment().wounds().get(entity.getId());
 		float weak = entity instanceof Player ? weak(entity.getHealth() / Math.max(1.0F, entity.getMaxHealth())) : 0.0F;
 		if (set == null && weak <= 0.0F) {

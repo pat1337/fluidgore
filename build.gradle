@@ -11,6 +11,14 @@ repositories {
 	maven { url = "https://maven.terraformersmc.com/releases/" }
 }
 
+// The Cobble Tank add-on: its own mod and jar (cobbletank-<version>.jar), built against Fluid Gore's main source set.
+sourceSets {
+	tank {
+		compileClasspath += main.compileClasspath + main.output
+		runtimeClasspath += main.runtimeClasspath + main.output
+	}
+}
+
 loom {
 	// Optional compatibility testing: ./gradlew runClientGameTest -PextraMods=<folder of mod jars>
 	if (project.hasProperty("extraMods")) {
@@ -31,6 +39,18 @@ loom {
 			vmArg "-Dfluidgore.demos=${project.property('onlyDemos')}"
 		}
 	}
+	// ... and against a dedicated server instead of singleplayer: -PonlyTests=keptBodies,cleanupAuth -Pdedicated
+	if (project.hasProperty("dedicated")) {
+		runs.configureEach {
+			vmArg "-Dfluidgore.dedicated=true"
+		}
+	}
+	// ... and with a shader pack switched on (needs Iris in -PextraMods): -Pshaders=<path to the pack zip>
+	if (project.hasProperty("shaders")) {
+		runs.configureEach {
+			vmArg "-Dfluidgore.shaders=${project.property('shaders')}"
+		}
+	}
 	// ... and with Ragdoll Physics on: -PragdollOn
 	if (project.hasProperty("ragdollOn")) {
 		runs.configureEach {
@@ -38,10 +58,42 @@ loom {
 		}
 	}
 
+	// The dev client loads the Cobble Tank add-on too (its classpath includes Fluid Gore's).
+	runs.named("client") { source sourceSets.tank }
+
+	// Two players on one server, side by side (shared dice, relayed actions):
+	//   ./gradlew runShowServer    then, in two more terminals,    ./gradlew runShowOne    ./gradlew runShowTwo
+	// The server is offline-mode on localhost:25566 (run-server/); each client has its own folder and joins it.
+	runs {
+		showServer {
+			server()
+			name "Showcase Server"
+			runDir "run-server"
+			source sourceSets.tank
+		}
+		showOne {
+			client()
+			name "Showcase Client One"
+			runDir "run"
+			programArgs "--username", "PlayerOne", "--quickPlayMultiplayer", "localhost:25566"
+			source sourceSets.tank
+		}
+		showTwo {
+			client()
+			name "Showcase Client Two"
+			runDir "run2"
+			programArgs "--username", "PlayerTwo", "--quickPlayMultiplayer", "localhost:25566"
+			source sourceSets.tank
+		}
+	}
+
 	mods {
 		"fluidgore" {
 
 			sourceSet sourceSets.main
+		}
+		"cobbletank" {
+			sourceSet sourceSets.tank
 		}
 	}
 }
@@ -56,6 +108,12 @@ fabricApi {
 		enableClientGameTests = true
 		eula = true
 	}
+}
+
+// The game test plays the tank's scenes too, so it sees the add-on.
+sourceSets.named("gametest") {
+	compileClasspath += sourceSets.tank.output
+	runtimeClasspath += sourceSets.tank.output
 }
 
 dependencies {
@@ -88,6 +146,28 @@ java {
 	targetCompatibility = JavaVersion.VERSION_25
 }
 
+// Puts the built jar in the game's mods folder for testing in the real game: ./gradlew installMod (or -PmodsDir=<folder>).
+// The Cobble Tank add-on is installed with it. Older copies of either are deleted first, since two copies of the same mod crash the game.
+def modsDir = providers.gradleProperty("modsDir").orElse(providers.environmentVariable("APPDATA").map { it + "/.minecraft/mods" })
+tasks.register("installMod") {
+	group = "fluidgore"
+	description = "Builds Fluid Gore and the Cobble Tank add-on and installs both in the game's mods folder, replacing older copies."
+	def jarFile = tasks.named("jar").flatMap { it.archiveFile }
+	def tankFile = tasks.named("tankJar", Jar).flatMap { it.archiveFile }
+	inputs.file(jarFile)
+	inputs.file(tankFile)
+	def target = modsDir
+	doLast {
+		def dir = new File(target.get())
+		dir.mkdirs()
+		dir.listFiles().findAll { it.name ==~ /(fluidgore|cobbletank)-.*\.jar/ }.each { it.delete() }
+		[jarFile.get().asFile, tankFile.get().asFile].each { source ->
+			java.nio.file.Files.copy(source.toPath(), new File(dir, source.name).toPath())
+			println "Installed ${source.name} in ${dir}"
+		}
+	}
+}
+
 jar {
 	def projectName = project.name
 	inputs.property "projectName", projectName
@@ -96,3 +176,27 @@ jar {
 		rename { "${it}_$projectName" }
 	}
 }
+
+processTankResources {
+	def version = project.tank_version
+	def fluidgoreVersion = project.version
+	inputs.property "version", version
+	inputs.property "fluidgoreVersion", fluidgoreVersion
+
+	filesMatching("fabric.mod.json") {
+		expand "version": version, "fluidgore_version": fluidgoreVersion
+	}
+}
+
+def tankJar = tasks.register("tankJar", Jar) {
+	group = "build"
+	description = "Builds the Cobble Tank add-on jar."
+	archiveBaseName = "cobbletank"
+	archiveVersion = project.tank_version
+	from sourceSets.tank.output
+	from("LICENSE") {
+		rename { "${it}_cobbletank" }
+	}
+}
+
+tasks.named("assemble") { dependsOn tankJar }

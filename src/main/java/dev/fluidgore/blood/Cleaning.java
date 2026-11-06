@@ -184,6 +184,10 @@ public final class Cleaning {
 	/** A bloody tool rinsed at {@code at}: the blood clouds out into the water. */
 	public static void wash(ClientLevel level, Vec3 at, int toolRgb) {
 		level.playLocalSound(at.x, at.y, at.z, SoundEvents.GENERIC_SPLASH, SoundSource.PLAYERS, 0.45F, 1.2F + level.getRandom().nextFloat() * 0.2F, false);
+		if (WaterClouds.inWater(level, at.x, at.y - 0.15, at.z)) {
+			dev.fluidgore.GoreSystems.blood().clouds().add(level, at.x, at.y - 0.15, at.z, 0.04F, toolRgb);
+		}
+
 		DustParticleOptions cloud = new DustParticleOptions(toolRgb, 1.4F);
 		for (int i = 0; i < 14; i++) {
 			level.addParticle(cloud, at.x + (level.getRandom().nextDouble() - 0.5) * 0.6, at.y + level.getRandom().nextDouble() * 0.2,

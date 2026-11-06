@@ -27,7 +27,8 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Burnt flesh. Every tick an animal spends on fire chars it a little more, from seared through roasted brown to
- * black, and it keeps that colour: alive, dying and dead. Burning bodies give off greasy smoke and ash and sizzle;
+ * black, as far as its injuries go (only a body the fire is killing chars black), and it keeps that colour: alive,
+ * dying and dead. Burning bodies give off greasy smoke and ash and sizzle;
  * once the fire is out they smoulder for a while. A body that burnt to death leaves a black scorch mark where it
  * lies, and the pieces it pops into at the end are charred too.
  */
@@ -36,6 +37,8 @@ public final class Burns {
 	public static final RenderStateDataKey<Integer> KEY = RenderStateDataKey.create(() -> "fluidgore:char");
 	/** Char per tick on fire: fully black after about seven seconds of burning, and four times as fast in lava. */
 	private static final float RATE = 0.007F;
+	/** The furthest a body at full health chars: roasted brown, not black (see {@link #tint}). */
+	private static final float SURVIVABLE = 0.45F;
 	/** Ticks a body keeps smouldering after the fire on it has gone out. */
 	private static final int SMOULDER = 600;
 	private static final double RANGE_SQ = 64.0 * 64.0;
@@ -100,7 +103,13 @@ public final class Burns {
 
 			int id = living.getId();
 			float before = charOf.get(id);
-			charOf.put(id, Math.min(1.0F, before + RATE * (living.isInLava() ? 4.0F : 1.0F)));
+			// How deep a burn goes is how much of the body it has destroyed: a beast that ran through a fire and lived is
+			// singed and seared brown, and only one the fire is killing chars black all over (as Melting does for people).
+			float hurt = living.isAlive() ? Mth.clamp(1.0F - living.getHealth() / Math.max(1.0F, living.getMaxHealth()), 0.0F, 1.0F) : 1.0F;
+			float limit = SURVIVABLE + (1.0F - SURVIVABLE) * hurt;
+			if (before < limit) {
+				charOf.put(id, Math.min(limit, before + RATE * (living.isInLava() ? 4.0F : 1.0F)));
+			}
 			cold.put(id, 0);
 		}
 
@@ -131,9 +140,10 @@ public final class Burns {
 				}
 
 				// Burning: greasy black smoke, flakes of ash coming off, the fat sizzling.
-				if (RANDOM.nextFloat() < 0.3F + c * 0.4F) {
-					level.addParticle(ParticleTypes.LARGE_SMOKE, at.x + (RANDOM.nextDouble() - 0.5) * entity.getBbWidth(), at.y,
-							at.z + (RANDOM.nextDouble() - 0.5) * entity.getBbWidth(), 0.0, 0.04, 0.0);
+				// It rises off the top in the heat, not out of the middle of the body.
+				if (RANDOM.nextFloat() < 0.15F + c * 0.25F) {
+					level.addParticle(ParticleTypes.SMOKE, at.x + (RANDOM.nextDouble() - 0.5) * entity.getBbWidth() * 0.6, at.y + entity.getBbHeight() * 0.5 + 0.1,
+							at.z + (RANDOM.nextDouble() - 0.5) * entity.getBbWidth() * 0.6, 0.0, 0.09, 0.0);
 				}
 
 				if (RANDOM.nextFloat() < c * 0.5F) {
@@ -191,7 +201,17 @@ public final class Burns {
 		return r << 16 | g << 8 | b;
 	}
 
-	/** The entity respawned or is gone for good. */
+	/** The body has a new id (it lies on after its player respawned under the old one). */
+	public void rekey(int from, int to) {
+		if (charOf.containsKey(from)) {
+			charOf.put(to, charOf.remove(from));
+			cold.put(to, cold.remove(from));
+			if (scorched.remove(from)) {
+				scorched.add(to);
+			}
+		}
+	}
+
 	/** Restores how charred a body is, for evidence (see {@code net/Evidence}). */
 	public void restore(int entityId, float charred) {
 		if (charred > 0.0F) {
@@ -199,6 +219,7 @@ public final class Burns {
 		}
 	}
 
+	/** The entity respawned or is gone for good. */
 	public void forget(int entityId) {
 		charOf.remove(entityId);
 		cold.remove(entityId);

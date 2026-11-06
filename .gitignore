@@ -31,6 +31,8 @@ bin/
 # fabric
 
 run/
+run2/
+run-server/
 
 # java
 
@@ -39,3 +41,10 @@ replay_*.log
 *.hprof
 *.jfr
 releases/
+
+# private working notes (AI handoffs, session logs, local setup)
+notes/
+
+# generated anatomy art: regenerate with tools/SheepAnatomyModels.java and tools/CowAnatomyModels.java
+art/**/*.bbmodel
+art/**/*.png

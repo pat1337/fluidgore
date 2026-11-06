@@ -28,7 +28,13 @@ public enum Flesh {
 	 * under it has turned to grey wax (adipocere), what is in the cut is black-brown clotted ooze, the muscle is
 	 * grey-green and soft, there is pus, there are maggots, and the bone is stained yellow-brown.
 	 */
-	ROTTEN;
+	ROTTEN,
+	/**
+	 * Mutton: a grown sheep's meat, dark brick red and close-grained, with little marbling in the lean but a hard, chalky
+	 * white fat over it and between the muscles (sheep fat sets firm and brittle at room temperature, unlike the soft
+	 * fat of a pig). Kept last, so the flesh codes older peers send still read the same.
+	 */
+	MUTTON;
 
 	/** The tissues a wound shows, from the skin down, plus the rot that lives in it, and bare skin where feathers were plucked. */
 	public enum Tissue {
@@ -59,6 +65,10 @@ public enum Flesh {
 			return BEEF;
 		}
 
+		if (type == EntityTypes.SHEEP) {
+			return MUTTON;
+		}
+
 		if (type == EntityTypes.HUSK || type == EntityTypes.CAMEL_HUSK) {
 			return DRIED;
 		}
@@ -84,6 +94,31 @@ public enum Flesh {
 	/** True if this flesh has pus and maggots in its wounds. */
 	public boolean rots() {
 		return this == ROTTEN;
+	}
+
+	/** Ticks a bruise takes to go most of the way from fresh red to the plum of stale blood under the skin. */
+	private static final float BRUISE_DARKENS = 6000.0F;
+
+	/**
+	 * A bruise {@code age} ticks after the blow. Blood let out under unbroken skin is red at first; as it loses its
+	 * oxygen it goes dark, to the plum of {@link #tint}. Bodies without red blood keep the one colour.
+	 */
+	public int bruise(int blood, long age) {
+		int fresh = switch (this) {
+			case MEAT -> mix(scale(blood, 0.85F), 0xB03040, 0.3F);
+			case PORK -> 0xC2404C;
+			case BEEF -> 0xA02A34;
+			case MUTTON -> 0x9A2A32;
+			case POULTRY -> 0xC8506A;
+			default -> -1;
+		};
+		int stale = tint(Tissue.BRUISE, blood);
+		if (fresh < 0) {
+			return stale;
+		}
+
+		float t = 1.0F - (float) Math.exp(-Math.max(0L, age) / BRUISE_DARKENS);
+		return mix(fresh, stale, t);
 	}
 
 	/** Opaque RGB tint of {@code tissue} on a creature whose blood is {@code blood}. */
@@ -130,7 +165,19 @@ public enum Flesh {
 				case MAGGOTS -> 0xF0EBD8;
 				case SKIN -> 0xE8C0A8;
 			};
-			case POULTRY -> switch (tissue) {
+case MUTTON -> switch (tissue) {
+	case BRUISE -> 0x4A1E2E;
+	// Hard white, a little chalky: tallow.
+	case FAT -> 0xF4F1E6;
+	case SPLIT -> 0x6A1219;
+	case MUSCLE -> 0xA0262C;
+	case BONE -> 0xE8DFCB;
+	case PUS -> 0xC8C060;
+	case MAGGOTS -> 0xF0EBD8;
+	// A shorn sheep's skin: pink-white, the grease of the wool in it.
+	case SKIN -> 0xEBCDBF;
+};
+case POULTRY -> switch (tissue) {
 				case BRUISE -> 0x8A4A6A;
 				case FAT -> 0xF4E2A8;
 				case SPLIT -> 0xD8606E;
@@ -191,6 +238,17 @@ public enum Flesh {
 
 	private static int scale(int rgb, float f) {
 		return rgb(r(rgb) * f, g(rgb) * f, b(rgb) * f);
+	}
+
+	/**
+	 * The colour of {@code tissue} as an open wound shows it: muscle in a fresh wound is wet with the animal's own blood
+	 * (pale pork read as grey-mauve in the wound's shading without it). Flesh that does not bleed (dried, rotten, bone)
+	 * shows as it is.
+	 */
+	public int wound(Tissue tissue, int blood) {
+		int base = tint(tissue, blood);
+		boolean bleeds = this == MEAT || this == PORK || this == BEEF || this == MUTTON || this == POULTRY;
+		return tissue == Tissue.MUSCLE && bleeds ? mix(base, blood, 0.35F) : base;
 	}
 
 	private static int mix(int from, int to, float t) {

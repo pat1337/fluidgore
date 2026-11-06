@@ -1,11 +1,14 @@
 package dev.fluidgore.ragdoll;
 
+import dev.fluidgore.GoreSystems;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.physics.BodySlide;
 import dev.fluidgore.suffer.Corpse;
 import dev.fluidgore.suffer.Ragdoll;
 import dev.fluidgore.wound.Cremation;
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.gizmos.Gizmos;
@@ -81,6 +84,22 @@ public final class Rigging {
 		return rig;
 	}
 
+	/** Reused for the boxes of the bodies near the one being stepped. */
+	private static final List<Rig.Block> NEAR = new ArrayList<>();
+
+	/** Hands {@code c}'s rig the segments of every other rigged body close enough to touch it: they lie against each other. */
+	private static void neighbours(Corpse c) {
+		NEAR.clear();
+		AABB reach = c.rig.bounds().inflate(0.5);
+		for (Corpse other : GoreSystems.suffering().corpses()) {
+			if (other != c && other.rig != null && other.rig.bounds().intersects(reach)) {
+				NEAR.addAll(other.rig.blocks());
+			}
+		}
+
+		c.rig.neighbours(NEAR);
+	}
+
 	/**
 	 * One tick of a rigged corpse: what was done to the old ragdoll goes to the rig, the rig moves, and the ragdoll is
 	 * set from it. Returns how hard the trunk hit the ground this tick, on the old ragdoll's scale (0 if it did not).
@@ -114,6 +133,10 @@ public final class Rigging {
 		follow(rig, c);
 		slide(level, rig, c);
 		long start = System.nanoTime();
+		if (rig.stepsNext()) {
+			neighbours(c);
+		}
+		rig.lift = c.lift();
 		rig.tick(level);
 		nanos += System.nanoTime() - start;
 		steps++;
@@ -235,8 +258,10 @@ public final class Rigging {
 		double dz = entity.getZ() - centre.z;
 		double dist = Math.sqrt(dx * dx + dz * dz);
 		double dy = entity.getY() - rig.bottom();
-		// The server took it down a step or a ledge the rig still lies on: it goes there (the segments then settle).
-		if (dist > 8.0 || dy < -DROP) {
+		// The server took it down a step or a ledge the rig still lies on: it goes there (the segments then settle). In
+		// water each floats or sinks on its own: the server's box is not the shape the rig lies in, so it floats at
+		// another height.
+		if (dist > 8.0 || dy < -DROP && !rig.inWater) {
 			rig.shift(dx, dy, dz);
 		} else if (dist > LEASH) {
 			double k = (dist - LEASH) / dist * 0.5;

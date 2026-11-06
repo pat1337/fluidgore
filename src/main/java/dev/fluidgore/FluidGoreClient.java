@@ -6,9 +6,9 @@ import dev.fluidgore.net.Evidence;
 import dev.fluidgore.rot.Decay;
 import dev.fluidgore.net.GoreSync;
 import dev.fluidgore.net.PieceSync;
+import dev.fluidgore.net.VesselBursts;
 import dev.fluidgore.player.HurtScreen;
 import dev.fluidgore.render.GoreRenderer;
-import dev.fluidgore.tank.client.TankClient;
 import dev.fluidgore.ui.GoreCommand;
 import dev.fluidgore.ui.OptionsScreenButton;
 import dev.fluidgore.ui.SortButtons;
@@ -22,8 +22,8 @@ import org.slf4j.Logger;
 
 /**
  * Client entrypoint: all of the gore. Its packets ({@link GoreSync} and the rest) are only used on a server that runs
- * Fluid Gore too (see {@link FluidGore}); the one block it adds, the pressure vessel, has its client half in
- * {@link TankClient}.
+ * Fluid Gore too (see {@link FluidGore}). A pressure-vessel burst reported by the server is played by
+ * {@link VesselBursts}.
  */
 public class FluidGoreClient implements ClientModInitializer {
 	public static final Logger LOGGER = FluidGore.LOGGER;
@@ -34,11 +34,10 @@ public class FluidGoreClient implements ClientModInitializer {
 		PieceSync.register();
 		Evidence.register();
 		Decay.register();
-		TankClient.register();
+		VesselBursts.register();
 
 		ClientTickEvents.END_CLIENT_TICK.register(GoreSystems::tick);
 		ClientTickEvents.END_CLIENT_TICK.register(DemoPlayer::tick);
-		ClientTickEvents.END_CLIENT_TICK.register(TankClient::tick);
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, context) -> GoreCommand.register(dispatcher));
 		ClientReceiveMessageEvents.ALLOW_GAME.register((message, overlay) -> overlay || DemoPlayer.allowMessage(message));
 		ClientChunkEvents.CHUNK_UNLOAD.register((level, chunk) -> GoreSystems.onChunkUnload(chunk.getPos().x(), chunk.getPos().z()));

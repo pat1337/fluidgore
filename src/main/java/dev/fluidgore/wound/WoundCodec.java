@@ -21,8 +21,13 @@ public final class WoundCodec {
 	private WoundCodec() {
 	}
 
+	/**
+	 * Writes {@code set} in the current format: each wound with its age, then the runs of blood. A codec reading data
+	 * from before (see {@link #read}) passes {@code dated} false.
+	 */
 	public static void write(WoundSet set, ByteBuf buf) {
 		List<ModelPart> parts = parts(set.root);
+		long now = Wounds.now();
 		buf.writeByte(set.flesh.ordinal());
 		buf.writeInt(set.blood);
 		buf.writeFloat(set.trauma);
@@ -57,11 +62,51 @@ public final class WoundCodec {
 			for (float f : new float[]{set.u[i], set.v[i], set.radius[i], set.severity[i], set.ox[i], set.oy[i], set.oz[i], set.yaw[i]}) {
 				buf.writeFloat(f);
 			}
+
+			buf.writeInt(age(now, set.born[i]));
+		}
+
+		int runs = 0;
+		for (int i = 0; i < set.runCount; i++) {
+			if (parts.indexOf(set.runs[i].part()) >= 0) {
+				runs++;
+			}
+		}
+
+		buf.writeByte(runs);
+		for (int i = 0; i < set.runCount; i++) {
+			WoundSet.Run run = set.runs[i];
+			int part = parts.indexOf(run.part());
+			if (part < 0) {
+				continue;
+			}
+
+			buf.writeShort(part);
+			buf.writeByte(cubes(run.part()).indexOf(run.cube()));
+			buf.writeByte(run.bodyPart() == null ? -1 : run.bodyPart().ordinal());
+			buf.writeByte(run.axis());
+			buf.writeByte(run.sign());
+			buf.writeByte((run.alongC() ? 1 : 0) | (run.towardsMin() ? 2 : 0));
+			buf.writeByte(run.variant());
+			buf.writeFloat(run.b0());
+			buf.writeFloat(run.b1());
+			buf.writeFloat(run.c0());
+			buf.writeFloat(run.c1());
+			buf.writeInt(age(now, run.born()));
 		}
 	}
 
-	/** Wounds on {@code model} (an entity's) or on {@code root} (a loose piece, with {@code model} null). */
-	public static WoundSet read(ByteBuf buf, @Nullable Model<?> model, ModelPart root) {
+	/** Ticks since {@code born}, as sent: ages travel, game times differ between a save and a later replay. */
+	private static int age(long now, long born) {
+		return (int) Math.clamp(now - born, 0L, Integer.MAX_VALUE);
+	}
+
+	/**
+	 * Wounds on {@code model} (an entity's) or on {@code root} (a loose piece, with {@code model} null). {@code dated}
+	 * is false for data from before wounds had ages and runs: those read as long-ago wounds with no runs.
+	 */
+	public static WoundSet read(ByteBuf buf, @Nullable Model<?> model, ModelPart root, boolean dated) {
+		long now = Wounds.now();
 		Flesh[] fleshes = Flesh.values();
 		Flesh flesh = fleshes[Math.floorMod(buf.readByte(), fleshes.length)];
 		int blood = buf.readInt();
@@ -90,6 +135,7 @@ public final class WoundCodec {
 				f[k] = buf.readFloat();
 			}
 
+			int age = dated ? buf.readInt() : Integer.MAX_VALUE;
 			if (part < 0 || part >= parts.size() || set.count >= WoundSet.MAX || !plausible(f)) {
 				continue;
 			}
@@ -116,9 +162,47 @@ public final class WoundCodec {
 			set.oy[i] = f[5];
 			set.oz[i] = f[6];
 			set.yaw[i] = f[7];
+			set.born[i] = now - Math.max(0, age);
 		}
 
+		if (dated) {
+			readRuns(buf, set, parts, bodyParts, now);
+		}
+
+		// Its blood has run already: what came with it is what there is.
+		set.tracedUpTo = now;
+		set.lyingTraced = dated;
 		return set;
+	}
+
+	private static void readRuns(ByteBuf buf, WoundSet set, List<ModelPart> parts, BodyPart[] bodyParts, long now) {
+		int count = buf.readUnsignedByte();
+		for (int n = 0; n < count; n++) {
+			int part = buf.readShort();
+			int cube = buf.readByte();
+			int bodyPart = buf.readByte();
+			byte axis = buf.readByte();
+			byte sign = buf.readByte();
+			byte flags = buf.readByte();
+			byte variant = buf.readByte();
+			float b0 = buf.readFloat();
+			float b1 = buf.readFloat();
+			float c0 = buf.readFloat();
+			float c1 = buf.readFloat();
+			int age = buf.readInt();
+			if (part < 0 || part >= parts.size() || axis < 0 || axis > 2 || Math.abs(sign) != 1 || !plausible(new float[]{b0, b1, c0, c1})
+					|| !(b0 < b1 && c0 < c1)) {
+				continue;
+			}
+
+			List<ModelPart.Cube> partCubes = cubes(parts.get(part));
+			if (cube < 0 || cube >= partCubes.size()) {
+				continue;
+			}
+
+			set.addRun(new WoundSet.Run(parts.get(part), partCubes.get(cube), bodyPart >= 0 && bodyPart < bodyParts.length ? bodyParts[bodyPart] : null,
+					axis, sign, (flags & 1) != 0, (flags & 2) != 0, b0, b1, c0, c1, Math.floorMod(variant, 4), now - Math.max(0, age)));
+		}
 	}
 
 	/** A wound's floats (u, v, radius, severity, the spot ox/oy/oz, yaw) as one of ours writes them; else it is dropped. */

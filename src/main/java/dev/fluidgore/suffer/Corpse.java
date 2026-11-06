@@ -1,7 +1,10 @@
 package dev.fluidgore.suffer;
 
+import dev.fluidgore.GoreSystems;
 import dev.fluidgore.dismember.ModelParts;
+import dev.fluidgore.physics.Buoyancy;
 import dev.fluidgore.ragdoll.Rig;
+import dev.fluidgore.rot.Rot;
 import dev.fluidgore.trigger.Fate;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.LivingEntity;
@@ -93,6 +96,11 @@ public final class Corpse {
 	public @Nullable Rig rig;
 	/** This body's own dice for its death, seeded by the killing blow: the same on every client (see Fate). */
 	public final RandomSource random;
+	/**
+	 * The dice for the pop when the body goes, drawn first from {@link #random} when the corpse is made. Drawing it at the
+	 * pop instead would depend on how many per-tick draws this client made (wading, flies), which differ between screens.
+	 */
+	public final long popSeed;
 	boolean toppled;
 	/** How far it has dropped since it last lay on something, sliding down a drop (see {@code Suffering.slide}). */
 	float drop;
@@ -161,6 +169,7 @@ public final class Corpse {
 		this.stillTicks = stillTicks;
 		this.seed = seed;
 		this.random = Fate.body(entity);
+		this.popSeed = random.nextLong();
 		this.body = new Ragdoll(entity);
 		this.legs = ModelParts.legs(entity.getId());
 	}
@@ -191,6 +200,12 @@ public final class Corpse {
 	/** The dying is over: the body lies still from now on. */
 	public boolean lifeless() {
 		return groundTicks() > throeTicks;
+	}
+
+	/** How it lies in water (see {@link Buoyancy}): it sinks fresh, and comes up as it bloats. */
+	public float lift() {
+		Rot rot = GoreSystems.decay().of(entity.getId());
+		return Buoyancy.lift(rot == null ? 0.0F : rot.swell());
 	}
 
 	/** The server keeps this body: it stays until the server takes it away (cleaned up, or the player went away). */

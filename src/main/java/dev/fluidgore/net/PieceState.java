@@ -57,6 +57,17 @@ public record PieceState(long key, float x, float y, float z, float vx, float vy
 			}
 		}
 
+		// A rotation must be a unit quaternion (anything else scales the piece), and a spin needs an axis (a zero one turns
+		// the rotation into NaN for good).
+		float q = qx * qx + qy * qy + qz * qz + qw * qw;
+		if (!(q >= 0.9F && q <= 1.1F)) {
+			return false;
+		}
+
+		if (spin != 0.0F && !(ax * ax + ay * ay + az * az >= 1.0E-6F)) {
+			return false;
+		}
+
 		return true;
 	}
 

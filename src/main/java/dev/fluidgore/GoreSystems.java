@@ -7,6 +7,7 @@ import dev.fluidgore.blood.BrokenBlocks;
 import dev.fluidgore.blood.Gush;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.Dismemberment;
+import dev.fluidgore.dismember.Identify;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.net.Evidence;
 import dev.fluidgore.net.GoreSync;
@@ -71,7 +72,9 @@ public final class GoreSystems {
 		if (level == null) {
 			return;
 		}
+		if (!client.isPaused()) dev.fluidgore.fragment.FragmentEffects.tick();
 
+		dev.fluidgore.event.Events.tick();
 		GoreConfig config = GoreConfig.get();
 		boolean gore = config.goreLevel.enabled();
 		boolean suffering = config.sufferingLevel.enabled();
@@ -100,6 +103,7 @@ public final class GoreSystems {
 		Gush.tick();
 		TRACKER.tick(level, BLOOD, DISMEMBERMENT, SUFFERING);
 		if (gore) {
+			dev.fluidgore.trigger.GasBubbles.tick(level);
 			BLOOD.tick(level, tickCount);
 			DISMEMBERMENT.tick(level, BLOOD);
 			DECAY.tick(level, BLOOD);
@@ -110,6 +114,10 @@ public final class GoreSystems {
 
 		if (suffering) {
 			SUFFERING.tick(level);
+		}
+
+		if (gore) {
+			Identify.tick(client);
 		}
 
 		// Every system has had its chance to react to this tick's broken blocks.
@@ -153,6 +161,9 @@ public final class GoreSystems {
 	}
 
 	public static void clearAll() {
+		dev.fluidgore.fragment.FragmentEffects.clear();
+		dev.fluidgore.event.Events.clear();
+		dev.fluidgore.trigger.GasBubbles.clear();
 		GoreSync.clear();
 		Evidence.clear();
 		Gush.clear();

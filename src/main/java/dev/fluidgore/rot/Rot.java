@@ -5,8 +5,8 @@ import net.minecraft.util.Mth;
 
 /**
  * How far one body has rotted, and what that looks like. Everything here is a function of {@code days}, the body's
- * decay-days (see {@link Decay}: real days scaled by heat and by the body's size, so 1 is one day of a pig lying in a
- * 20 degree summer), the same on every screen. The stages and their timing follow the pig carcass studies forensic
+ * decay-days (see {@link Decay}: counted up as it lies, each day weighed by the heat where it lay and by the body's
+ * size, so 1 is one day of a pig lying in a 20 degree summer; it never goes down), the same on every screen. The stages and their timing follow the pig carcass studies forensic
  * entomology is built on (Payne 1965 and after):
  * <ol>
  * <li><b>Fresh</b> (0 to {@link #BLOAT}): the blood settles and the skin goes waxy pale, rigor mortis stiffens the
@@ -50,15 +50,7 @@ public final class Rot {
 	 * below its living size as the flesh goes (negative).
 	 */
 	public float swell() {
-		if (arid) {
-			return 0.35F * ramp(days, BLOAT, 3.0F) - 0.65F * ramp(days, 3.0F, ADVANCED);
-		}
-
-		if (days < ACTIVE) {
-			return ramp(days, BLOAT, ACTIVE - 0.5F);
-		}
-
-		return 1.0F - 1.2F * ramp(days, ACTIVE, ACTIVE + 1.5F) - 0.15F * ramp(days, ADVANCED, DRY);
+		return RotClock.swell(days, arid);
 	}
 
 	/** Has burst open: the gas is out and the inside is coming out. */

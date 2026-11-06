@@ -8,6 +8,7 @@ import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.blood.BloodSupply;
 import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.event.Events;
 import dev.fluidgore.config.GoreLevel;
 import dev.fluidgore.demo.DemoPlayer;
 import dev.fluidgore.dismember.BodyPart;
@@ -76,7 +77,31 @@ public final class DamageTracker {
 	 * An explosion the server told us about: where and how big (TNT is 4, a creeper 3, a charged one 6), and the
 	 * pressure vessel it burst, if it was one of a vessel's TNT.
 	 */
-	private record Blast(Vec3 center, float radius, int tick, PressureVessel.@Nullable Vessel vessel) {
+	/** An explosion seen here: where, its vanilla power, when, the vessel it was if any, and its real charge, kg of TNT. */
+	private record Blast(Vec3 center, float radius, int tick, PressureVessel.@Nullable Vessel vessel, double tntKg, dev.fluidgore.physics.Underwater.@Nullable Site water) {
+		/** The event id: the vessel's rupture, or this charge (see {@link Events}). */
+		long event() {
+			return vessel != null ? vessel.event : Events.id(Events.Source.CHARGE, center, tntKg);
+		}
+
+		Events.Source source() {
+			return vessel != null ? Events.Source.COMPRESSED_GAS : Events.Source.CHARGE;
+		}
+
+		/** Radius of its cloud: a charge's fireball, a vessel's cold gas (see {@link BlastCloud}). */
+		float cloud() {
+			if (water != null) {
+				// Under water: no fireball, no cold cloud (see Underwater).
+				return 0.0F;
+			}
+
+			return vessel != null ? dev.fluidgore.physics.Blast.gasCloudRadius(tntKg) : dev.fluidgore.physics.Blast.fireballRadius(tntKg);
+		}
+
+		/** What caps its pressure close in: the vessel's own, psi (none for a charge). */
+		double psi() {
+			return vessel != null ? vessel.psi : 1.0E7;
+		}
 	}
 
 	/** Blast radius assumed when no explosion packet matches (TNT). */
@@ -101,6 +126,14 @@ public final class DamageTracker {
 
 	/** Called on the client thread when a damage event packet arrives for {@code victim}. */
 	public void onDamageEvent(LivingEntity victim, DamageSource source) {
+		if (source.is(dev.fluidgore.physics.GasJet.JET) || source.is(dev.fluidgore.physics.GasJet.EMBOLISM)) {
+			// A tank's escaping gas: its own channel, named by the tank it came out of.
+			Entity tank = source.getDirectEntity();
+			Vec3 at = tank != null ? tank.position() : source.getSourcePosition() != null ? source.getSourcePosition() : victim.position();
+			Events.record(Events.id(Events.Source.COMPRESSED_GAS, at, 0.0), Events.Source.COMPRESSED_GAS, Events.Channel.JET, -1, Events.Effect.WOUND,
+					Events.body(victim), source.is(dev.fluidgore.physics.GasJet.EMBOLISM) ? "gas embolism" : "jet");
+		}
+
 		if (GoreSync.serverReportsHits()) {
 			// The server's own report of this hit follows it (see onReport).
 			return;
@@ -128,10 +161,27 @@ public final class DamageTracker {
 		boolean[] burst = {false};
 		PressureVessel.Vessel vessel = vessels.explosion(center, burst);
 		// The rest of a vessel's TNT is the same burst: every body is graded from the vessel's centre.
-		blasts.add(new Blast(vessel != null ? vessel.centre : center, radius, tick, vessel));
+		double tntKg = vessel != null ? vessel.tntKg : dev.fluidgore.physics.Blast.charge(radius);
 		ClientLevel level = Minecraft.getInstance().level;
+		// A charge under water plays out by the water's rules (see Underwater). A vessel's burst keeps the open-air ones.
+		dev.fluidgore.physics.Underwater.Site water = vessel == null && level != null ? dev.fluidgore.physics.Underwater.at(level, center) : null;
+		Blast blast = new Blast(vessel != null ? vessel.centre : center, radius, tick, vessel, tntKg, water);
+		blasts.add(blast);
+		if (level != null && GoreConfig.get().goreLevel.enabled() && (vessel == null || burst[0])) {
+			// Once per event (a vessel's other TNT is the same burst): its cloud, and the wave on the pieces already lying about.
+			Events.begin(blast.event(), blast.source(), blast.center(), blast.cloud(), water);
+			try {
+				BlastCloud.burst(level, GoreSystems.blood(), GoreSystems.dismemberment(), blast.center(), blast.cloud(), tntKg, blast.psi());
+			} finally {
+				Events.end();
+			}
+		}
+
 		if (burst[0] && level != null && GoreConfig.get().goreLevel.enabled()) {
 			PressureVessel.burst(level, GoreSystems.blood(), GoreSystems.dismemberment(), vessel);
+		} else if (vessel == null && level != null && GoreConfig.get().goreLevel.enabled()) {
+			// Any other explosion is a charge of its own size: the same primary blast injuries on every body it reaches.
+			PressureVessel.shockwave(level, GoreSystems.blood(), GoreSystems.dismemberment(), center, tntKg, water);
 		}
 	}
 
@@ -165,6 +215,14 @@ public final class DamageTracker {
 				float max = Math.max(1.0F, living.getMaxHealth());
 				dismemberment.wounds().heal(id, (health - previous) / max, health >= max - 0.01F);
 				BloodSupply.refill(id, (health - previous) / max, health >= max - 0.01F);
+			}
+
+			if (living instanceof net.minecraft.world.entity.player.Player player && player.isAlive() && PlayerInjuries.spared(player)
+					&& dismemberment.wounds().get(id) != null) {
+				// Gone into creative or spectator: nothing hurts them there, so their wounds close and stop bleeding, though
+				// switching left their health where it was.
+				dismemberment.wounds().forget(id);
+				BloodSupply.refill(id, 1.0F, true);
 			}
 
 			PendingHit hit;
@@ -256,21 +314,43 @@ public final class DamageTracker {
 		// the radius, times how much of the body the blast could see). Null and 0 for anything but a blast.
 		Vec3 blastAt = null;
 		float impact = 0.0F;
+		double tntKg = dev.fluidgore.physics.Blast.TNT_BLOCK_KG;
+		float seen = 1.0F;
+		// Which event the blast was, and what made it: a vessel's rupture has no heat to give (see Events).
+		long blastEvent = 0L;
+		Events.Source blastSource = Events.Source.UNKNOWN;
+		// The blast's cloud (a charge's fireball, a vessel's cold gas): what a piece made inside it is seared or chilled by.
+		float blastCloud = 0.0F;
+		// Where it went off under water, if it did (see Underwater).
+		dev.fluidgore.physics.Underwater.Site blastWater = null;
 		if (hit != null && hit.explosion()) {
 			Blast known = blastFor(victim, hit.sourceAt());
 			if (known != null || hit.sourceAt() != null) {
 				blastAt = known != null ? known.center() : hit.sourceAt();
+				blastEvent = known != null ? known.event() : Events.id(Events.Source.UNKNOWN, blastAt, 0.0);
+				blastSource = known != null ? known.source() : Events.Source.UNKNOWN;
+				blastCloud = known != null ? known.cloud() : 0.0F;
+				blastWater = known != null ? known.water() : null;
 				float radius = known != null ? known.radius() : DEFAULT_BLAST_RADIUS;
+				tntKg = known != null ? known.tntKg() : dev.fluidgore.physics.Blast.charge(radius);
+				seen = ServerExplosion.getSeenPercent(blastAt, victim);
 				if (known != null && known.vessel() != null) {
 					// A pressure vessel: graded by the real overpressure on the body, not by vanilla's TNT.
 					impact = PressureVessel.impact(PressureVessel.overpressure(known.vessel(), victim), TEAR_IMPACT, SHRED_IMPACT);
 				} else {
-					double dist = Math.sqrt(victim.distanceToSqr(blastAt)) / (radius * 2.0);
-					impact = (float) Math.max(0.0, (1.0 - dist) * ServerExplosion.getSeenPercent(blastAt, victim));
+					// Any other charge the same way, by the real overpressure of its TNT equivalent at the body's middle.
+					double metres = victim.getBoundingBox().getCenter().distanceTo(blastAt);
+					Vec3 middle = victim.getBoundingBox().getCenter();
+					float open = blastWater != null
+							? dev.fluidgore.physics.Underwater.overpressure(level, blastWater, middle, tntKg, 1.0E7, dev.fluidgore.physics.BodyMass.kilograms(victim))
+							: dev.fluidgore.physics.Blast.overpressure(metres, tntKg, 1.0E7);
+					float kPa = dev.fluidgore.physics.Blast.covered(open, seen);
+					impact = PressureVessel.impact(kPa, TEAR_IMPACT, SHRED_IMPACT);
 				}
 			} else {
 				// No idea where it went off (the explosion packet never came): a blast, but not a close one.
 				blastAt = victim.position();
+				blastEvent = Events.id(Events.Source.UNKNOWN, blastAt, 0.0);
 				impact = 0.3F;
 			}
 		}
@@ -305,14 +385,21 @@ public final class DamageTracker {
 		boolean torn = false;
 		// Players too: a creeper that kills you throws your limbs about for everyone watching.
 		if (gore && blastAt != null && lethal && config.blastGore && config.goreLevel.ordinal() >= GoreLevel.MEDIUM.ordinal()) {
-			if (impact >= SHRED_IMPACT) {
-				// Right next to the charge: the body is torn to pieces and there is nothing left to die slowly.
-				dismemberment.vaporize(blood, level, victim, blastAt);
-				gore = false;
-			} else if (impact >= TEAR_IMPACT) {
-				// Close: limbs and head torn off and thrown, the belly opened. The rest is thrown like a doll.
-				dismemberment.tear(blood, level, victim, blastAt, (impact - TEAR_IMPACT) / (SHRED_IMPACT - TEAR_IMPACT));
-				torn = true;
+			Events.begin(blastEvent, blastSource, blastAt, blastCloud, blastWater);
+			try {
+				if (impact >= SHRED_IMPACT) {
+					// Right next to the charge: the body is torn to pieces and there is nothing left to die slowly.
+					dismemberment.vaporize(blood, level, victim, blastAt, tntKg, seen);
+					Events.record(Events.Channel.PRESSURE, -1, Events.Effect.WOUND, Events.body(victim), String.format(java.util.Locale.ROOT, "shredded, impact %.2f", impact));
+					gore = false;
+				} else if (impact >= TEAR_IMPACT) {
+					// Close: limbs and head torn off and thrown, the belly opened. The rest is thrown like a doll.
+					dismemberment.tear(blood, level, victim, blastAt, (impact - TEAR_IMPACT) / (SHRED_IMPACT - TEAR_IMPACT), tntKg, seen);
+					Events.record(Events.Channel.PRESSURE, -1, Events.Effect.WOUND, Events.body(victim), String.format(java.util.Locale.ROOT, "torn open, impact %.2f", impact));
+					torn = true;
+				}
+			} finally {
+				Events.end();
 			}
 		}
 
@@ -323,65 +410,88 @@ public final class DamageTracker {
 		// One player's blade on another: deeper cuts, harder bleeding, and a kill takes more than one limb.
 		boolean pvp = config.brutalPvp && victim instanceof Player && meleeAttacker instanceof Player && weapon != null && weapon.cuts();
 		Deaths.Zone zone = Deaths.Zone.UNKNOWN;
-		if (gore) {
-			// No attacker and no blast: a fall, fire, drowning. Bruising and a little bleeding.
-			// Fire sears the flesh shut instead: it chars (see Burns) but does not bleed.
-			if (hit == null || !hit.fire()) {
-				// What is in a walking corpse is old and thick: it oozes rather than sprays.
-				float flow = (EntityFilter.isRotten(victim) ? 0.55F : 1.0F) * (pvp ? PVP_BLEED : 1.0F);
-				BloodEmitter.bleed(blood, level, victim, damage, lethal, away, (weapon != null ? weapon.bleed : 0.25F) * flow);
-			}
+		// Everything the blast does to this body (its wound, chips, a smashed bone) is the blast event's.
+		if (blastAt != null) {
+			Events.begin(blastEvent, blastSource, blastAt, blastCloud, blastWater);
+		}
 
-			Wounds.Strike wound = weapon == null ? null : blastAt != null
-					? dismemberment.wounds().onBlast(victim, blastAt, damage)
-					: dismemberment.wounds().onDamage(victim, attacker, meleeAttacker != null, weapon, damage * (pvp ? PVP_DEPTH : 1.0F),
-							hit != null ? hit.rayFrom() : null, hit != null ? hit.rayDir() : null);
-			if (wound != null) {
-				BodyPart part = wound.hit().bodyPart();
-				zone = part == null ? Deaths.Zone.BODY : part == BodyPart.HEAD ? Deaths.Zone.HEAD : Deaths.Zone.LEG;
-			}
+		try {
+			if (gore) {
+				// No attacker and no blast: a fall, fire, drowning. Bruising and a little bleeding.
+				// Fire sears the flesh shut instead: it chars (see Burns) but does not bleed.
+				if (hit == null || !hit.fire()) {
+					// What is in a walking corpse is old and thick: it oozes rather than sprays.
+					float flow = (EntityFilter.isRotten(victim) ? 0.55F : 1.0F) * (pvp ? PVP_BLEED : 1.0F);
+					BloodEmitter.bleed(blood, level, victim, damage, lethal, away, (weapon != null ? weapon.bleed : 0.25F) * flow);
+				}
 
-			if (wound != null) {
-				// The shooter may be too far away for this client to know of; the server said where the arrow came from.
-				Vec3 from = blastAt != null ? blastAt : hit != null && hit.rayFrom() != null ? hit.rayFrom() : attacker.getEyePosition();
-				Vec3 blow = wound.hit().point().subtract(from);
-				if (blow.lengthSqr() > 1.0E-6) {
-					HitFeedback.hit(level, blood, victim, wound, weapon, blow.normalize());
+				// Gas pressure has already acted on the anatomy in PressureVessel.shock. It does not make a second,
+				// arbitrary surface slash through the body's later network pose; casing contacts supply their own wounds.
+				Wounds.Strike wound = weapon == null || blastAt != null && blastSource == Events.Source.COMPRESSED_GAS ? null : blastAt != null
+						? dismemberment.wounds().onBlast(victim, blastAt, damage)
+						: dismemberment.wounds().onDamage(victim, attacker, meleeAttacker != null, weapon, damage * (pvp ? PVP_DEPTH : 1.0F),
+								hit != null ? hit.rayFrom() : null, hit != null ? hit.rayDir() : null);
+				if (wound != null && blastAt != null) {
+					Vec3 p = wound.hit().point();
+					Events.record(blastEvent, blastSource, Events.Channel.PRESSURE, -1, Events.Effect.WOUND, Events.body(victim),
+							String.format(java.util.Locale.ROOT, "blast wound, %s at %.2f %.2f %.2f", wound.hit().bodyPart() == null ? "trunk" : wound.hit().bodyPart(), p.x, p.y, p.z));
+				}
+
+				if (wound != null) {
+					BodyPart part = wound.hit().bodyPart();
+					zone = part == null ? Deaths.Zone.BODY : part == BodyPart.HEAD ? Deaths.Zone.HEAD : Deaths.Zone.LEG;
+				}
+
+				if (wound != null) {
+					// The shooter may be too far away for this client to know of; the server said where the arrow came from.
+					Vec3 from = blastAt != null ? blastAt : hit != null && hit.rayFrom() != null ? hit.rayFrom() : attacker.getEyePosition();
+					Vec3 blow = wound.hit().point().subtract(from);
+					if (blow.lengthSqr() > 1.0E-6) {
+						HitFeedback.hit(level, blood, victim, wound, weapon, blow.normalize());
+					}
+				}
+
+				if (wound != null && wound.fracture() != Wounds.INTACT) {
+					HitFeedback.fracture(level, victim, wound);
+					BodyPart broke = wound.hit().bodyPart();
+					// Smashed: the head caves in, the limb is torn off. Players keep their parts until they die. A blast
+					// tears limbs off only where its overpressure does (see Dismemberment.tear), not by a bone it broke.
+					// No animal lives on without its head: a skull smashed by a blow that did not kill caves in, but stays on.
+					if (wound.fracture() == Wounds.SMASHED && broke != null && blastAt == null && (lethal || !(victim instanceof Player) && broke != BodyPart.HEAD)) {
+						dismemberment.smash(blood, level, victim, broke, victim::position, Float.NaN, 0.0F, away);
+					}
+				}
+
+				if (wound != null && wound.aimed()) {
+					// The player aimed this blow: only the part that was struck can come off.
+					BodyPart struck = wound.hit().bodyPart();
+					boolean heavy = damage >= config.heavyHitDamage && !(victim instanceof Player);
+					boolean chop = weapon.cuts() && (lethal || heavy) && RANDOM.nextFloat() < config.goreLevel.partChance;
+					// The head comes off only with the blow that kills: a living body keeps it.
+					if (struck != null && (wound.cut() || chop) && (lethal || struck != BodyPart.HEAD)) {
+						dismemberment.severPart(blood, level, victim, struck, victim::position, Float.NaN, 0.0F, away);
+					}
+
+					if (pvp && lethal && config.goreLevel.ordinal() >= GoreLevel.HIGH.ordinal()) {
+						// Hacked down: more of the body comes apart than the limb that took the blow.
+						dismemberment.onBladedHit(blood, level, victim, true, away);
+					}
+				} else if (torn) {
+					// Already torn apart above.
+				} else if (weapon != Weapon.BLAST && EntityFilter.isBone(victim) && (meleeAttacker != null || lethal)
+						|| meleeAttacker != null && EntityFilter.isBladed(DemoPlayer.held(meleeAttacker))) {
+					// Spot unknown or guessed. Bone does not need a blade: any hard blow can snap a bone off. A blast that
+					// did not tear the body (above) kills it whole: by blast lung, its limbs on.
+					// Players only lose parts on death; mobs can also lose one to a heavy hit and keep walking.
+					boolean heavy = damage >= config.heavyHitDamage && !(victim instanceof Player);
+					if (lethal || heavy) {
+						dismemberment.onBladedHit(blood, level, victim, lethal, away);
+					}
 				}
 			}
-
-			if (wound != null && wound.fracture() != Wounds.INTACT) {
-				HitFeedback.fracture(level, victim, wound);
-				BodyPart broke = wound.hit().bodyPart();
-				// Smashed: the head caves in, the limb is torn off. Players keep their parts until they die.
-				if (wound.fracture() == Wounds.SMASHED && broke != null && (lethal || !(victim instanceof Player))) {
-					dismemberment.smash(blood, level, victim, broke, victim::position, Float.NaN, 0.0F, away);
-				}
-			}
-
-			if (wound != null && wound.aimed()) {
-				// The player aimed this blow: only the part that was struck can come off.
-				BodyPart struck = wound.hit().bodyPart();
-				boolean heavy = damage >= config.heavyHitDamage && !(victim instanceof Player);
-				boolean chop = weapon.cuts() && (lethal || heavy) && RANDOM.nextFloat() < config.goreLevel.partChance;
-				if (struck != null && (wound.cut() || chop)) {
-					dismemberment.severPart(blood, level, victim, struck, victim::position, Float.NaN, 0.0F, away);
-				}
-
-				if (pvp && lethal && config.goreLevel.ordinal() >= GoreLevel.HIGH.ordinal()) {
-					// Hacked down: more of the body comes apart than the limb that took the blow.
-					dismemberment.onBladedHit(blood, level, victim, true, away);
-				}
-			} else if (torn) {
-				// Already torn apart above.
-			} else if (weapon != Weapon.BLAST && EntityFilter.isBone(victim) && (meleeAttacker != null || lethal)
-					|| meleeAttacker != null && EntityFilter.isBladed(DemoPlayer.held(meleeAttacker)) || weapon == Weapon.BLAST && lethal) {
-				// Spot unknown or guessed. Bone does not need a blade: any hard blow can snap a bone off.
-				// Players only lose parts on death; mobs can also lose one to a heavy hit and keep walking.
-				boolean heavy = damage >= config.heavyHitDamage && !(victim instanceof Player);
-				if (lethal || heavy) {
-					dismemberment.onBladedHit(blood, level, victim, lethal, away);
-				}
+		} finally {
+			if (blastAt != null) {
+				Events.end();
 			}
 		}
 

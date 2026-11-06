@@ -29,7 +29,11 @@ import org.jspecify.annotations.Nullable;
 public final class BloodFluidSim {
 	private static final float HEAD_PER_VOLUME = 0.25F;
 	private static final float FLOW_RATE = 0.22F;
-	private static final float MIN_MOBILE = 0.06F;
+	/**
+	 * Thinner than this, blood does not run on: thick and starting to clot, its edge stops while it still lies a few
+	 * millimetres deep, so a pig's worth on a flat floor covers a few square metres in one sheet, not a field of drops.
+	 */
+	private static final float MIN_MOBILE = 0.4F;
 	private static final float MIN_TRANSFER = 0.004F;
 	/** Volume lost to drying each tick, as a fraction. */
 	private static final float EVAPORATION = 0.0006F;
@@ -78,8 +82,8 @@ public final class BloodFluidSim {
 		} else {
 			float total = cell.volume + volume;
 			cell.rgb = mixColor(cell.rgb, rgb, volume / total);
-			// Fresh blood re-wets the puddle.
-			cell.age = Math.min(cell.age, cell.lifetime / 5);
+			// Fresh blood re-wets the puddle; a good deal of it makes it fresh again, bright on top of the old.
+			cell.age = Math.min(cell.age, volume / total > 0.3F ? 0 : cell.lifetime / 12);
 			cell.lifetime = Math.max(cell.lifetime, lifetime);
 		}
 
@@ -274,7 +278,11 @@ public final class BloodFluidSim {
 				}
 
 				if (level.getFluidState(pos).is(FluidTags.WATER) || level.getFluidState(pos).is(FluidTags.LAVA)) {
-					// Blood disperses in water and burns off in lava.
+					// Water flooding a pool lifts it off the floor in a cloud; lava burns it off.
+					if (level.getFluidState(pos).is(FluidTags.WATER)) {
+						world.clouds().add(level, cell.bx + 0.5, cell.surfaceY + 0.1, cell.bz + 0.5, cell.volume, cell.rgb);
+					}
+
 					it.remove();
 					continue;
 				}
@@ -306,14 +314,14 @@ public final class BloodFluidSim {
 	}
 
 	private boolean isPooled(BloodCell cell) {
-		if (cell.volume < BloodCell.FULL * 0.75F) {
+		if (cell.volume < BloodCell.FULL * 0.4F) {
 			return false;
 		}
 
 		int wet = 0;
 		for (Direction dir : HORIZONTAL) {
 			BloodCell n = cells.get(BlockPos.asLong(cell.bx + dir.getStepX(), cell.by, cell.bz + dir.getStepZ()));
-			if (n != null && n.volume > BloodCell.FULL * 0.3F) {
+			if (n != null && n.volume > BloodCell.FULL * 0.25F) {
 				wet++;
 			}
 		}
@@ -347,7 +355,7 @@ public final class BloodFluidSim {
 		active.clear();
 	}
 
-	static int mixColor(int a, int b, float t) {
+	public static int mixColor(int a, int b, float t) {
 		t = Mth.clamp(t, 0.0F, 1.0F);
 		int r = (int) Mth.lerp(t, (a >> 16) & 0xFF, (b >> 16) & 0xFF);
 		int g = (int) Mth.lerp(t, (a >> 8) & 0xFF, (b >> 8) & 0xFF);

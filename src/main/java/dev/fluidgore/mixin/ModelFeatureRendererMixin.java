@@ -2,6 +2,9 @@ package dev.fluidgore.mixin;
 
 import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.blaze3d.vertex.PoseStack;
+import dev.fluidgore.anatomy.Melt;
+import dev.fluidgore.blood.Pallor;
+import dev.fluidgore.anatomy.MeltRenderer;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.Dismemberment;
 import dev.fluidgore.dismember.ModelParts;
@@ -17,6 +20,7 @@ import dev.fluidgore.suffer.SufferPose;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.wound.BloodyWool;
 import dev.fluidgore.wound.Burns;
+import dev.fluidgore.wound.CoatRenderer;
 import dev.fluidgore.wound.Cremation;
 import dev.fluidgore.wound.CremationRenderer;
 import dev.fluidgore.wound.WoundRenderer;
@@ -69,6 +73,9 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 	private static final float STIFF = 0.75F;
 	@Unique
 	private final List<ModelPart> fluidgore$hidden = new ArrayList<>();
+	/** Parts whose skin MeltRenderer draws instead of the model. */
+	@Unique
+	private final List<ModelPart> fluidgore$skipped = new ArrayList<>();
 	@Unique
 	private final List<ModelPart> fluidgore$moved = new ArrayList<>();
 	@Unique
@@ -98,14 +105,26 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 		BloodyWool.Plumage plumage = submit.model() instanceof AdultChickenModel ? state.getData(BloodyWool.PLUMAGE) : null;
 		Cremation.Charred charred = state.getData(Cremation.KEY);
 		RigPose rig = state.getData(RigPose.KEY);
+		Melt burning = state.getData(Melt.KEY);
+		Melt melt = burning != null && MeltRenderer.drawsOn(submit.model(), burning) ? burning : null;
+		boolean fleece = fluidgore$fleece(submit, burning);
 		if ((mask == null || mask == 0) && pose == null && body == null && (wounds == null || wounds.brokenMask() == 0) && injury == null && rot == null
-				&& plumage == null && charred == null && rig == null) {
+				&& plumage == null && charred == null && rig == null && melt == null && !fleece) {
 			return;
 		}
 
 		Model<?> model = submit.model();
+		if (fleece) {
+			// MeltRenderer draws the burning fleece after the model, patch by patch.
+			MeltRenderer.skins(model, part -> {
+				if (!part.skipDraw) {
+					part.skipDraw = true;
+					fluidgore$skipped.add(part);
+				}
+			});
+		}
 		if (charred != null && charred.shorn() && model instanceof SheepFurModel) {
-			// The wool goes up first, in a flash: none of the fleece is left.
+			// The fleece has charred and fallen away: none of it is left.
 			model.root().visible = false;
 			fluidgore$hidden.add(model.root());
 			return;
@@ -155,7 +174,28 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 		}
 
 		if (charred != null) {
-			fluidgore$cremate(model, parts, charred);
+			fluidgore$cremate(model, parts, charred.flex(), charred.wasted());
+		}
+
+		if (fleece) {
+			// The fleece follows the body under it as the heat draws it in.
+			fluidgore$cremate(model, parts, burning.flex(), 0.0F);
+		}
+
+		if (melt != null) {
+			// A burning person keeps their shape, the anatomy is drawn inside it; only a dead one draws up into the boxer's pose.
+			fluidgore$cremate(model, parts, melt.flex(), 0.0F);
+			Integer id = state.getData(ModelParts.ENTITY_ID);
+			if (id != null && model == ModelParts.drawn(id) && submit.sheetedDecalPose() == null && submit.uvMapping() == null
+					&& submit.tintedColor() >>> 24 == 0xFF) {
+				// MeltRenderer draws the skin after the model, texel by texel, with the burns through it.
+				MeltRenderer.skins(model, part -> {
+					if (!part.skipDraw) {
+						part.skipDraw = true;
+						fluidgore$skipped.add(part);
+					}
+				});
+			}
 		}
 
 		if (posed != null) {
@@ -172,9 +212,7 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 	 * away and the trunk and limbs shrink down to the bones.
 	 */
 	@Unique
-	private void fluidgore$cremate(Model<?> model, ModelPart[] parts, Cremation.Charred charred) {
-		float flex = charred.flex();
-		float wasted = charred.wasted();
+	private void fluidgore$cremate(Model<?> model, ModelPart[] parts, float flex, float wasted) {
 		boolean upright = model instanceof HumanoidModel<?>;
 		ModelPart torso = ModelParts.torso(model);
 		if (torso != null && wasted > 0.0F) {
@@ -339,7 +377,34 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 						getVertexBuilder(WoundRenderer.renderType()), submit.lightCoords(), submit.overlayCoords());
 			}
 
-			WoundSet wounds = state.getData(Wounds.KEY);
+			Melt burning = state.getData(Melt.KEY);
+			Melt melt = burning != null && MeltRenderer.drawsOn(submit.model(), burning) ? burning : null;
+			if (melt != null && id != null && submit.model() == ModelParts.drawn(id) && submit.uvMapping() == null) {
+				// A person or a beast burning: the skin texel by texel with the holes, and what shows through them.
+				MeltRenderer.draw(submit.model(), melt, poseStack, getVertexBuilder(submit.renderType()), null, submit.lightCoords(), submit.overlayCoords(),
+						submit.tintedColor());
+				MeltRenderer.draw(submit.model(), melt, poseStack, null, getVertexBuilder(MeltRenderer.renderType()), submit.lightCoords(), submit.overlayCoords(),
+						submit.tintedColor());
+			}
+
+			if (fluidgore$fleece(submit, burning)) {
+				// A sheep's fleece smouldering off it, in its own colour and with the blood in it.
+				int wool = fluidgore$woolColor(submit.tintedColor(), state);
+				MeltRenderer.fleece(submit.model(), burning, poseStack, getVertexBuilder(submit.renderType()), null, submit.lightCoords(), submit.overlayCoords(), wool);
+				MeltRenderer.fleece(submit.model(), burning, poseStack, null, getVertexBuilder(MeltRenderer.renderType()), submit.lightCoords(), submit.overlayCoords(),
+						wool);
+				melt = burning;
+			}
+
+			// Blood on the coat, under the wounds: the body's own model, and a fleece drawn over it.
+			BloodyWool.Drawn coat = melt == null && charred == null ? state.getData(BloodyWool.COAT) : null;
+			if (coat != null && id != null && (submit.model() == ModelParts.drawn(id) || submit.model() instanceof SheepFurModel)) {
+				CoatRenderer.draw(coat, submit.model(), ModelParts.drawn(id), poseStack, getVertexBuilder(WoundRenderer.renderType()), submit.lightCoords(),
+						submit.overlayCoords());
+			}
+
+			// Once the skin is burning through, its wounds would hang over the holes.
+			WoundSet wounds = melt != null && melt.bare() > 0.2F ? null : state.getData(Wounds.KEY);
 			if (wounds != null && wounds.count() > 0 && wounds.drawsOn(submit.model())) {
 				if (submit.model() instanceof AdultChickenModel && GoreConfig.get().bloodyFeathers) {
 					// The feathers round each wound are matted with its blood (under the wound itself).
@@ -368,6 +433,44 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 		fluidgore$restore();
 	}
 
+	/**
+	 * Bled white: vanilla's white overlay lifts the skin of the body itself toward white (see {@link Pallor#overlay}). Not
+	 * on a body charred or rotted dark, where the pale would show as a grey film over the black.
+	 */
+	@ModifyArg(
+			method = "prepareModel",
+			at = @At(value = "INVOKE", target = "Lnet/minecraft/client/model/Model;renderToBuffer(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;III)V"),
+			index = 3
+	)
+	private int fluidgore$pallid(int overlay, @Local(argsOnly = true) ModelFeatureRenderer.Submit<?> submit) {
+		Float pale = fluidgore$pale(submit);
+		if (pale == null || submit.state() instanceof LivingEntityRenderState state && fluidgore$darkened(state)) {
+			return overlay;
+		}
+
+		return Pallor.overlay(overlay, pale);
+	}
+
+	/** How pale the body drawn by {@code submit} is, if it is the body's own model (not its wool, armour or saddle). */
+	@Unique
+	private static @Nullable Float fluidgore$pale(ModelFeatureRenderer.Submit<?> submit) {
+		if (submit.sheetedDecalPose() != null || !(submit.state() instanceof LivingEntityRenderState state)) {
+			return null;
+		}
+
+		Float pale = state.getData(Pallor.KEY);
+		Integer id = state.getData(ModelParts.ENTITY_ID);
+		return pale != null && id != null && submit.model() == ModelParts.drawn(id) ? pale : null;
+	}
+
+	/** The body is charred, cremated or rotted dark. */
+	@Unique
+	private static boolean fluidgore$darkened(LivingEntityRenderState state) {
+		Integer tint = state.getData(Burns.KEY);
+		int luma = tint == null ? 255 : ((tint >> 16 & 0xFF) * 3 + (tint >> 8 & 0xFF) * 6 + (tint & 0xFF)) / 10;
+		return luma < 200 || state.getData(Cremation.KEY) != null || state.getData(Melt.KEY) != null;
+	}
+
 	/** Burnt flesh: the body and anything sharing its state (saddle, wool) darkens; not the block-breaking overlay. */
 	@ModifyArg(
 			method = "prepareModel",
@@ -382,6 +485,12 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 				color = Burns.apply(color, soaked);
 			}
 
+			Float pale = fluidgore$pale(submit);
+			if (pale != null) {
+				// Bled white: the flush goes out of the skin of the body itself.
+				color = Burns.apply(color, Pallor.tint(pale));
+			}
+
 			Integer tint = state.getData(Burns.KEY);
 			if (tint != null) {
 				return Burns.apply(color, tint);
@@ -389,6 +498,20 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 		}
 
 		return color;
+	}
+
+	/** A burning sheep's own fleece, drawn by {@link MeltRenderer#fleece} instead of the model; not ghostly or a decal. */
+	@Unique
+	private static boolean fluidgore$fleece(ModelFeatureRenderer.Submit<?> submit, @Nullable Melt burning) {
+		return burning != null && burning.fleece() && submit.model() instanceof SheepFurModel && submit.sheetedDecalPose() == null && submit.uvMapping() == null
+				&& submit.tintedColor() >>> 24 == 0xFF;
+	}
+
+	/** The fleece's colour as vanilla would draw it: its dye, reddened by the blood soaked into it. */
+	@Unique
+	private static int fluidgore$woolColor(int color, LivingEntityRenderState state) {
+		Integer soaked = state.getData(BloodyWool.KEY);
+		return soaked != null ? Burns.apply(color, soaked) : color;
 	}
 
 	/**
@@ -462,6 +585,11 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 		}
 
 		fluidgore$hidden.clear();
+		for (ModelPart part : fluidgore$skipped) {
+			part.skipDraw = false;
+		}
+
+		fluidgore$skipped.clear();
 		// Newest first, so a part saved twice ends up as it was before either change.
 		for (int i = fluidgore$moved.size() - 1; i >= 0; i--) {
 			ModelPart part = fluidgore$moved.get(i);

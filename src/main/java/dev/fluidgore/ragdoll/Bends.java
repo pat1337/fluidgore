@@ -107,6 +107,27 @@ public final class Bends {
 		return M.set(pose.pose()).mul(split.toSegment()[split.segmentOf(coordinate)]);
 	}
 
+	/** True if {@code part} is cut into stretches in the body being drawn now. */
+	public static boolean cut(@Nullable ModelPart part) {
+		Bends bends = current;
+		return bends != null && part != null && bends.of(part) != null;
+	}
+
+	/**
+	 * The matrix to draw the point {@code x, y, z} of a part (pixels, its own frame) with: the part's own, or that of the
+	 * stretch the point is on. Valid until the next call.
+	 */
+	public static Matrix4f matrixAt(PoseStack.Pose pose, @Nullable ModelPart part, float x, float y, float z) {
+		Bends bends = current;
+		Split split = bends != null && part != null ? bends.of(part) : null;
+		if (split == null) {
+			return pose.pose();
+		}
+
+		int axis = split.cut().axis();
+		return M.set(pose.pose()).mul(split.toSegment()[split.segmentOf(axis == 0 ? x : axis == 1 ? y : z)]);
+	}
+
 	/**
 	 * Draws a face-aligned quad in a part's own coordinates (pixels): {@code depth} on axis {@code a}, spanning
 	 * {@code b0..b1} on axis {@code b} and {@code c0..c1} on axis {@code c}, with uv from {@code u0, v0} to

@@ -166,7 +166,11 @@ public final class CorpseStrike {
 		Vec3 flat = new Vec3(look.x, 0.0, look.z);
 		Vec3 away = flat.lengthSqr() > 1.0E-6 ? flat.normalize() : null;
 		if (wound != null) {
-			if (struck != null && wound.cut()) {
+			// An axe that reaches the bone of a leg or the neck on a downed body goes through the joint: no luck in it,
+			// as a butcher jointing a carcass takes a leg in a chop or two.
+			boolean chopped = struck != null && weapon == Weapon.CHOP && GoreConfig.get().butchery && GoreConfig.get().goreLevel.woundDepth >= 0.7F
+					&& wound.severity() >= Math.min(weapon.cap, GoreConfig.get().goreLevel.woundDepth) - 1.0E-3F;
+			if (struck != null && (wound.cut() || chopped)) {
 				GoreSystems.dismemberment().severPart(blood, level, entity, struck, () -> new Vec3(body.x, body.y, body.z), body.yaw, body.roll, away);
 			} else if (struck == null && wound.cut() && blade && GoreConfig.get().butchery) {
 				// Through the carcass, already cut to the bone: a few chops through the backbone and it splits.
@@ -187,7 +191,28 @@ public final class CorpseStrike {
 		double height = entity.getBbHeight();
 		double half = Mth.lerp(lying, width, Math.max(width, height)) * 0.5;
 		double top = Mth.lerp(lying, height, width);
-		return new AABB(body.x - half, body.y, body.z - half, body.x + half, body.y + top, body.z + half).inflate(0.1);
+		Vec3 m = middle(corpse, 1.0F);
+		return new AABB(m.x - half, m.y, m.z - half, m.x + half, m.y + top, m.z + half).inflate(0.1);
+	}
+
+	/**
+	 * The middle of a body seen from above, at the height of its lowest point, {@code t} of the way from the last tick
+	 * to this one. A ragdoll pivots on its feet, so a body tipped onto its side has its middle half its height off to the
+	 * side it fell, turned as the renderer turns it (the yaw, then the roll about the feet); an articulated body's rig
+	 * keeps its own centre. Everything drawn on or thrown off a body (its flames, smoke, sparks) starts from here.
+	 */
+	public static Vec3 middle(Corpse corpse, float t) {
+		Ragdoll body = corpse.body;
+		double x = body.x(t);
+		double y = body.y(t);
+		double z = body.z(t);
+		if (corpse.rig != null) {
+			return new Vec3(x, y, z);
+		}
+
+		float yaw = (180.0F - body.yaw(t)) * Mth.DEG_TO_RAD;
+		float half = corpse.entity.getBbHeight() * 0.5F * Mth.sin(body.roll(t));
+		return new Vec3(x - half * Mth.cos(yaw), y, z + half * Mth.sin(yaw));
 	}
 
 	/** For tests: the point at the middle of a body. */

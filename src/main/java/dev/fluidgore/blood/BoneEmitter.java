@@ -3,6 +3,7 @@ package dev.fluidgore.blood;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.config.GoreLevel;
 import dev.fluidgore.trigger.Fate;
+import dev.fluidgore.wound.BurntBone;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.DustParticleOptions;
@@ -32,6 +33,9 @@ public final class BoneEmitter {
 	private static final BlockParticleOption CRUMBS = new BlockParticleOption(ParticleTypes.BLOCK, Blocks.BONE_BLOCK.defaultBlockState());
 	private static final ItemParticleOption SHARD = new ItemParticleOption(ParticleTypes.ITEM, Items.BONE);
 	private static final ItemParticleOption POWDER = new ItemParticleOption(ParticleTypes.ITEM, Items.BONE_MEAL);
+	private static final BlockParticleOption CHAR_CRUMBS = new BlockParticleOption(ParticleTypes.BLOCK, Blocks.COAL_BLOCK.defaultBlockState());
+	private static final BlockParticleOption GREY_CRUMBS = new BlockParticleOption(ParticleTypes.BLOCK, Blocks.TUFF.defaultBlockState());
+	private static final ItemParticleOption CHARCOAL = new ItemParticleOption(ParticleTypes.ITEM, Items.CHARCOAL);
 	private static final SoundEvent[] CRACK = {SoundEvents.BONE_BLOCK_BREAK, SoundEvents.BONE_BLOCK_HIT, SoundEvents.BONE_BLOCK_FALL};
 
 	private BoneEmitter() {
@@ -90,12 +94,45 @@ public final class BoneEmitter {
 			if (RANDOM.nextFloat() < 0.25F) {
 				level.addParticle(POWDER, x, y, z, RANDOM.nextGaussian() * 0.04, 0.03 + RANDOM.nextDouble() * 0.05, RANDOM.nextGaussian() * 0.04);
 			} else {
-				level.addParticle(new DustParticleOptions(DUST, 0.6F + RANDOM.nextFloat()), x, y, z, 0.0, 0.0, 0.0);
+				level.addParticle(new DustParticleOptions(DUST, 0.3F + RANDOM.nextFloat() * 0.35F), x, y, z, 0.0, 0.0, 0.0);
 			}
 		}
 
 		if (dust > 4) {
 			level.addParticle(ParticleTypes.POOF, origin.x, origin.y, origin.z, RANDOM.nextGaussian() * 0.02, 0.02, RANDOM.nextGaussian() * 0.02);
+		}
+	}
+
+	/**
+	 * {@link #burst} for burnt bone, {@code heat} as in {@link BurntBone}: charred bone breaks into black lumps and soot
+	 * like charcoal, grey bone into grey grit, and only calcined bone into the pale crumbs and powder of clean bone.
+	 */
+	public static void burnt(ClientLevel level, Vec3 origin, @Nullable Vec3 away, int shards, int dust, double speed, float heat) {
+		if (heat >= BurntBone.CALCINED) {
+			burst(level, origin, away, shards, dust, speed);
+			return;
+		}
+
+		boolean grey = heat >= BurntBone.GREY;
+		BlockParticleOption crumbs = grey ? GREY_CRUMBS : CHAR_CRUMBS;
+		for (int i = 0; i < shards; i++) {
+			double vx = RANDOM.nextGaussian() * speed + (away != null ? away.x * speed : 0.0);
+			double vy = 0.08 + RANDOM.nextDouble() * speed * 1.5;
+			double vz = RANDOM.nextGaussian() * speed + (away != null ? away.z * speed : 0.0);
+			// A few pieces still show they were bone; the rest are lumps of char.
+			level.addParticle(RANDOM.nextFloat() < 0.7F ? crumbs : grey ? SHARD : CHARCOAL, origin.x, origin.y, origin.z, vx, vy, vz);
+		}
+
+		int color = BurntBone.color(heat);
+		for (int i = 0; i < dust; i++) {
+			double x = origin.x + (RANDOM.nextDouble() - 0.5) * 0.4;
+			double y = origin.y + (RANDOM.nextDouble() - 0.5) * 0.4;
+			double z = origin.z + (RANDOM.nextDouble() - 0.5) * 0.4;
+			level.addParticle(new DustParticleOptions(color, 0.3F + RANDOM.nextFloat() * 0.35F), x, y, z, 0.0, 0.0, 0.0);
+		}
+
+		if (dust > 4) {
+			level.addParticle(ParticleTypes.SMOKE, origin.x, origin.y, origin.z, RANDOM.nextGaussian() * 0.02, 0.02, RANDOM.nextGaussian() * 0.02);
 		}
 	}
 

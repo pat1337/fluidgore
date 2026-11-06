@@ -528,8 +528,10 @@ public final class Skeleton {
 			bones.add(new Bone("neck", null, 0, new Vector3f(), new Matrix4f().translation(headPivot), box, volume));
 			int neck = bones.size() - 1;
 			Vector3f toHead = new Vector3f(towardChest).negate();
-			ball(chest, neck, new Vector3f(headPivot).add(end), toHead, 40.0F * DEG, -20.0F * DEG, 20.0F * DEG);
-			ball(neck, head, headPivot, toHead, 55.0F * DEG, -35.0F * DEG, 35.0F * DEG);
+			// Together about 50 degrees each way: a dead head lolls and drops, but a short, thick farm-animal neck does not
+			// fold the head back against the shoulder (95 did, and the head sank into the body: the rig has no self-collision).
+			ball(chest, neck, new Vector3f(headPivot).add(end), toHead, 20.0F * DEG, -12.0F * DEG, 12.0F * DEG);
+			ball(neck, head, headPivot, toHead, 30.0F * DEG, -18.0F * DEG, 18.0F * DEG);
 		}
 
 		/** Root-level parts without a segment ride on the bone whose middle is nearest their pivot. */

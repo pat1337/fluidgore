@@ -48,7 +48,29 @@ public final class ModelHit {
 		void visit(int axis, float lo, float hi, Matrix4f pose);
 	}
 
+	/**
+	 * One cube as posed now (or the stretch of it a ragdoll has cut at a joint, {@code lo} to {@code hi} along
+	 * {@code cutAxis}). {@code pose} takes the part's own space, in blocks, to world space relative to the point the
+	 * boxes were asked for.
+	 */
+	public record Box(ModelPart part, ModelPart.Cube cube, @Nullable BodyPart bodyPart, Matrix4f pose, Matrix4f inverse, int cutAxis, float lo,
+			float hi) {
+	}
+
 	private ModelHit() {
+	}
+
+	/** Every cube of the model as posed now, relative to {@code relativeTo}. */
+	public static List<Box> boxes(LivingEntity entity, ModelParts.Posed posed, Vec3 relativeTo) {
+		List<Box> out = new java.util.ArrayList<>();
+		walk(entity, posed, relativeTo, (part, pose, bodyPart) -> stretches(posed.bends(), part, pose, (axis, lo, hi, stretchPose) -> {
+			Matrix4f fixed = new Matrix4f(stretchPose);
+			Matrix4f inverse = new Matrix4f(fixed).invert();
+			for (ModelPart.Cube cube : ((ModelPartAccessor) (Object) part).fluidgore$getCubes()) {
+				out.add(new Box(part, cube, bodyPart, fixed, inverse, axis, lo, hi));
+			}
+		}));
+		return out;
 	}
 
 	/** The nearest cube face hit by the ray from {@code from} along unit vector {@code dir}, within {@code reach}. */

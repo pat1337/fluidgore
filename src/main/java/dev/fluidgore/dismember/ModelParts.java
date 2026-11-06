@@ -280,6 +280,19 @@ public final class ModelParts {
 		return scale;
 	}
 
+	/**
+	 * How {@code target} is turned in model space as posed now: the turn of every part from the root down to it, in the
+	 * order {@code translateAndRotate} applies them (each part z, then y, then x).
+	 */
+	public static org.joml.Quaternionf chainRotation(ModelPart root, ModelPart target) {
+		org.joml.Quaternionf rotation = new org.joml.Quaternionf();
+		for (ModelPart part : chain(root, target)) {
+			rotation.mul(new org.joml.Quaternionf().rotationZYX(part.zRot, part.yRot, part.xRot));
+		}
+
+		return rotation;
+	}
+
 	/** Adds a ragdoll's joint offsets to the head and limbs; {@code before} sees each part before it is changed. */
 	public static void applyJoints(ModelPart[] parts, float[] j, @Nullable Consumer<ModelPart> before) {
 		ModelPart head = parts[BodyPart.HEAD.ordinal()];

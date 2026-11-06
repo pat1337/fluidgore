@@ -132,7 +132,7 @@ public final class PieceSync {
 		p.vx = s.vx();
 		p.vy = s.vy();
 		p.vz = s.vz();
-		p.rotation.set(s.qx(), s.qy(), s.qz(), s.qw());
+		p.rotation.set(s.qx(), s.qy(), s.qz(), s.qw()).normalize();
 		p.spinAxis.set(s.ax(), s.ay(), s.az());
 		p.spinSpeed = s.spin();
 		p.held = s.has(PieceState.HELD);

@@ -5,6 +5,7 @@ import dev.fluidgore.trigger.Fate;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.core.Direction;
+import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
@@ -25,6 +26,7 @@ public final class BloodWorld {
 	private final DropletSystem droplets = new DropletSystem(this);
 	private final Footprints footprints = new Footprints(this);
 	private final Spurts spurts = new Spurts(this);
+	private final WaterClouds clouds = new WaterClouds();
 	private final RandomSource random = Fate.stream("world");
 	private long serial;
 
@@ -44,6 +46,11 @@ public final class BloodWorld {
 		return droplets;
 	}
 
+	/** Blood in water. */
+	public WaterClouds clouds() {
+		return clouds;
+	}
+
 	long nextSerial() {
 		return serial++;
 	}
@@ -59,6 +66,32 @@ public final class BloodWorld {
 		landOnFloor(level, x, y, z, 0.0, -1.0, 0.0, volume, rgb, lifetime);
 	}
 
+	/** Stains drawn out so far (see {@link #drawnOut}), for the game test. */
+	private long drawn;
+
+	public long drawn() {
+		return drawn;
+	}
+
+	/**
+	 * A stain drawn out across the floor along ({@code dx}, {@code dz}), {@code length} long and {@code radius} wide at the
+	 * start: round blots overlapping in a line, the first the biggest, each further one smaller, ending in a drop. A drop
+	 * that came in at a slant, or blood dragged along the ground. (The wall-run tile, used for this before, read as a pin
+	 * lying on the floor.)
+	 */
+	public void drawnOut(Level level, double x, double surfaceY, double z, double dx, double dz, float radius, float length, int rgb, int lifetime) {
+		drawn++;
+		int blots = Mth.clamp(Math.round(length / Math.max(0.02F, radius)), 1, 4);
+		for (int i = 0; i < blots; i++) {
+			float f = blots == 1 ? 0.0F : i / (float) (blots - 1);
+			float r = radius * (1.0F - 0.55F * f) * (0.9F + random.nextFloat() * 0.2F);
+			double along = (length - radius) * f;
+			int tile = i == blots - 1 && blots > 1 ? BloodTextures.droplet() : BloodTextures.smallSplat(random);
+			decals.addFloor(level, x + dx * along, surfaceY, z + dz * along, Math.max(0.04F, r), tile, random.nextInt(8), rgb, true,
+					lifetime);
+		}
+	}
+
 	/**
 	 * A drop landing at velocity (vx, vy, vz). Steep, it splats round; at a slant it stretches into a teardrop as long
 	 * as its width over the sine of the angle it came in at, its tail pointing the way it flew. That is how a spatter
@@ -72,11 +105,8 @@ public final class BloodWorld {
 			float half = Math.min(0.6F, width / (float) Math.max(0.33, sine) * 0.5F);
 			double dx = vx / across;
 			double dz = vz / across;
-			// The streak tile's blob sits near one end with the tails running on: the blob goes where the drop hit.
-			double ahead = half * 0.76;
-			int orient = Math.abs(dx) > Math.abs(dz) ? 4 | (dx < 0.0 ? 2 : 0) : dz < 0.0 ? 2 : 0;
-			decals.addFloor(level, x + dx * ahead, y, z + dz * ahead, half, BloodTextures.STREAK, orient | random.nextInt(2), vary(rgb, 0.18F), true,
-					lifetime);
+			// The drop where it hit, drawn out the way it flew.
+			drawnOut(level, x, y, z, dx, dz, width * 0.5F, half * 2.0F, vary(rgb, 0.18F), lifetime);
 			return;
 		}
 
@@ -132,6 +162,7 @@ public final class BloodWorld {
 		droplets.tick(level);
 		fluid.tick(level, tickCount);
 		decals.tick(level, tickCount);
+		clouds.tick(level);
 		if (GoreConfig.get().footprints) {
 			footprints.tick(level);
 		} else {
@@ -217,9 +248,12 @@ public final class BloodWorld {
 			return false;
 		}
 
-		int orient = Math.abs(stroke.x) > Math.abs(stroke.z) ? 4 | (stroke.x < 0.0 ? 2 : 0) : stroke.z < 0.0 ? 2 : 0;
-		decals.addFloor(level, x, surface, z, Math.clamp(half, 0.1F, 0.6F), BloodTextures.STREAK, orient | random.nextInt(2), vary(rgb, 0.12F), true,
-				decalLifetime());
+		double along = Math.sqrt(stroke.x * stroke.x + stroke.z * stroke.z);
+		double ux = along > 1.0E-6 ? stroke.x / along : 1.0;
+		double uz = along > 1.0E-6 ? stroke.z / along : 0.0;
+		float size = Math.clamp(half, 0.1F, 0.6F);
+		// Centred on (x, z): the smear runs back along the stroke and on past it.
+		drawnOut(level, x - ux * size, surface, z - uz * size, ux, uz, size * 0.6F, size * 2.0F, vary(rgb, 0.12F), decalLifetime());
 		return true;
 	}
 
@@ -293,6 +327,7 @@ public final class BloodWorld {
 	public void onChunkUnload(int chunkX, int chunkZ) {
 		decals.removeChunk(chunkX, chunkZ);
 		fluid.removeChunk(chunkX, chunkZ);
+		clouds.removeChunk(chunkX, chunkZ);
 	}
 
 	public void clear() {
@@ -301,5 +336,6 @@ public final class BloodWorld {
 		droplets.clear();
 		spurts.clear();
 		footprints.clear();
+		clouds.clear();
 	}
 }

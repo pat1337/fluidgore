@@ -6,6 +6,7 @@ import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.mixin.ModelPartAccessor;
 import dev.fluidgore.ragdoll.Bends;
+import dev.fluidgore.render.GoreRenderer;
 import net.minecraft.client.model.Model;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.rendertype.RenderType;
@@ -33,9 +34,20 @@ public final class WoundRenderer {
 	private static final Layer[] ROUND = {
 			new Layer(0, 0.0F, 1.3F, Flesh.Tissue.BRUISE), new Layer(1, 0.25F, 1.0F, Flesh.Tissue.SPLIT),
 			new Layer(2, 0.5F, 0.8F, Flesh.Tissue.MUSCLE), new Layer(3, 0.75F, 0.5F, Flesh.Tissue.BONE)};
-	/** A slash: bruised margins, the fat under the skin, the gaping split, muscle in its depth, a line of bone. */
+	/**
+	 * A chop or a ragged cut: bruised, scraped margins, the fat under the skin, the gaping split, muscle in its depth, a
+	 * line of bone.
+	 */
 	private static final Layer[] SLASH = {
 			new Layer(4, 0.0F, 1.15F, Flesh.Tissue.BRUISE), new Layer(5, 0.2F, 1.0F, Flesh.Tissue.FAT),
+			new Layer(6, 0.25F, 0.95F, Flesh.Tissue.SPLIT), new Layer(7, 0.45F, 0.85F, Flesh.Tissue.MUSCLE),
+			new Layer(8, 0.75F, 0.7F, Flesh.Tissue.BONE)};
+	/**
+	 * A blade's clean cut: no bruised or scraped margin, as a sharp edge crushes nothing. A shallow one is a thin red
+	 * line; deeper, the skin's elastic pulls its lips apart and the yellow fat shows at them round the gape.
+	 */
+	private static final Layer[] INCISED = {
+			new Layer(6, 0.0F, 0.6F, Flesh.Tissue.SPLIT), new Layer(5, 0.2F, 1.0F, Flesh.Tissue.FAT),
 			new Layer(6, 0.25F, 0.95F, Flesh.Tissue.SPLIT), new Layer(7, 0.45F, 0.85F, Flesh.Tissue.MUSCLE),
 			new Layer(8, 0.75F, 0.7F, Flesh.Tissue.BONE)};
 	/** Rot in a zombie's wound, over the meat and under the bone: pus once it is open, maggots once it is deep. */
@@ -51,6 +63,7 @@ public final class WoundRenderer {
 	private static final Layer[] STOVE_IN = {
 			new Layer(0, 0.0F, 1.5F, Flesh.Tissue.BRUISE), new Layer(1, 0.0F, 1.1F, Flesh.Tissue.SPLIT), new Layer(13, 0.0F, 1.0F, Flesh.Tissue.BONE)};
 	private static final Layer[] SLASH_ROTTEN = rotten(SLASH);
+	private static final Layer[] INCISED_ROTTEN = rotten(INCISED);
 	/**
 	 * The cut face of a piece of meat, edge to edge as on a butcher's block: the grain of the muscle, veins of fat through
 	 * it, a rim of fat along one edge, wet smears of blood, and the bone in a piece big enough to have it. Steak is
@@ -63,12 +76,20 @@ public final class WoundRenderer {
 	private static final Layer CUT_BONE = new Layer(3, 0.75F, 0.3F, Flesh.Tissue.BONE);
 	private static final Layer[] CUT_MEAT = {GRAIN, MARBLE, RIM, SMEAR, CUT_BONE};
 	private static final Layer[] CUT_POULTRY = {GRAIN, SMEAR, CUT_BONE};
+	/** Mutton: close grain with hardly any marbling in it, under a thick rim of hard white fat. */
+	private static final Layer[] CUT_MUTTON = {GRAIN, RIM, SMEAR, CUT_BONE};
 	private static final Layer[] CUT_ROTTEN = rotten(CUT_MEAT);
 	/** Outward lift per layer, in model pixels, so the layers stack instead of fighting. */
 	private static final float LIFT = 0.02F;
-	/** wounds.png is 8 tiles across and 18 down. */
+	/** wounds.png is 8 tiles across and 21 down. */
 	private static final float TILE_U = 1.0F / 8.0F;
-	private static final float TILE_V = 1.0F / 18.0F;
+	public static final float TILE_V = 1.0F / 21.0F;
+	/** Row of the runs of blood: columns 0-3 run down the tile, 4-7 across it. */
+	private static final int RUN_ROW = 18;
+	/** A run sits under the wound it came from. */
+	private static final float RUN_LIFT = LIFT * 0.5F;
+	/** Ticks a thin film of blood on skin takes to dry dark. */
+	private static final float RUN_DRIES = 4800.0F;
 
 	/** The outer skin layer over each {@link dev.fluidgore.dismember.BodyPart} of a player model, in its order. */
 	private static final String[] CLOTHES = {"hat", "right_sleeve", "left_sleeve", "right_pants", "left_pants"};
@@ -94,6 +115,20 @@ public final class WoundRenderer {
 	/** Draws the wounds of {@code set}; {@code poseStack} holds the model's root transform, as after renderToBuffer. */
 	public static void draw(WoundSet set, PoseStack poseStack, VertexConsumer buffer, int light, int overlay) {
 		ModelPart root = set.root;
+		long now = Wounds.now();
+		for (int i = 0; i < set.runCount; i++) {
+			WoundSet.Run run = set.runs[i];
+			ModelPart[] chain = ModelParts.chain(root, run.part());
+			if (chain.length == 0 || !visible(chain)) {
+				continue;
+			}
+
+			poseStack.pushPose();
+			Bends.chain(poseStack, chain);
+			run(set, run, now, poseStack.last(), buffer, light, overlay);
+			poseStack.popPose();
+		}
+
 		for (int i = 0; i < set.count; i++) {
 			ModelPart[] chain = ModelParts.chain(root, set.part[i]);
 			if (chain.length == 0 || !visible(chain)) {
@@ -102,7 +137,7 @@ public final class WoundRenderer {
 
 			poseStack.pushPose();
 			Bends.chain(poseStack, chain);
-			wound(set, i, poseStack.last(), buffer, light, overlay);
+			wound(set, i, now, poseStack.last(), buffer, light, overlay);
 			poseStack.popPose();
 		}
 	}
@@ -202,7 +237,7 @@ public final class WoundRenderer {
 		return true;
 	}
 
-	private static void wound(WoundSet set, int i, PoseStack.Pose pose, VertexConsumer buffer, int light, int overlay) {
+	private static void wound(WoundSet set, int i, long now, PoseStack.Pose pose, VertexConsumer buffer, int light, int overlay) {
 		ModelPart.Cube cube = set.cube[i];
 		int a = set.axis[i];
 		int b = (a + 1) % 3;
@@ -216,7 +251,8 @@ public final class WoundRenderer {
 			case WoundSet.PLUCK -> PLUCKED;
 			case WoundSet.CRUSH -> CRUSHED;
 			case WoundSet.RIBS -> STOVE_IN;
-			case WoundSet.CUT -> set.flesh.rots() ? CUT_ROTTEN : set.flesh == Flesh.POULTRY ? CUT_POULTRY : CUT_MEAT;
+			case WoundSet.CUT -> set.flesh.rots() ? CUT_ROTTEN : set.flesh == Flesh.POULTRY ? CUT_POULTRY : set.flesh == Flesh.MUTTON ? CUT_MUTTON : CUT_MEAT;
+			case WoundSet.INCISED, WoundSet.STICK -> set.flesh.rots() ? INCISED_ROTTEN : INCISED;
 			default -> set.flesh.rots() ? slash ? SLASH_ROTTEN : ROUND_ROTTEN : slash ? SLASH : ROUND;
 		};
 		for (int n = 0; n < layers.length; n++) {
@@ -246,10 +282,58 @@ public final class WoundRenderer {
 			float v0 = tv + (c0 - (set.v[i] - r)) * spanV;
 			float v1 = tv + (c1 - (set.v[i] - r)) * spanV;
 			float depth = face + set.sign[i] * LIFT * (n + 1);
-			int color = 0xFF000000 | set.flesh.tint(layer.tissue(), set.blood);
+			int color = 0xFF000000 | (layer.tissue() == Flesh.Tissue.BRUISE ? set.flesh.bruise(set.blood, now - set.born[i])
+					: set.flesh.wound(layer.tissue(), set.blood));
 			// The raw cut in an enderman glows with its blood.
 			int lit = glows(set, layer.tissue()) ? LightCoordsUtil.FULL_BRIGHT : light;
 			Bends.quad(buffer, pose, set.part[i], a, b, c, depth, set.sign[i], b0, b1, c0, c1, u0, u1, v0, v1, color, lit, overlay);
 		}
+	}
+
+	/**
+	 * A run of blood on the skin, the tile stretched along it with its source end where the blood came onto the face.
+	 * Fresh it is bright and wet; it dries darker, as the pools on the floor do.
+	 */
+	private static void run(WoundSet set, WoundSet.Run run, long now, PoseStack.Pose pose, VertexConsumer buffer, int light, int overlay) {
+		ModelPart.Cube cube = run.cube();
+		int a = run.axis();
+		int b = (a + 1) % 3;
+		int c = (a + 2) % 3;
+		float[] min = {cube.minX, cube.minY, cube.minZ};
+		float[] max = {cube.maxX, cube.maxY, cube.maxZ};
+		float b0 = Math.max(min[b], run.b0());
+		float b1 = Math.min(max[b], run.b1());
+		float c0 = Math.max(min[c], run.c0());
+		float c1 = Math.min(max[c], run.c1());
+		if (b0 >= b1 || c0 >= c1) {
+			return;
+		}
+
+		// Where the clamped face sits within the whole run, 0 to 1 along each face axis.
+		float fb0 = (b0 - run.b0()) / (run.b1() - run.b0());
+		float fb1 = (b1 - run.b0()) / (run.b1() - run.b0());
+		float fc0 = (c0 - run.c0()) / (run.c1() - run.c0());
+		float fc1 = (c1 - run.c0()) / (run.c1() - run.c0());
+		float tu = (run.variant() + (run.alongC() ? 0 : 4)) * TILE_U;
+		float tv = RUN_ROW * TILE_V;
+		float u0 = tu + fb0 * TILE_U;
+		float u1 = tu + fb1 * TILE_U;
+		float v0 = tv + fc0 * TILE_V;
+		float v1 = tv + fc1 * TILE_V;
+		if (run.towardsMin()) {
+			// The source end of the tile goes at the high end.
+			if (run.alongC()) {
+				v0 = tv + (1.0F - fc0) * TILE_V;
+				v1 = tv + (1.0F - fc1) * TILE_V;
+			} else {
+				u0 = tu + (1.0F - fb0) * TILE_U;
+				u1 = tu + (1.0F - fb1) * TILE_U;
+			}
+		}
+
+		float depth = (run.sign() > 0 ? max[a] : min[a]) + run.sign() * RUN_LIFT;
+		float dryness = Math.min(1.0F, Math.max(0.0F, now - run.born()) / RUN_DRIES);
+		int color = 0xFF000000 | GoreRenderer.shade(set.blood, dryness);
+		Bends.quad(buffer, pose, run.part(), a, b, c, depth, run.sign(), b0, b1, c0, c1, u0, u1, v0, v1, color, light, overlay);
 	}
 }

@@ -74,8 +74,8 @@ public final class HitFeedback {
 			}
 		}
 
-		// Into the fleece, its own and its neighbours'.
-		GoreSystems.dismemberment().wool().hit(level, entity, at, depth);
+		// Onto its coat where it was struck, and over its neighbours'.
+		GoreSystems.dismemberment().wool().hit(level, entity, at, depth, strike.hit().bodyPart());
 
 		// A blade in a sheep cuts clumps of fleece loose, matted with the blood of the wound.
 		if (BloodyWool.woolly(entity) && weapon.cuts() && depth >= 0.25F) {
@@ -136,7 +136,7 @@ public final class HitFeedback {
 					play(level, at, SoundEvents.HONEY_BLOCK_BREAK, 0.6F, 0.8F);
 				}
 			}
-			case MEAT, POULTRY, PORK, BEEF -> {
+			case MEAT, POULTRY, PORK, BEEF, MUTTON -> {
 				switch (weapon) {
 					// A heavy, dead thud: meat over bone, no splash.
 					case BLUNT -> {

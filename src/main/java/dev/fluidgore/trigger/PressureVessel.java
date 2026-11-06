@@ -5,8 +5,12 @@ import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.blood.BloodSupply;
 import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.config.GoreConfig;
-import dev.fluidgore.tank.Blast;
+import dev.fluidgore.config.GoreLevel;
+import dev.fluidgore.event.Events;
+import dev.fluidgore.physics.Blast;
 import dev.fluidgore.dismember.Dismemberment;
+import dev.fluidgore.suffer.Corpse;
+import dev.fluidgore.suffer.Suffering;
 import dev.fluidgore.wound.HitFeedback;
 import dev.fluidgore.wound.Weapon;
 import dev.fluidgore.wound.Wounds;
@@ -31,7 +35,7 @@ import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 /**
- * A 2x2 of TNT stands in for a carbon-overwrapped pressure vessel (COPV): by default the Roadster's, 200 litres of gas
+ * A 2x2 of TNT stands in for a carbon-overwrapped pressure vessel (COPV): by default 200 litres of gas
  * at 10,000 psi. When the first of the four goes off, the vessel bursts, and every body around it is hurt the way a
  * real blast of that size hurts: by the peak overpressure where it stood, not by vanilla's TNT formula.
  * <p>
@@ -61,6 +65,10 @@ public final class PressureVessel {
 	public static final float LETHAL_KPA = Blast.LETHAL_KPA;
 	public static final float TEAR_KPA = Blast.TEAR_KPA;
 	public static final float SHRED_KPA = Blast.SHRED_KPA;
+	/** A dead body is thrown about by a blast out to where the wave is this strong. */
+	private static final float THROWN_KPA = 15.0F;
+	/** Ticks after its death a body was surely not killed by the blast now reaching it. */
+	private static final int JUST_DIED = 5;
 	/** Fragments from a 200 L vessel; more for a bigger one. */
 	public static final float FRAGMENTS_PER_LITRE = 1.5F;
 	/** Ticks after a burst during which bits of the casing come down round it. */
@@ -88,6 +96,8 @@ public final class PressureVessel {
 		final @Nullable Int2IntOpenHashMap hits;
 		final int armed;
 		int burstAt = -1;
+		/** The rupture's id in the event trace (see {@link Events}): the same for the same vessel set up the same way. */
+		public final long event;
 
 		/** A tank block: its damage is real (the server's), so a lung blast kills from {@link Blast#FATAL_KPA}. */
 		public boolean real() {
@@ -95,12 +105,17 @@ public final class PressureVessel {
 		}
 
 		Vessel(Vec3 centre, float litres, float psi, @Nullable Int2IntOpenHashMap hits, int armed) {
+			this(centre, litres, psi, (float) Blast.tntKg(litres, psi), hits, armed);
+		}
+
+		Vessel(Vec3 centre, float litres, float psi, float waveKg, @Nullable Int2IntOpenHashMap hits, int armed) {
 			this.centre = centre;
-			this.tntKg = (float) Blast.tntKg(litres, psi);
+			this.tntKg = waveKg;
 			this.litres = litres;
 			this.psi = psi;
 			this.hits = hits;
 			this.armed = armed;
+			this.event = Events.id(Events.Source.COMPRESSED_GAS, centre, litres * psi);
 		}
 	}
 
@@ -202,9 +217,9 @@ public final class PressureVessel {
 	 * The server says a tank block is bursting at {@code centre} (its explosion packet follows, if this player is near
 	 * enough to be sent one): the vessel that explosion will belong to.
 	 */
-	public Vessel told(Vec3 centre, float litres, float psi, Int2IntOpenHashMap hits) {
+	public Vessel told(Vec3 centre, float litres, float psi, float waveKg, Int2IntOpenHashMap hits) {
 		vessels.removeIf(v -> v.burstAt < 0 && v.centre.distanceToSqr(centre) < OWN_TNT * OWN_TNT);
-		Vessel vessel = new Vessel(centre, litres, psi, hits, tick);
+		Vessel vessel = new Vessel(centre, litres, psi, waveKg, hits, tick);
 		vessels.add(vessel);
 		return vessel;
 	}
@@ -306,6 +321,8 @@ public final class PressureVessel {
 			// The same dice on every client: the body, its health as the blast reached it, and where the vessel stood.
 			Fate.begin(living, null);
 			BloodSupply.begin(living);
+			// Cold gas: pressure and fragments, and no heat to sear anything with.
+			Events.begin(vessel.event, Events.Source.COMPRESSED_GAS);
 			try {
 				int hits = fragments(vessel, living, RANDOM);
 				if (living == mc.player) {
@@ -313,38 +330,138 @@ public final class PressureVessel {
 				}
 
 				if (kPa >= RINGING_KPA || hits > 0) {
-					shock(level, blood, dismemberment, vessel, living, kPa, hits);
+					// Real tank fragment wounds come from server contact records, never another random target draw.
+					shock(level, blood, dismemberment, vessel.centre, living, kPa, vessel.real() ? 0 : hits);
 				}
 			} finally {
+				Events.end();
 				BloodSupply.end();
+				Fate.end();
+			}
+		}
+
+		dead(level, blood, dismemberment, vessel.centre, vessel.tntKg, vessel);
+	}
+
+	/**
+	 * Any other explosion (TNT, a creeper, a bed) as the charge it is, {@code tntKg} of TNT at {@code centre} (see
+	 * {@code Blast.charge}): the primary blast injuries on every living body it reaches, by the real overpressure where
+	 * each stands and how much of it the blast could see. Burst eardrums bleed from out to about 11 m of a block of TNT,
+	 * torn lungs bring blood up out of the mouth and nose within 7. A charge has no casing, so nothing is driven in.
+	 */
+	public static void shockwave(ClientLevel level, BloodWorld blood, Dismemberment dismemberment, Vec3 centre, double tntKg,
+			dev.fluidgore.physics.Underwater.@Nullable Site water) {
+		// Under water the wave carries much further (see Underwater): out to where it no longer bursts eardrums.
+		double reach = water != null ? WATER_REACH : Blast.reach(tntKg, 1.0E7, EARDRUM_KPA);
+		for (Entity entity : level.entitiesForRendering()) {
+			if (!(entity instanceof LivingEntity living) || !living.isAlive() || living.distanceToSqr(centre) > reach * reach) {
+				continue;
+			}
+
+			Vec3 middle = living.getBoundingBox().getCenter();
+			float open = water != null
+					? dev.fluidgore.physics.Underwater.overpressure(level, water, middle, tntKg, 1.0E7, dev.fluidgore.physics.BodyMass.kilograms(living))
+					: Blast.overpressure(middle.distanceTo(centre), tntKg, 1.0E7);
+			float kPa = Blast.covered(open, ServerExplosion.getSeenPercent(centre, living));
+			if (kPa < EARDRUM_KPA) {
+				continue;
+			}
+
+			Fate.begin(living, null);
+			BloodSupply.begin(living);
+			Events.begin(Events.id(Events.Source.CHARGE, centre, tntKg), Events.Source.CHARGE, centre, 0.0F, water);
+			try {
+				shock(level, blood, dismemberment, centre, living, kPa, 0);
+			} finally {
+				Events.end();
+				BloodSupply.end();
+				Fate.end();
+			}
+		}
+
+		dead(level, blood, dismemberment, centre, tntKg, null, water);
+	}
+
+	/** Furthest, blocks, a charge under water is looked at for hurting a body: past it the shallow water has cut it off. */
+	private static final double WATER_REACH = 48.0;
+
+	/**
+	 * A blast on the bodies already lying dead: a dead body has no health left for a blast to take, so nothing else
+	 * reaches it, but the wave still does. By the overpressure on it, as on the living: shredded close to the charge,
+	 * torn open (limbs off, belly burst) a little further, and thrown limp by it further out still; a vessel's fragments
+	 * go into it where they strike. {@code vessel} is null for any other charge.
+	 */
+	static void dead(ClientLevel level, BloodWorld blood, Dismemberment dismemberment, Vec3 centre, double tntKg, @Nullable Vessel vessel) {
+		dead(level, blood, dismemberment, centre, tntKg, vessel, null);
+	}
+
+	/** As {@link #dead(ClientLevel, BloodWorld, Dismemberment, Vec3, double, Vessel)}, for a charge under water at {@code water} (or null). */
+	static void dead(ClientLevel level, BloodWorld blood, Dismemberment dismemberment, Vec3 centre, double tntKg, @Nullable Vessel vessel,
+			dev.fluidgore.physics.Underwater.@Nullable Site water) {
+		GoreConfig config = GoreConfig.get();
+		if (!config.goreLevel.enabled()) {
+			return;
+		}
+
+		double reach = water != null ? WATER_REACH : Blast.reach(tntKg, vessel != null ? vessel.psi : 1.0E7, THROWN_KPA);
+		for (Corpse corpse : List.copyOf(GoreSystems.suffering().corpses())) {
+			LivingEntity body = corpse.entity;
+			// One that died in this blast was graded as it died (DamageTracker): it is not torn twice.
+			if (corpse.age < JUST_DIED || dismemberment.vaporized(body.getId())) {
+				continue;
+			}
+
+			Vec3 middle = Suffering.centre(corpse);
+			double metres = middle.distanceTo(centre);
+			if (metres > reach) {
+				continue;
+			}
+
+			float seen = ServerExplosion.getSeenPercent(centre, body);
+			// A dead body's lungs no longer matter to it: under water only the bubble tears it (no lungs: NaN).
+			float open = water != null ? dev.fluidgore.physics.Underwater.overpressure(level, water, middle, tntKg, 1.0E7, Double.NaN)
+					: Blast.overpressure(metres, tntKg, vessel != null ? vessel.psi : 1.0E7);
+			float kPa = Blast.covered(open, seen);
+			if (water != null && kPa <= 0.0F) {
+				continue;
+			}
+
+			Fate.begin(body, null);
+			Events.begin(vessel != null ? vessel.event : Events.id(Events.Source.CHARGE, centre, tntKg), vessel != null ? Events.Source.COMPRESSED_GAS : Events.Source.CHARGE,
+					centre, 0.0F, water);
+			try {
+				boolean gore = config.blastGore && config.goreLevel.ordinal() >= GoreLevel.MEDIUM.ordinal() && EntityFilter.affects(body);
+				if (gore && kPa >= SHRED_KPA) {
+					dismemberment.vaporize(blood, level, body, centre, tntKg, seen);
+					Events.record(Events.Channel.PRESSURE, -1, Events.Effect.WOUND, Events.body(body), String.format(java.util.Locale.ROOT, "dead body shredded at %.0f kPa", kPa));
+					continue;
+				}
+
+				if (gore && kPa >= TEAR_KPA) {
+					dismemberment.tear(blood, level, body, centre, (impact(kPa, 0.0F, 1.0F)), tntKg, seen);
+					Events.record(Events.Channel.PRESSURE, -1, Events.Effect.WOUND, Events.body(body), String.format(java.util.Locale.ROOT, "dead body torn at %.0f kPa", kPa));
+				}
+
+				int hits = vessel != null && !vessel.real() ? fragments(vessel, body, RANDOM) : 0;
+				if (hits > 0) {
+					fragmentWounds(level, blood, dismemberment, centre, body, hits);
+				}
+
+				GoreSystems.suffering().blasted(corpse, centre, kPa);
+			} finally {
+				Events.end();
 				Fate.end();
 			}
 		}
 	}
 
 	/** The burst on one body: fragments driven in, blood from the ears, blood coughed up. */
-	private static void shock(ClientLevel level, BloodWorld blood, Dismemberment dismemberment, Vessel vessel, LivingEntity body, float kPa, int hits) {
+	private static void shock(ClientLevel level, BloodWorld blood, Dismemberment dismemberment, Vec3 centre, LivingEntity body, float kPa, int hits) {
 		if (!GoreConfig.get().goreLevel.enabled() || !EntityFilter.affects(body)) {
 			return;
 		}
 
-		Vec3 mid = body.getBoundingBox().getCenter();
-		for (int i = 0; i < hits; i++) {
-			Vec3 target = mid.add((RANDOM.nextDouble() - 0.5) * body.getBbWidth(), (RANDOM.nextDouble() - 0.5) * body.getBbHeight(),
-					(RANDOM.nextDouble() - 0.5) * body.getBbWidth());
-			Vec3 dir = target.subtract(vessel.centre);
-			double length = dir.length();
-			if (length < 1.0E-4) {
-				continue;
-			}
-
-			dir = dir.scale(1.0 / length);
-			Wounds.Strike strike = dismemberment.wounds().strike(body, vessel.centre, dir, length + 2.0, Weapon.PIERCE, 3.0F + RANDOM.nextFloat() * 5.0F);
-			if (strike != null) {
-				HitFeedback.hit(level, blood, body, strike, Weapon.PIERCE, dir);
-			}
-		}
-
+		fragmentWounds(level, blood, dismemberment, centre, body, hits);
 		if (EntityFilter.isBone(body) || EntityFilter.isBloodless(body)) {
 			return;
 		}
@@ -358,6 +475,7 @@ public final class PressureVessel {
 			float volume = 0.006F * Mth.clamp(kPa / EARDRUM_KPA, 1.0F, 3.0F);
 			BloodEmitter.drip(blood, head.add(side), rgb, volume);
 			BloodEmitter.drip(blood, head.subtract(side), rgb, volume);
+			Events.record(Events.Channel.PRESSURE, -1, Events.Effect.WOUND, Events.body(body), String.format(java.util.Locale.ROOT, "eardrums at %.0f kPa", kPa));
 		}
 
 		if (kPa >= LUNG_KPA) {
@@ -367,6 +485,30 @@ public final class PressureVessel {
 				float strength = Mth.clamp((kPa - LUNG_KPA) / (LETHAL_KPA - LUNG_KPA), 0.0F, 1.0F);
 				Vec3 out = body.getLookAngle().add(0.0, -0.4, 0.0).normalize();
 				BloodEmitter.cut(blood, level, mouth, out, rgb, 0.02F + 0.04F * strength, Math.round(4 + 8 * strength));
+				Events.record(Events.Channel.PRESSURE, -1, Events.Effect.WOUND, Events.body(body), String.format(java.util.Locale.ROOT, "lungs at %.0f kPa", kPa));
+			}
+		}
+	}
+
+	/** {@code hits} fragments from a vessel at {@code centre} driven into {@code body}, each where it strikes. */
+	private static void fragmentWounds(ClientLevel level, BloodWorld blood, Dismemberment dismemberment, Vec3 centre, LivingEntity body, int hits) {
+		Vec3 mid = body.getBoundingBox().getCenter();
+		for (int i = 0; i < hits; i++) {
+			Vec3 target = mid.add((RANDOM.nextDouble() - 0.5) * body.getBbWidth(), (RANDOM.nextDouble() - 0.5) * body.getBbHeight(),
+					(RANDOM.nextDouble() - 0.5) * body.getBbWidth());
+			Vec3 dir = target.subtract(centre);
+			double length = dir.length();
+			if (length < 1.0E-4) {
+				continue;
+			}
+
+			dir = dir.scale(1.0 / length);
+			Wounds.Strike strike = dismemberment.wounds().strike(body, centre, dir, length + 2.0, Weapon.PIERCE, 3.0F + RANDOM.nextFloat() * 5.0F);
+			if (strike != null) {
+				HitFeedback.hit(level, blood, body, strike, Weapon.PIERCE, dir);
+				Vec3 p = strike.hit().point();
+				Events.record(Events.Channel.FRAGMENT, i, Events.Effect.WOUND, Events.body(body),
+						String.format(java.util.Locale.ROOT, "%s at %.2f %.2f %.2f", strike.hit().bodyPart() == null ? "trunk" : strike.hit().bodyPart(), p.x, p.y, p.z));
 			}
 		}
 	}

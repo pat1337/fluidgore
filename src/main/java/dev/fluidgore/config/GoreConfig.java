@@ -114,6 +114,14 @@ public final class GoreConfig {
 	 */
 	public boolean bodySlide = true;
 	/**
+	 * Server side: a burning body sets fire to what it touches. An animal running on fire lights the dry grass, hay, wool
+	 * and wood it brushes past, and a body that died burning burns on where it lies, on its own fat, for as long as its
+	 * weight says (see {@code physics/BodyMass}), lighting what it lies against. Real fire, spreading as vanilla fire
+	 * does, so the game rule {@code fire_spread_radius_around_player} still decides where fire may spread. Asked for by
+	 * the user in 3.2: "a fired pig should probably set a house on fire".
+	 */
+	public boolean burningSpreadsFire = true;
+	/**
 	 * Dead bodies are articulated ragdolls: every leg bends at the knee or hock, the trunk at the waist and the head on a
 	 * neck, each joint as far as a real one goes, and the whole body falls, folds, drapes over steps and edges and comes
 	 * to rest under its own weight, never through a block. Off: the old one-piece ragdoll.
@@ -149,6 +157,36 @@ public final class GoreConfig {
 	/** How fast bodies burn, in percent: 100 burns a chicken to the bone in about 16 seconds, a sheep in 50, a cow in 100. */
 	public int cremationSpeedPercent = 100;
 	/**
+	 * Players on fire burn down layer by layer: the clothes and hair go, the skin blisters, chars and burns through, the
+	 * fat melts and drips, the muscle cooks, and the organs and bones show (as far as the gore level and how near death
+	 * they are allow). Dying on fire, the body stays and burns down to a charred skeleton.
+	 */
+	public boolean melting = true;
+	/** The same for zombies, piglins and every other mob drawn as a person (they burn in the sun: a lot of smoke at dawn). */
+	public boolean meltingMobs = false;
+	/**
+	 * Sheep, pigs and cows burn the same way, through their own anatomy: a fleece smoulders and chars off, the hide
+	 * blisters and splits, their fat (hard white suet, soft lard, yellow beef fat) runs, the meat cooks, and the bones,
+	 * the organs and the hooves show; a body burns on to a skeleton.
+	 */
+	public boolean meltingAnimals = true;
+	/**
+	 * Look at a piece of a body lying about (an organ, a bone, a scrap, a severed limb, a butchered joint) and what it is
+	 * shows over the hotbar: whose, what, which side, seared or charred.
+	 */
+	public boolean identifyRemains = true;
+	/**
+	 * Pieces of a body react to what they lie in, whoever cut or blew them off: in a fire or on lava an organ, a scrap or a
+	 * severed limb steams, cooks, dries, chars and catches (fat burns on its own flame), water puts it out, and what heat
+	 * did stays done. A charred piece crumbles when it lands hard; a cooked one has no blood left to leave.
+	 */
+	public boolean pieceReactions = true;
+	/**
+	 * Developer setting, not on the settings screen: write every recorded effect (which event, through which channel,
+	 * did what to which body or piece; see {@code event/Events}) to the log.
+	 */
+	public boolean traceEvents = false;
+	/**
 	 * Extreme gore level only: bodies that stay (kept bodies, severed pieces) rot as a real carcass does, by the
 	 * Minecraft day: rigor, bloat, rupture, maggots, bones. Faster for small bodies and in hot biomes, slower in water,
 	 * not at all in the snow; in deserts they dry out into mummies instead.
@@ -177,6 +215,13 @@ public final class GoreConfig {
 	/** Sheep's wool soaks up blood: stains round wounds, the coat reddening as it bleeds, the herd round it spattered. */
 	public boolean bloodyWool = true;
 	/**
+	 * Every animal that bleeds (not only sheep and birds) carries blood on its hide: spatter from its own wounds, a
+	 * neighbour's blow or a blast, and up its legs from walking or lying in a pool. Water rinses it off.
+	 */
+	public boolean bloodyCoats = true;
+	/** Blood that reaches water clouds out in it, sinks a little and thins away, instead of vanishing. */
+	public boolean bloodInWater = true;
+	/**
 	 * Birds are feathered: blows knock feathers out (wet with blood from a wound), dying birds shed them in their
 	 * wing-beats, and they drift down and lie where they land, soaking up blood and rain.
 	 */
@@ -197,6 +242,10 @@ public final class GoreConfig {
 	public boolean glowingEnderBlood = true;
 	/** Blunt blows add up on the bone they land on until it breaks: skulls cave in, ribs stove in, limbs snap and come off. */
 	public boolean fractures = true;
+	/** Blood from an open wound runs down the skin below it and dries there: a cut throat down the chest and forelegs. */
+	public boolean bloodRuns = true;
+	/** Skin goes pale as a body loses blood: a bled-out pig is a washed-out, pale pink beside a living one. Bare skin only. */
+	public boolean pallor = true;
 	/** Wounds on other players. Everyone with the mod sees the same wounds (see trigger/Fate). */
 	public boolean woundPlayers = true;
 	/** Wounds close as health comes back: meat to a gash, a gash to a bruise, a bruise gone; broken bones knit. */
@@ -214,21 +263,16 @@ public final class GoreConfig {
 	/** How hard a blow knocks your view about, in percent; 0 turns it off. A low-health sway comes with it. */
 	public int staggerPercent = 100;
 	/**
-	 * A 2x2 of TNT is a carbon-overwrapped pressure vessel (by default the Roadster's: 200 litres at 10,000 psi). When it
+	 * A 2x2 of TNT is a carbon-overwrapped pressure vessel (by default 200 litres at 10,000 psi). When it
 	 * goes, bodies are hurt by the real overpressure where they stood: shredded, torn apart, lungs and eardrums burst,
-	 * fragments driven in; you are told what it did to you. Cosmetic: who dies is still vanilla's TNT damage.
+	 * fragments driven in; you are told what it did to you. Cosmetic: who dies is still vanilla's TNT damage. Experimental
+	 * and off by default (3.3): the crafted Cobble Tank is the real pressure vessel; this guesses one from TNT blocks.
 	 */
-	public boolean pressureVessel = true;
+	public boolean pressureVessel = false;
 	/** The vessel's volume, litres. */
 	public int vesselLitres = 200;
 	/** The vessel's pressure, psi. */
 	public int vesselPsi = 10_000;
-	/** The pressure vessel block (crafted, real damage): its volume, litres. Only new tanks take a changed size. */
-	public int tankLitres = 600;
-	/** The pressure vessel block's pressure when full, psi. */
-	public int tankPsi = 10_000;
-	/** A tank block bursting breaks glass and blows doors open around it (on the server). */
-	public boolean tankBreaksGlass = true;
 	/** A blast loud enough leaves you deaf for a while (other sounds muffled) with your ears ringing. */
 	public boolean blastDeafness = true;
 	/** A broken or cut leg makes the body limp (your own view hitches on that step), a hurt arm hangs, a belly wound is clutched. */
@@ -299,6 +343,7 @@ public final class GoreConfig {
 
 	public static void load() {
 		if (Files.exists(PATH)) {
+			handOffTankSettings();
 			try (Reader reader = Files.newBufferedReader(PATH, StandardCharsets.UTF_8)) {
 				GoreConfig loaded = GSON.fromJson(reader, GoreConfig.class);
 				if (loaded != null) {
@@ -314,6 +359,41 @@ public final class GoreConfig {
 		save();
 	}
 
+	/** The Cobble Tank's settings that lived in this file before 4.0, when the tank became its own add-on. */
+	private static final List<String> TANK_KEYS = List.of("tankLitres", "tankPsi", "tankFireSeconds", "tankWavePercent",
+			"fragmentRayBudget", "tankFragmentRange", "tankBreaksGlass");
+
+	/**
+	 * 4.0: the Cobble Tank's settings moved to {@code config/cobbletank.json}. They are copied there once, before this
+	 * file is rewritten without them, so a server owner's tank settings survive the split whether or not the add-on is
+	 * installed yet.
+	 */
+	private static void handOffTankSettings() {
+		Path tank = PATH.resolveSibling("cobbletank.json");
+		if (Files.exists(tank)) {
+			return;
+		}
+
+		try (Reader reader = Files.newBufferedReader(PATH, StandardCharsets.UTF_8)) {
+			if (!(com.google.gson.JsonParser.parseReader(reader) instanceof com.google.gson.JsonObject old)) {
+				return;
+			}
+
+			com.google.gson.JsonObject moved = new com.google.gson.JsonObject();
+			for (String key : TANK_KEYS) {
+				if (old.has(key)) moved.add(key, old.get(key));
+			}
+
+			if (!moved.isEmpty()) {
+				try (Writer writer = Files.newBufferedWriter(tank, StandardCharsets.UTF_8)) {
+					GSON.toJson(moved, writer);
+				}
+			}
+		} catch (IOException | RuntimeException e) {
+			FluidGore.LOGGER.warn("Could not move the old Cobble Tank settings to {}", tank, e);
+		}
+	}
+
 	public static void save() {
 		try {
 			Files.createDirectories(PATH.getParent());
@@ -326,7 +406,7 @@ public final class GoreConfig {
 	}
 
 	/** Repairs values that a hand-edited file may have broken (missing enums, negative caps, null lists). */
-	private static final int CONFIG_VERSION = 7;
+	private static final int CONFIG_VERSION = 9;
 
 	private void sanitize() {
 		if (configVersion < 2) {
@@ -359,6 +439,12 @@ public final class GoreConfig {
 			if (bloodAmounts != null) bloodAmounts.clear();
 		}
 
+		if (configVersion < 8) {
+			// 3.3: the 2x2 TNT vessel is experimental and off by default; the crafted tank is the real vessel. It was on by
+			// default before, so an old file's true is that default, not a choice.
+			pressureVessel = false;
+		}
+
 		configVersion = CONFIG_VERSION;
 		if (goreLevel == null) goreLevel = GoreLevel.MEDIUM;
 		if (bloodStyle == null) bloodStyle = BloodStyle.REDSTONE;
@@ -373,8 +459,6 @@ public final class GoreConfig {
 		staggerPercent = clamp(staggerPercent, 0, 200);
 		vesselLitres = clamp(vesselLitres, 10, 1000);
 		vesselPsi = clamp(vesselPsi, 500, 20_000);
-		tankLitres = clamp(tankLitres, 10, 2000);
-		tankPsi = clamp(tankPsi, 500, 20_000);
 		maxDetachedParts = clamp(maxDetachedParts, 1, 256);
 		maxGiblets = clamp(maxGiblets, 0, Giblets.CAPACITY);
 		maxFeathers = clamp(maxFeathers, 0, dev.fluidgore.dismember.Feathers.CAPACITY);
@@ -395,7 +479,13 @@ public final class GoreConfig {
 		if (cleaningItems == null) cleaningItems = new ArrayList<>();
 		if (boneEntities == null) boneEntities = new ArrayList<>();
 		if (bloodlessEntities == null) bloodlessEntities = new ArrayList<>();
+		// A hand-edited [null] would crash whatever trims the entries (the first death on a server).
+		for (List<String> list : List.of(sufferingAnimals, bladedItems, cleaningItems, boneEntities, bloodlessEntities)) {
+			list.removeIf(java.util.Objects::isNull);
+		}
+
 		if (bloodAmounts == null) bloodAmounts = new java.util.HashMap<>();
+		bloodAmounts.keySet().removeIf(java.util.Objects::isNull);
 		bloodAmounts.values().removeIf(v -> v == null || !(v >= 0.0F));
 		bloodAmounts.replaceAll((k, v) -> Math.min(v, 500.0F));
 	}

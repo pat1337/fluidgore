@@ -1,5 +1,6 @@
 package dev.fluidgore.ragdoll;
 
+import dev.fluidgore.physics.Buoyancy;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.core.BlockPos;
@@ -50,6 +51,17 @@ public final class Rig {
 	/** Ticks of settling before it sleeps regardless. */
 	private static final int CALM_TICKS = 40;
 	private static final float MARGIN = 0.002F;
+	/** How fast water takes up a segment's motion through it, per second, all of it under. */
+	private static final float WATER_DRAG = 6.0F;
+	/** Net lift or weight, as a share of its own weight, that a body asleep in water stays asleep with. */
+	private static final float AFLOAT = 0.03F;
+	/** Share of a stiff leg's bend taken out per pass at full stiffness: enough to hold an upper leg up against its weight. */
+	private static final float STIFF_DRIVE = 0.2F;
+	/**
+	 * Ticks a stiffening leg is driven straight before it sets where it got to. Held there, it no longer pushes against
+	 * the floor or a body beside it that stopped it short, so the body can come to rest and sleep.
+	 */
+	private static final int STRAIGHTEN_TICKS = 20;
 
 	public final Skeleton skeleton;
 	public final int n;
@@ -81,8 +93,28 @@ public final class Rig {
 	private final float[][] samples;
 	private final Vector3f[] anchorParent;
 	private final Vector3f[] anchorChild;
+	/** How each joint's child sits on its parent as the model stands: the straight leg a stiff one goes back to. */
+	private final Quaternionf[] restTurn;
+	/** The joint is in a leg (the hip or shoulder, a knee or hock): what {@link #stiff} holds. */
+	private final boolean[] legJoint;
+	/** The turn each leg joint set at, after {@link #STRAIGHTEN_TICKS} of straightening: held from then on. */
+	private final Quaternionf[] heldTurn;
+	/** Ticks the legs have been stiff. */
+	private int stiffTicks;
+	/**
+	 * How stiff the legs are, 0 (limp, as the rest of a dead body) to 1: a dead animal on its side lies with its legs
+	 * locked straight out from the trunk, as a stunned or freshly bled carcass does, not folded under it. Set by its owner.
+	 */
+	private float stiff;
 
 	private final List<List<AABB>> near = new ArrayList<>();
+	/** Other bodies' segments within reach of each segment of this one, this tick (see {@link #neighbours}). */
+	private final List<List<Block>> others = new ArrayList<>();
+	private boolean hasOthers;
+	/** This body's own segments as other bodies see them (see {@link #blocks}), rebuilt after it moves. */
+	private final List<Block> blocks = new ArrayList<>();
+	private boolean blocksStale = true;
+	private static final float[] SCRATCH_DEPTH = new float[1];
 	/** Contacts of the current substep: body, arm (x, y, z), normal (x, y, z), depth. */
 	private float[] contacts = new float[8 * 64];
 	private int contactCount;
@@ -98,6 +130,15 @@ public final class Rig {
 	/** Fastest segment and fastest spin at the end of the last tick, blocks and radians per second. */
 	public float lastSpeed;
 	public float lastSpin;
+	/** Lift against its weight when it is entirely under water ({@link Buoyancy#lift}), set by its owner each tick. */
+	public float lift = Buoyancy.lift(0.0F);
+	/** Some of it was in water this tick. */
+	public boolean inWater;
+	/** The share of each segment under water this tick. */
+	private final float[] wet;
+	/** The current it lies in, blocks per second. */
+	private double currentX;
+	private double currentZ;
 
 	private final Vector3f r = new Vector3f();
 	private final Vector3f t = new Vector3f();
@@ -130,6 +171,7 @@ public final class Rig {
 		frameOffset = new Vector3f[n];
 		half = new Vector3f[n];
 		thick = new float[n];
+		wet = new float[n];
 		samples = new float[n][];
 		float volume = 0.0F;
 		for (Skeleton.Bone bone : skeleton.bones) {
@@ -154,15 +196,24 @@ public final class Rig {
 			invInertia[i] = new Vector3f(12.0F / (mass * (b * b + c * c)), 12.0F / (mass * (a * a + c * c)), 12.0F / (mass * (a * a + b * b)));
 			samples[i] = samples(h);
 			near.add(new ArrayList<>());
+			others.add(new ArrayList<>());
 		}
 
 		int joints = skeleton.joints.length;
 		anchorParent = new Vector3f[joints];
 		anchorChild = new Vector3f[joints];
+		restTurn = new Quaternionf[joints];
+		heldTurn = new Quaternionf[joints];
+		legJoint = new boolean[joints];
 		for (int j = 0; j < joints; j++) {
 			Skeleton.Joint joint = skeleton.joints[j];
 			anchorParent[j] = new Vector3f(joint.anchorParent()).mul(scale).add(frameOffset[joint.parent()]);
 			anchorChild[j] = new Vector3f(joint.anchorChild()).mul(scale).add(frameOffset[joint.child()]);
+			Quaternionf restA = skeleton.bones[joint.parent()].rest.getNormalizedRotation(new Quaternionf());
+			Quaternionf restB = skeleton.bones[joint.child()].rest.getNormalizedRotation(new Quaternionf());
+			restTurn[j] = restA.conjugate().mul(restB);
+			heldTurn[j] = new Quaternionf(restTurn[j]);
+			legJoint[j] = leg(skeleton, joint);
 		}
 	}
 
@@ -209,6 +260,11 @@ public final class Rig {
 		return asleep;
 	}
 
+	/** It will move or look at what is under it on its next tick: awake, or asleep and due its once-a-second check. */
+	public boolean stepsNext() {
+		return !asleep || (sleepTicks + 1) % 20 == 0;
+	}
+
 	public void wake() {
 		asleep = false;
 		still = 0;
@@ -238,25 +294,44 @@ public final class Rig {
 			}
 
 			gatherBlocks(level);
-			if (!supported()) {
+			soak(level);
+			if (inWater) {
+				// Floating, or on the bottom: it stays until the water around it would move it (it swelled, it burst, the
+				// current took it, the water went).
+				float net = buoyancy();
+				if (net > AFLOAT || net < -AFLOAT && !supported() || currentX != 0.0 || currentZ != 0.0) {
+					wake();
+				} else {
+					return;
+				}
+			} else if (!supported()) {
 				wake();
 			} else {
 				return;
 			}
+		} else {
+			gatherBlocks(level);
+			soak(level);
 		}
 
-		gatherBlocks(level);
+		setLegs();
 		for (int step = 0; step < SUBSTEPS; step++) {
 			integrate();
 			for (int pass = 0; pass < 2; pass++) {
 				solveJoints();
+				stiffLegs();
 				solveContacts();
 			}
 
+			// Once a substep is enough for bodies, which push out gently anyway (see BODY_PUSH).
+			solveBodies();
 			updateVelocities();
 			contactVelocities();
 			jointFriction();
 		}
+
+		// It has moved: other bodies see its segments where they are now.
+		blocksStale = true;
 
 		// At rest by how far it got this tick, not how fast it is going: contacts and joints trading tiny corrections
 		// show as speed but go nowhere.
@@ -305,7 +380,17 @@ public final class Rig {
 			ly[i] = y[i];
 			lz[i] = z[i];
 			lq[i].set(q[i]);
-			vy[i] -= GRAVITY * H;
+			float under = wet[i];
+			vy[i] -= GRAVITY * H * (1.0F - lift * under);
+			if (under > 0.0F) {
+				// Water holds it back, and carries it along with the current.
+				double keep = 1.0 / (1.0 + WATER_DRAG * H * under);
+				vx[i] = currentX + (vx[i] - currentX) * keep;
+				vy[i] *= keep;
+				vz[i] = currentZ + (vz[i] - currentZ) * keep;
+				w[i].mul((float) keep);
+			}
+
 			// Never more than half its own thickness in a step: nothing goes through a wall between two checks.
 			double speed = Math.sqrt(vx[i] * vx[i] + vy[i] * vy[i] + vz[i] * vz[i]);
 			double limit = 0.5 * thick[i] / H;
@@ -402,6 +487,92 @@ public final class Rig {
 					}
 				}
 			}
+		}
+	}
+
+	/** A joint in a leg: one whose child is a limb's top segment, or a knee or hock below it. */
+	private static boolean leg(Skeleton skeleton, Skeleton.Joint joint) {
+		if (joint.hinge()) {
+			return true;
+		}
+
+		for (int limb : skeleton.limbs) {
+			if (limb == joint.child()) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/** How stiff the legs are from now on, 0..1 (see {@link #stiff}). Stiffening a body at rest wakes it, so its legs straighten. */
+	public void stiffen(float amount) {
+		amount = Mth.clamp(amount, 0.0F, 1.0F);
+		if (amount > stiff) {
+			wake();
+		}
+
+		stiff = amount;
+	}
+
+	public float stiffness() {
+		return stiff;
+	}
+
+	/** How far the most bent leg joint is from straight, radians: for tests. */
+	public float legBend() {
+		float most = 0.0F;
+		for (int j = 0; j < skeleton.joints.length; j++) {
+			if (legJoint[j]) {
+				Quaternionf rel = new Quaternionf(q[skeleton.joints[j].parent()]).conjugate().mul(q[skeleton.joints[j].child()]);
+				Quaternionf off = rel.mul(new Quaternionf(restTurn[j]).conjugate());
+				most = Math.max(most, 2.0F * (float) Math.acos(Math.min(1.0F, Math.abs(off.w))));
+			}
+		}
+
+		return most;
+	}
+
+	/** Counts how long the legs have been stiff, and sets them where they got to once they have had time to straighten. */
+	private void setLegs() {
+		if (stiff <= 0.0F) {
+			stiffTicks = 0;
+			return;
+		}
+
+		if (++stiffTicks == STRAIGHTEN_TICKS) {
+			Skeleton.Joint[] joints = skeleton.joints;
+			for (int j = 0; j < joints.length; j++) {
+				if (legJoint[j]) {
+					heldTurn[j].set(q[joints[j].parent()]).conjugate().mul(q[joints[j].child()]);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Turns each stiff leg joint part of the way back to straight, the trunk taking the other end of it; once set (see
+	 * {@link #setLegs}), back to where it set.
+	 */
+	private void stiffLegs() {
+		if (stiff <= 0.0F) {
+			return;
+		}
+
+		float share = STIFF_DRIVE * stiff;
+		Skeleton.Joint[] joints = skeleton.joints;
+		for (int j = 0; j < joints.length; j++) {
+			if (!legJoint[j]) {
+				continue;
+			}
+
+			int a = joints[j].parent();
+			int b = joints[j].child();
+			// The turn from where the child should be on its parent (straight, then held as it set) to where it is.
+			Quaternionf wanted = new Quaternionf(q[a]).mul(stiffTicks < STRAIGHTEN_TICKS ? restTurn[j] : heldTurn[j]);
+			Quaternionf off = new Quaternionf(q[b]).mul(wanted.conjugate());
+			float sign = off.w >= 0.0F ? 2.0F : -2.0F;
+			angular(a, b, new Vector3f(off.x * sign * share, off.y * sign * share, off.z * sign * share));
 		}
 	}
 
@@ -580,6 +751,41 @@ public final class Rig {
 	}
 
 	/** True if something is still under the body: a sleeping body over a removed block wakes and falls. */
+	/** How much of each segment is under water, and the current there. */
+	private void soak(BlockGetter level) {
+		inWater = false;
+		for (int i = 0; i < n; i++) {
+			// Half its height as it lies: its box's three half-sizes, turned, onto the vertical.
+			Vector3f h = half[i];
+			float ext = Math.abs(q[i].transform(r.set(h.x, 0.0F, 0.0F)).y) + Math.abs(q[i].transform(r.set(0.0F, h.y, 0.0F)).y)
+					+ Math.abs(q[i].transform(r.set(0.0F, 0.0F, h.z)).y);
+			wet[i] = Buoyancy.submerged(level, x[i], y[i] - ext, y[i] + ext, z[i]);
+			inWater |= wet[i] > 0.0F;
+		}
+
+		currentX = 0.0;
+		currentZ = 0.0;
+		if (inWater) {
+			Vec3 c = centre();
+			Vec3 flow = Buoyancy.current(level, c.x, c.y, c.z);
+			currentX = flow.x / TICK;
+			currentZ = flow.z / TICK;
+		}
+	}
+
+	/** Lift less weight in the water it lies in now, as a share of its weight: above 0 it rises, below it sinks. */
+	private float buoyancy() {
+		float held = 0.0F;
+		float total = 0.0F;
+		for (int i = 0; i < n; i++) {
+			float mass = 1.0F / invMass[i];
+			held += mass * lift * wet[i];
+			total += mass;
+		}
+
+		return held / total - 1.0F;
+	}
+
 	private boolean supported() {
 		for (int i = 0; i < n; i++) {
 			float[] s = samples[i];
@@ -592,6 +798,11 @@ public final class Rig {
 					if (box.contains(px, py, pz)) {
 						return true;
 					}
+				}
+
+				if (inBody(others.get(i), px, py, pz, u, SCRATCH_DEPTH) != null) {
+					// Lying on another body.
+					return true;
 				}
 			}
 		}
@@ -670,6 +881,120 @@ public final class Rig {
 					if (wt > 0.0F) {
 						applyImpulse(i, new Vector3f(r), back, hold / wt);
 					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * Another body's segment, as a box turned with it: what this body's segments rest against instead of passing through
+	 * (see {@link #neighbours}). {@code half} is its half size along its own axes, blocks.
+	 */
+	public record Block(double x, double y, double z, Quaternionf turn, Vector3f half) {
+	}
+
+	/** How far one substep pushes a point out of another body: two bodies dropped into each other part over a few ticks, not at once. */
+	private static final float BODY_PUSH = 0.01F;
+	/** Other bodies' boxes are a little smaller than their segments: a model part does not fill its box to the corners. */
+	private static final float BODY_FILL = 0.9F;
+
+	/** The segments of other bodies near this one, for this tick (see {@link #blocks}): each segment keeps those it could reach. */
+	public void neighbours(List<Block> near) {
+		hasOthers = false;
+		for (int i = 0; i < n; i++) {
+			List<Block> mine = others.get(i);
+			mine.clear();
+			float reach = half[i].length() + 0.25F;
+			for (Block b : near) {
+				double dx = b.x() - x[i];
+				double dy = b.y() - y[i];
+				double dz = b.z() - z[i];
+				double within = reach + b.half().length();
+				if (dx * dx + dy * dy + dz * dz < within * within) {
+					mine.add(b);
+				}
+			}
+
+			hasOthers |= !mine.isEmpty();
+		}
+	}
+
+	/** This body's segments as boxes for other bodies to lie against, as of its last step. */
+	public List<Block> blocks() {
+		if (blocksStale) {
+			blocks.clear();
+			for (int i = 0; i < n; i++) {
+				blocks.add(new Block(x[i], y[i], z[i], new Quaternionf(q[i]), new Vector3f(half[i]).mul(BODY_FILL)));
+			}
+
+			blocksStale = false;
+		}
+
+		return blocks;
+	}
+
+	/** The block of {@code boxes} that holds a point, or null; {@code normal} and the returned depth say how it gets out. */
+	private @Nullable Block inBody(List<Block> boxes, double px, double py, double pz, Vector3f normal, float[] depth) {
+		for (Block b : boxes) {
+			b.turn().transformInverse(t.set((float) (px - b.x()), (float) (py - b.y()), (float) (pz - b.z())));
+			float ox = b.half().x - Math.abs(t.x);
+			float oy = b.half().y - Math.abs(t.y);
+			float oz = b.half().z - Math.abs(t.z);
+			if (ox <= 0.0F || oy <= 0.0F || oz <= 0.0F) {
+				continue;
+			}
+
+			// Out through the nearest face of it.
+			if (ox <= oy && ox <= oz) {
+				normal.set(t.x < 0.0F ? -1.0F : 1.0F, 0.0F, 0.0F);
+				depth[0] = ox;
+			} else if (oy <= oz) {
+				normal.set(0.0F, t.y < 0.0F ? -1.0F : 1.0F, 0.0F);
+				depth[0] = oy;
+			} else {
+				normal.set(0.0F, 0.0F, t.z < 0.0F ? -1.0F : 1.0F);
+				depth[0] = oz;
+			}
+
+			b.turn().transform(normal);
+			return b;
+		}
+
+		return null;
+	}
+
+	/** Every point of every segment that is inside another body is moved out of it: bodies lie against each other. */
+	private void solveBodies() {
+		if (!hasOthers) {
+			return;
+		}
+
+		Vector3f normal = new Vector3f();
+		float[] depth = new float[1];
+		for (int i = 0; i < n; i++) {
+			List<Block> boxes = others.get(i);
+			if (boxes.isEmpty()) {
+				continue;
+			}
+
+			float[] s = samples[i];
+			for (int p = 0; p < s.length; p += 3) {
+				q[i].transform(r.set(s[p], s[p + 1], s[p + 2]));
+				if (inBody(boxes, x[i] + r.x, y[i] + r.y, z[i] + r.z, normal, depth) == null) {
+					continue;
+				}
+
+				Vector3f arm = new Vector3f(r);
+				float wn = generalized(i, arm, normal);
+				if (wn <= 0.0F) {
+					continue;
+				}
+
+				float push = Math.min(depth[0], BODY_PUSH);
+				applyImpulse(i, arm, normal, push / wn);
+				record(i, arm, normal, push);
+				if (normal.y > 0.5F) {
+					grounded = true;
 				}
 			}
 		}
@@ -836,6 +1161,7 @@ public final class Rig {
 
 	/** Moves every segment by the same amount, keeping their motion (the server moved the body); a nudge does not wake it. */
 	public void shift(double dx, double dy, double dz) {
+		blocksStale = true;
 		for (int i = 0; i < n; i++) {
 			x[i] += dx;
 			y[i] += dy;

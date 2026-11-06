@@ -86,7 +86,7 @@ public final class GoreSync {
 	/** Shows {@code action} to the others without doing it here (the caller already has). */
 	public static void send(GoreAction action) {
 		if (serverKeepsBodies()) {
-			if (action.kind() == GoreAction.CLEAN) {
+			if (action.kind() == GoreAction.CLEAN || action.kind() == GoreAction.VAPORIZED) {
 				GONE.add(action.entityId());
 			}
 
@@ -125,9 +125,9 @@ public final class GoreSync {
 						&& GoreSystems.dismemberment().butchery().pluck(level, corpse, action.at(), action.dir());
 				case GoreAction.CUT -> {
 					GorePart part = GoreSystems.dismemberment().parts().byKey(action.partKey());
-					yield part != null && GoreConfig.get().butchery && GoreSystems.dismemberment().butchery().cut(GoreSystems.blood(), level, part, action.dir());
+					yield part != null && GoreConfig.get().butchery && GoreSystems.dismemberment().butchery().cut(GoreSystems.blood(), level, part, action.at(), action.dir());
 				}
-				case GoreAction.CLEAN -> {
+				case GoreAction.CLEAN, GoreAction.VAPORIZED -> {
 					GONE.add(action.entityId());
 					yield GoreSystems.suffering().clean(level, action.entityId());
 				}
@@ -166,7 +166,7 @@ public final class GoreSync {
 			Entity entity = level.getEntity(id);
 			// Only one the server is keeping: vanilla takes a dead body away on its own within a second.
 			if (entity instanceof LivingEntity body && !body.isAlive() && !body.isRemoved() && body.deathTime > KEPT_AFTER && GONE.add(id)) {
-				ClientPlayNetworking.send(new GoreAction(GoreAction.CLEAN, id, 0L, (float) body.getX(), (float) body.getY(), (float) body.getZ(),
+				ClientPlayNetworking.send(new GoreAction(GoreAction.VAPORIZED, id, 0L, (float) body.getX(), (float) body.getY(), (float) body.getZ(),
 						0.0F, 0.0F, 0.0F, (byte) 0, 0.0F));
 			}
 		}

@@ -8,10 +8,9 @@ import dev.fluidgore.blood.SurfaceProbe;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.config.GoreLevel;
 import dev.fluidgore.dismember.GorePart;
-import dev.fluidgore.net.BodyAge;
+import dev.fluidgore.net.BodyRot;
 import dev.fluidgore.suffer.Corpse;
 import dev.fluidgore.trigger.EntityFilter;
-import it.unimi.dsi.fastutil.ints.Int2LongOpenHashMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
@@ -24,13 +23,10 @@ import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
@@ -46,14 +42,24 @@ import org.jspecify.annotations.Nullable;
  * the stages in {@link Rot}, in the plains a chicken is bones in about ten days, a pig in four weeks, a cow in five and
  * a horse in eight. In dry heat (no rain and over 20 degrees: deserts, badlands, savanna, the Nether) it mummifies.
  *
- * <p>A body's age is counted from when it died, by the game clock or the day clock, whichever has gone further, so
- * it keeps rotting while players sleep or skip time. A client that saw it die knows when; for one that comes along
- * later, the server says ({@link BodyAge}). Everything a body looks like follows from that age and its UUID, so every
- * player with the mod sees the same rot; only the flies and drips are this screen's own.
+ * <p>The decay-days are counted up as time goes ({@link RotClock}), never worked out again from the body's age: each
+ * stretch of time adds days at the heat and wet of where the body lay through it, so a carcass carried from the
+ * plains into the snow stops where it got to and does not go back to fresh. Time is the game clock or the day clock,
+ * whichever has gone further, so it keeps rotting while players sleep or skip time. Each body is measured where it
+ * lies every five seconds and before a skip is counted, and the time since is counted at that.
+ *
+ * <p>Time this client did not see is an approximation. A body the server keeps comes with the server's own count
+ * ({@link BodyRot}, see {@code server/KeptBodies.rotted}), which is right for where the body really lay. With no word
+ * from the server (it lacks the mod, or the word has not come yet) a body that comes into view dead is taken to have
+ * lain where it lies now since its death clock started, which for a body that vanilla removes is a second at most.
+ * A body seen again after Bodies Rot was switched off and on counts the gap at where it lies then. Everything a body
+ * looks like follows from its count and its UUID, so every player with the mod sees the same rot; only the flies and
+ * drips are this screen's own. Rot Speed is each player's own: it speeds what they watch, and a body they come to is
+ * the server's real-time count times it.
  */
 public final class Decay {
-	private static final float PIG_VOLUME = 0.9F * 0.9F * 0.9F;
-	private static final float DAY = 24000.0F;
+	/** More time than this between two ticks is a skip, counted only after measuring where the body lies. */
+	private static final long SKIP_TICKS = 20;
 	/** Flies, drips and sounds only near the camera. */
 	private static final double EFFECTS_SQ = 32.0 * 32.0;
 	private static final double SOUND_SQ = 14.0 * 14.0;
@@ -69,10 +75,11 @@ public final class Decay {
 
 	private static final class Body {
 		final Rot rot;
-		long diedGame;
-		long diedClock;
-		/** Decay-days per real day here (heat, water) and the body's size factor, worked out now and then. */
+		/** Its rot counted so far, at this player's Rot Speed; {@link #rot} shows it. */
+		RotClock count;
+		/** Decay-days per real day here (heat, water), dry heat here, and the body's size factor, measured now and then. */
 		float rate = -1.0F;
+		boolean aridHere;
 		float size = 1.0F;
 		/** Days last tick, to catch the moment it bursts; -1 before the first. */
 		float last = -1.0F;
@@ -81,20 +88,27 @@ public final class Decay {
 		float stainHalf;
 		int nextBuzz;
 
-		Body(long seed, long diedGame, long diedClock) {
+		Body(long seed, RotClock count) {
 			this.rot = new Rot(seed);
-			this.diedGame = diedGame;
-			this.diedClock = diedClock;
+			this.count = count;
+		}
+
+		void show() {
+			rot.days = count.days();
+			rot.arid = count.arid();
 		}
 	}
 
 	private final Int2ObjectOpenHashMap<Body> bodies = new Int2ObjectOpenHashMap<>();
-	/** Ages from the server for bodies not being rotted here yet: the game time here at which they died. */
-	private final Int2LongOpenHashMap told = new Int2LongOpenHashMap();
+	/**
+	 * Counts for bodies not being rotted here yet, at this player's Rot Speed: the server's word, or what a body had when
+	 * Bodies Rot was switched off.
+	 */
+	private final Int2ObjectOpenHashMap<RotClock> told = new Int2ObjectOpenHashMap<>();
 	private int tick;
 
 	public static void register() {
-		ClientPlayNetworking.registerGlobalReceiver(BodyAge.TYPE, (age, context) -> GoreSystems.decay().told(age.entityId(), age.ticks()));
+		ClientPlayNetworking.registerGlobalReceiver(BodyRot.TYPE, (rot, context) -> GoreSystems.decay().told(rot.entityId(), rot.days(), rot.arid()));
 	}
 
 	/** On: Extreme gore and Bodies Rot. */
@@ -103,21 +117,26 @@ public final class Decay {
 		return config.bodyDecay && config.goreLevel == GoreLevel.EXTREME;
 	}
 
-	/** The server says this body died {@code ticks} ago. */
-	void told(int entityId, long ticks) {
+	/** The server says this body has rotted {@code days} decay-days (at 1x), and whether it is drying into a mummy. */
+	void told(int entityId, float days, boolean arid) {
 		ClientLevel level = Minecraft.getInstance().level;
-		if (level == null) {
+		if (level == null || !Float.isFinite(days)) {
 			return;
 		}
 
+		RotClock count = new RotClock(Math.max(0.0F, days) * GoreConfig.get().decaySpeed, arid, level.getGameTime(), level.getOverworldClockTime());
 		Body body = bodies.get(entityId);
 		if (body == null) {
-			told.put(entityId, level.getGameTime() - ticks);
+			told.put(entityId, count);
 			return;
 		}
 
-		body.diedGame = level.getGameTime() - ticks;
-		body.diedClock = level.getOverworldClockTime() - ticks;
+		// Already rotting here from the entity's death clock: the server knows better, but rot never goes back.
+		if (count.days() > body.count.days()) {
+			body.count = count;
+			body.show();
+		}
+
 		// Seen at this age for the first time: no burst to play.
 		body.last = -1.0F;
 	}
@@ -156,23 +175,28 @@ public final class Decay {
 
 			Body body = bodies.get(entity.getId());
 			if (body == null) {
-				// Died in front of this player, or came into view dead: the server's word if it has given it, else the
-				// entity's own death clock (ticks since this client saw it die or saw it at all).
-				long ago = told.containsKey(entity.getId()) ? game - told.remove(entity.getId()) : entity.deathTime;
-				body = new Body(entity.getUUID().getLeastSignificantBits() ^ entity.getUUID().getMostSignificantBits(), game - ago, clock - ago);
+				// Died in front of this player, or came into view dead: the server's count if it has given it, else the
+				// entity's own death clock (ticks since this client saw it die or saw it at all), counted below at
+				// where it lies now.
+				RotClock count = told.remove(entity.getId());
+				body = new Body(entity.getUUID().getLeastSignificantBits() ^ entity.getUUID().getMostSignificantBits(),
+						count != null ? count : RotClock.died(game - entity.deathTime, clock - entity.deathTime));
 				bodies.put(entity.getId(), body);
 			}
 
 			body.seen = tick;
-			if (body.rate < 0.0F || (tick + entity.getId()) % 100 == 0) {
-				Vec3 at = where(entity);
-				body.rate = rate(level, BlockPos.containing(at), entity.isInWater());
-				body.rot.arid = arid(level, BlockPos.containing(at), entity.isInWater());
-				body.size = size(entity.getBbWidth() * entity.getBbWidth() * entity.getBbHeight());
+			// Measured where it lies every five seconds, and again before a skip (sleep, /time add) is counted, so the
+			// skip goes at where it lies through it, as the server counts it.
+			long since = Math.max(game - body.count.game(), clock - body.count.clock());
+			if (body.rate < 0.0F || since > SKIP_TICKS || (tick + entity.getId()) % 100 == 0) {
+				BlockPos at = BlockPos.containing(where(entity));
+				body.rate = RotClock.rate(level, at, entity.isInWater());
+				body.aridHere = RotClock.arid(level, at, entity.isInWater());
+				body.size = RotClock.size(entity.getBbWidth() * entity.getBbWidth() * entity.getBbHeight());
 			}
 
-			float days = Math.max(game - body.diedGame, clock - body.diedClock) / DAY;
-			body.rot.days = days * body.rate * config.decaySpeed / body.size;
+			body.count = body.count.to(game, clock, body.rate * config.decaySpeed, body.size, body.aridHere);
+			body.show();
 			if (camera != null && camera.distanceToSqr(entity) < EFFECTS_SQ) {
 				effects(level, blood, entity, body, camera);
 			}
@@ -194,7 +218,10 @@ public final class Decay {
 		}
 	}
 
-	/** Severed pieces rot by their own size, where they lie, from the rot of the body they came off. */
+	/**
+	 * Severed pieces rot by their own size, where they lie, from the rot of the body they came off: counted up a second
+	 * at a time like a body ({@link RotClock}), and mummifying or not settled the same way.
+	 */
 	private void ageParts(ClientLevel level, GoreConfig config) {
 		for (GorePart part : GoreSystems.dismemberment().parts().parts()) {
 			if (part.bone() || part.held) {
@@ -204,8 +231,8 @@ public final class Decay {
 			BlockPos pos = BlockPos.containing(part.x, part.y, part.z);
 			boolean wet = !level.getFluidState(pos).isEmpty();
 			float volume = 8.0F * part.halfExtents.x * part.halfExtents.y * part.halfExtents.z;
-			part.rot += 20.0F / DAY * rate(level, pos, wet) * config.decaySpeed / size(volume);
-			part.arid = arid(level, pos, wet);
+			part.arid = RotClock.arid(part.arid, part.rot, RotClock.arid(level, pos, wet));
+			part.rot += 20.0F / RotClock.DAY * RotClock.rate(level, pos, wet) * config.decaySpeed / RotClock.size(volume);
 		}
 	}
 
@@ -313,27 +340,6 @@ public final class Decay {
 		}
 	}
 
-	/** Decay-days per day at {@code pos}: degree-days over 20, from the biome's temperature, halved in water. */
-	static float rate(Level level, BlockPos pos, boolean wet) {
-		float rate = Mth.clamp(celsius(level, pos), 0.0F, 40.0F) / 20.0F;
-		return wet ? rate * 0.5F : rate;
-	}
-
-	/** Dry heat: no rain and warm. Bodies there mummify. */
-	static boolean arid(Level level, BlockPos pos, boolean wet) {
-		Biome biome = level.getBiome(pos).value();
-		return !wet && !biome.hasPrecipitation() && celsius(level, pos) > 20.0F;
-	}
-
-	private static float celsius(Level level, BlockPos pos) {
-		return level.getBiome(pos).value().getBaseTemperature() * 25.0F - 5.0F;
-	}
-
-	/** How much longer than a pig a body of {@code volume} cubic blocks takes to rot. */
-	private static float size(float volume) {
-		return Mth.clamp(Mth.sqrt(volume / PIG_VOLUME), 0.3F, 3.0F);
-	}
-
 	/** The middle of the body, where the ragdoll has it if it is a corpse. */
 	private static Vec3 where(LivingEntity entity) {
 		Corpse corpse = GoreSystems.suffering().corpse(entity.getId());
@@ -352,8 +358,8 @@ public final class Decay {
 
 		BloodWorld blood = GoreSystems.blood();
 		for (Int2ObjectMap.Entry<Body> entry : bodies.int2ObjectEntrySet()) {
-			// Its age goes back where the server's would be, so it rots on from there when switched back on.
-			told.put(entry.getIntKey(), entry.getValue().diedGame);
+			// It rots on from the count it has when switched back on.
+			told.put(entry.getIntKey(), entry.getValue().count);
 			removeStain(blood, entry.getValue());
 		}
 

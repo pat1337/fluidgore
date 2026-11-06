@@ -156,6 +156,12 @@ public final class BloodSupply {
 		return r == null ? 0.0F : r.lost;
 	}
 
+	/** Share of its whole blood {@code entityId} has lost so far, 0 to 1 (0 if it never bled). */
+	public static float lostShare(int entityId) {
+		Reservoir r = RESERVOIRS.get(entityId);
+		return r == null || r.litres <= 0.0F ? 0.0F : Math.min(1.0F, r.lost / r.litres);
+	}
+
 	/** {@code fraction} of the health came back: the body makes that share of what it lost again; all of it at full health. */
 	public static void refill(int entityId, float fraction, boolean full) {
 		Reservoir r = RESERVOIRS.get(entityId);
@@ -170,6 +176,11 @@ public final class BloodSupply {
 		if (r != null && !GoreSystems.suffering().holdsBody(entityId)) {
 			RESERVOIRS.remove(entityId);
 		}
+	}
+
+	/** Forgets a body's reservoir whether or not a corpse still holds it: the corpse is finished or cleaned away. */
+	public static void drop(int entityId) {
+		RESERVOIRS.remove(entityId);
 	}
 
 	public static void clear() {

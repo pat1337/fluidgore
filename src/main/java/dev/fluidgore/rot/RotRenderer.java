@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.fluidgore.mixin.ModelPartAccessor;
 import dev.fluidgore.ragdoll.Bends;
+import dev.fluidgore.wound.WoundRenderer;
 import java.util.List;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.util.Mth;
@@ -46,7 +47,7 @@ public final class RotRenderer {
 	/** Outward lift per layer, in model pixels: under the wounds, which start at 0.02. */
 	private static final float LIFT = 0.004F;
 	private static final float TILE_U = 1.0F / 8.0F;
-	private static final float TILE_V = 1.0F / 18.0F;
+	private static final float TILE_V = WoundRenderer.TILE_V;
 
 
 	private static final float[] MIN = new float[3];

@@ -13,15 +13,15 @@ import net.minecraft.world.phys.Vec3;
  * result: each client works the result out itself with the same dice ({@link #seed}), as it does for live hits.
  *
  * @param kind     what was done, see the constants
- * @param entityId the body (STRIKE, PLUCK, CLEAN, IGNITE), or -1
+ * @param entityId the body (STRIKE, PLUCK, CLEAN, VAPORIZED, IGNITE), or -1
  * @param partKey  the loose piece (CUT), see {@code GorePart#key}; for SCRUB the tool's blood colour (high 32 bits)
  *                 and the lifted blood's (low); for WASH the tool's blood colour; or 0
  * @param x        the eye (STRIKE, PLUCK, CUT), the scrubbed point (SCRUB) or the water (WASH)
  * @param dx       the view direction; for SCRUB the stroke's direction (dx, dz; 0 for a dab) and how bloody the tool
  *                 was (dy, 0..1)
  * @param weapon   ordinal of the {@code Weapon} held (STRIKE), 1 for a fire charge (IGNITE), the face (SCRUB)
- * @param damage   the attack damage of the held item (STRIKE), blood lifted in litres (SCRUB), 1 for a body wiped
- *                 away by hand (CLEAN)
+ * @param damage   the attack damage of the held item (STRIKE), blood lifted in litres (SCRUB), positive for a body
+ *                 wiped away by hand (CLEAN), zero for automatic removal (VAPORIZED)
  */
 public record GoreAction(byte kind, int entityId, long partKey, float x, float y, float z, float dx, float dy, float dz, byte weapon,
 		float damage) implements CustomPacketPayload {
@@ -31,7 +31,7 @@ public record GoreAction(byte kind, int entityId, long partKey, float x, float y
 	public static final byte PLUCK = 1;
 	/** A blade through a loose piece. */
 	public static final byte CUT = 2;
-	/** The body is cleaned away (or gone, butchered apart): the server removes it. */
+	/** A kept body wiped away by hand with a cleaning tool: close range and a valid tool are required. */
 	public static final byte CLEAN = 3;
 	/** Blood scrubbed off a surface. */
 	public static final byte SCRUB = 4;
@@ -42,6 +42,8 @@ public record GoreAction(byte kind, int entityId, long partKey, float x, float y
 	 * server rinses the stack and passes it on only if there is water there.
 	 */
 	public static final byte WASH = 6;
+	/** A kept body torn or butchered apart: reported for automatic removal, not manual cleaning or tool soak. */
+	public static final byte VAPORIZED = 7;
 
 	public static final Type<GoreAction> TYPE = new Type<>(Identifier.fromNamespaceAndPath(FluidGore.MOD_ID, "action"));
 	public static final StreamCodec<ByteBuf, GoreAction> CODEC = StreamCodec.of((buf, a) -> {

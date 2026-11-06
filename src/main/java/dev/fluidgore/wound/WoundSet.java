@@ -30,10 +30,39 @@ public final class WoundSet {
 	public static final byte RIBS = 4;
 	/** The cut face of a diced piece: the whole face is meat, as on a butcher's block. */
 	public static final byte CUT = 5;
+	/**
+	 * A blade's incised cut: a {@link #SLASH} with clean edges. A sharp edge divides the skin without crushing it, so
+	 * there is no bruised, scraped margin (that marks a chop or a ragged flint cut), only the gape with the fat at its lips.
+	 */
+	public static final byte INCISED = 6;
+	/**
+	 * The sticking wound: a blade put into the throat just ahead of the breastbone, through the great vessels of the
+	 * neck. Drawn as an {@link #INCISED} cut along the neck; the body bleeds out through it.
+	 */
+	public static final byte STICK = 7;
 	/** Where the trunk's bone damage is kept, after the severable parts. */
 	public static final int TORSO = BodyPart.values().length;
+	/** Most runs of blood kept on one body; the oldest makes room. */
+	public static final int MAX_RUNS = 24;
 	/** Widest a wound can be hacked open, in model pixels. */
 	private static final float MAX_RADIUS = 4.5F;
+
+	/**
+	 * Blood that ran down the skin from a wound and stayed there: one straight stretch of it on one cube face, from
+	 * where it came onto the face to where it left. Kept in the part's own space, so it moves with the body the way
+	 * a dried run does, wherever the body is turned later.
+	 *
+	 * @param alongC     true if it runs along the face's second axis ({@code axis + 2}), false along its first
+	 * @param towardsMin true if it flows towards the low end of that axis
+	 * @param b0         its bounds on the face, in model pixels, along {@code axis + 1} and {@code axis + 2}
+	 * @param born       game time it ran, for its drying
+	 */
+	public record Run(ModelPart part, ModelPart.Cube cube, @Nullable BodyPart bodyPart, int axis, int sign, boolean alongC, boolean towardsMin,
+			float b0, float b1, float c0, float c1, int variant, long born) {
+		Run moved(ModelPart to) {
+			return new Run(to, cube, bodyPart, axis, sign, alongC, towardsMin, b0, b1, c0, c1, variant, born);
+		}
+	}
 
 	/**
 	 * Wounds are only drawn on this model (not on armour or other layers that share the render state). Null for a
@@ -64,7 +93,15 @@ public final class WoundSet {
 	final float[] oy = new float[MAX];
 	final float[] oz = new float[MAX];
 	final float[] yaw = new float[MAX];
+	/** Game time each wound was opened; a bruise darkens as the blood in it goes stale. */
+	final long[] born = new long[MAX];
 	int count;
+	final Run[] runs = new Run[MAX_RUNS];
+	int runCount;
+	/** True once the body's wounds have bled across it where it came to lie. */
+	boolean lyingTraced;
+	/** Game time of the newest wound whose blood has run (see {@link Wounds}). */
+	long tracedUpTo = Long.MIN_VALUE;
 	/**
 	 * Crushing injury taken without the skin giving way: blows from fists, clubs and blasts. Past a point the animal
 	 * bleeds from the mouth and nose instead of from wounds.
@@ -102,9 +139,11 @@ public final class WoundSet {
 
 	/**
 	 * Deepens the wound under the hit, or opens a new one. A wound never gets deeper than {@code cap}; a cut through
-	 * one that is already there is how parts come off (see {@link Wounds}).
+	 * one that is already there is how parts come off (see {@link Wounds}). With {@code stick} the blow is the sticking
+	 * cut in the throat, laid along the neck at {@code stickAngle} (0 along the face's first axis, 2 along its second).
 	 */
-	Change add(ModelHit.Result hit, Weapon weapon, float amount, float cap, Vec3 offset, float bodyYaw, RandomSource random) {
+	Change add(ModelHit.Result hit, Weapon weapon, float amount, float cap, Vec3 offset, float bodyYaw, boolean stick, int stickAngle, long now,
+			RandomSource random) {
 		if (weapon == Weapon.BLUNT || weapon == Weapon.BLAST) {
 			trauma += amount;
 		}
@@ -119,12 +158,17 @@ public final class WoundSet {
 			float before = severity[i];
 			severity[i] = Math.max(before, Math.min(cap, before + amount));
 			radius[i] = Math.min(MAX_RADIUS, radius[i] + weapon.radius * weapon.spread * Math.min(1.0F, amount * 2.0F));
-			if (weapon.slashes() && morph[i] == ROUND) {
+			if (stick && morph[i] != STICK) {
+				morph[i] = STICK;
+				variant[i] = (byte) (stickAngle + 4 * random.nextInt(2));
+			} else if (weapon.slashes() && morph[i] == ROUND) {
 				// A blade through a bruise: now it is a cut.
-				morph[i] = SLASH;
+				morph[i] = slashOf(weapon);
 				variant[i] = (byte) slashVariant(hit.axis(), random);
 			}
 
+			// Fresh blood into it: it reddens again.
+			born[i] = now;
 			return new Change(i, before, severity[i]);
 		}
 
@@ -134,17 +178,19 @@ public final class WoundSet {
 		bodyPart[i] = hit.bodyPart();
 		axis[i] = (byte) hit.axis();
 		sign[i] = (byte) hit.sign();
-		morph[i] = weapon.slashes() ? SLASH : ROUND;
-		variant[i] = (byte) (morph[i] == SLASH ? slashVariant(hit.axis(), random) : random.nextInt(8));
+		morph[i] = stick ? STICK : weapon.slashes() ? slashOf(weapon) : ROUND;
+		variant[i] = (byte) (stick ? stickAngle + 4 * random.nextInt(2) : weapon.slashes() ? slashVariant(hit.axis(), random) : random.nextInt(8));
 		u[i] = hu;
 		v[i] = hv;
-		// A slash is long: the same blow opens it wider along the cut than a round wound.
-		radius[i] = weapon.radius * (morph[i] == SLASH ? 1.35F : 1.0F) * (0.85F + random.nextFloat() * 0.3F);
+		// A slash is long: the same blow opens it wider along the cut than a round wound. A sticking cut is short: the
+		// point goes in deep through a slit only as wide as the blade.
+		radius[i] = weapon.radius * (stick ? 0.9F : weapon.slashes() ? 1.35F : 1.0F) * (0.85F + random.nextFloat() * 0.3F);
 		severity[i] = Math.min(cap, amount);
 		ox[i] = (float) offset.x;
 		oy[i] = (float) offset.y;
 		oz[i] = (float) offset.z;
 		yaw[i] = bodyYaw;
+		born[i] = now;
 		return new Change(i, 0.0F, severity[i]);
 	}
 
@@ -204,6 +250,7 @@ public final class WoundSet {
 		oy[i] = (float) offset.y;
 		oz[i] = (float) offset.z;
 		yaw[i] = bodyYaw;
+		born[i] = Wounds.now();
 	}
 
 	/** True if the bone of {@code part} is broken (or smashed). */
@@ -252,6 +299,7 @@ public final class WoundSet {
 		v[i] = at.local().get(c);
 		radius[i] = Mth.clamp(size, 1.5F, MAX_RADIUS);
 		severity[i] = depth;
+		born[i] = Wounds.now();
 		// Stumps bleed through the dismemberment's own stump drip.
 		ox[i] = oy[i] = oz[i] = Float.NaN;
 		return i;
@@ -310,11 +358,16 @@ public final class WoundSet {
 		return flesh;
 	}
 
-	/** How many of the wounds are of this shape, {@link #ROUND} or {@link #SLASH}. */
+	/** The slash a cutting weapon leaves: a blade's is clean ({@link #INCISED}), a chop's or a flint's ragged. */
+	private static byte slashOf(Weapon weapon) {
+		return weapon == Weapon.BLADE ? INCISED : SLASH;
+	}
+
+	/** How many of the wounds are of this shape, {@link #ROUND} or {@link #SLASH} (which counts the clean ones too). */
 	public int count(byte shape) {
 		int n = 0;
 		for (int i = 0; i < count; i++) {
-			if (morph[i] == shape) {
+			if (morph[i] == shape || shape == SLASH && (morph[i] == INCISED || morph[i] == STICK)) {
 				n++;
 			}
 		}
@@ -357,7 +410,15 @@ public final class WoundSet {
 				target.v[j] = v[i];
 				target.radius[j] = radius[i];
 				target.severity[j] = severity[i];
+				target.born[j] = born[i];
 				target.ox[j] = target.oy[j] = target.oz[j] = Float.NaN;
+			}
+		}
+
+		for (int i = 0; i < runCount; i++) {
+			ModelPart moved = parts.get(runs[i].part());
+			if (moved != null) {
+				target.addRun(runs[i].moved(moved));
 			}
 		}
 	}
@@ -421,6 +482,54 @@ public final class WoundSet {
 		}
 
 		count = kept;
+		int runsKept = 0;
+		for (int i = 0; i < runCount; i++) {
+			if (runs[i].bodyPart() != severed) {
+				runs[runsKept++] = runs[i];
+			}
+		}
+
+		for (int i = runsKept; i < runCount; i++) {
+			runs[i] = null;
+		}
+
+		runCount = runsKept;
+	}
+
+	/** Keeps a run of blood on the skin; when there are {@link #MAX_RUNS}, the oldest goes. */
+	void addRun(Run run) {
+		if (runCount < MAX_RUNS) {
+			runs[runCount++] = run;
+			return;
+		}
+
+		int oldest = 0;
+		for (int i = 1; i < runCount; i++) {
+			if (runs[i].born() < runs[oldest].born()) {
+				oldest = i;
+			}
+		}
+
+		runs[oldest] = run;
+	}
+
+	public int runCount() {
+		return runCount;
+	}
+
+	public Run run(int i) {
+		return runs[i];
+	}
+
+	/** True if the throat has been cut: the sticking wound, through the great vessels and the windpipe. */
+	public boolean throatCut() {
+		for (int i = 0; i < count; i++) {
+			if (morph[i] == STICK && severity[i] >= 0.25F) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -491,5 +600,6 @@ public final class WoundSet {
 		oy[to] = oy[from];
 		oz[to] = oz[from];
 		yaw[to] = yaw[from];
+		born[to] = born[from];
 	}
 }

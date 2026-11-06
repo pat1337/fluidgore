@@ -251,7 +251,7 @@ public final class PlayerInjuries {
 	private static void report(LocalPlayer player, PressureVessel.Vessel vessel, double metres, float kPa, int hits) {
 		String effect = kPa >= PressureVessel.SHRED_KPA ? "shred"
 				: kPa >= PressureVessel.TEAR_KPA ? "tear"
-				: kPa >= (vessel.real() ? dev.fluidgore.tank.Blast.FATAL_KPA : PressureVessel.LETHAL_KPA) ? "lethal"
+				: kPa >= (vessel.real() ? dev.fluidgore.physics.Blast.FATAL_KPA : PressureVessel.LETHAL_KPA) ? "lethal"
 				: kPa >= PressureVessel.LUNG_KPA ? "lungs"
 				: kPa >= PressureVessel.EARDRUM_KPA ? "eardrums"
 				: kPa >= PressureVessel.RINGING_KPA ? "ringing" : "bang";
@@ -336,6 +336,17 @@ public final class PlayerInjuries {
 			return;
 		}
 
+		if (spared(player) && tick >= fakeUntil) {
+			// Creative or spectator: nothing can hurt them, so they are not hurt. The blood on the screen, the ringing and
+			// the heartbeat go, even at the health they had when they switched.
+			splats.clear();
+			flash = flashO = 0.0F;
+			staggerAt = lastBeat = -1000;
+			deaf = ring = dose = 0.0F;
+			beatIn = 0;
+			return;
+		}
+
 		float weak = weak(player);
 		GoreConfig config = GoreConfig.get();
 		if (weak > 0.0F && config.lowHealthHeartbeat && config.goreLevel.enabled() && !mc.isPaused()) {
@@ -358,7 +369,19 @@ public final class PlayerInjuries {
 			return Injury.weak(fakeHealth);
 		}
 
+		if (spared(player)) {
+			return 0.0F;
+		}
+
 		return Injury.weak(player.getHealth() / Math.max(1.0F, player.getMaxHealth()));
+	}
+
+	/**
+	 * True for a player in creative or spectator mode: nothing hurts them, so they carry no injury, whatever health they
+	 * had when they switched (switching does not heal). Every client knows every player's game mode, so all agree.
+	 */
+	public static boolean spared(net.minecraft.world.entity.player.Player player) {
+		return player.isCreative() || player.isSpectator();
 	}
 
 	/** For a demo: show {@code health} (a share of full) instead of the real health for {@code ticks}. */

@@ -57,6 +57,10 @@ public final class Wounds {
 	public static final float DESTROY = 1.6F;
 	/** Severity healed per share of health regained: a third of the bar closes a wound to the bone back to nothing. */
 	private static final float HEAL_RATE = 3.0F;
+	/** Ticks a body has lain before its wounds bleed across the side it lies on. */
+	private static final int LIE_TRACE = 30;
+	/** Ticks a wound bleeds before its blood has run down the skin below it. */
+	private static final int RUN_AFTER = 20;
 	/** What a blow did to the bone under it. */
 	public static final int INTACT = 0;
 	public static final int BROKE = 1;
@@ -78,6 +82,12 @@ public final class Wounds {
 
 	public @Nullable WoundSet get(int entityId) {
 		return sets.get(entityId);
+	}
+
+	/** The client world's game time, what wounds and runs of blood are dated by; 0 with no world. */
+	public static long now() {
+		ClientLevel level = net.minecraft.client.Minecraft.getInstance().level;
+		return level != null ? level.getGameTime() : 0L;
 	}
 
 	/** True if this entity shows wounds under the current settings. */
@@ -232,7 +242,16 @@ public final class Wounds {
 		return hit != null ? open(victim, posed.model(), hit, posed.state().bodyRot, weapon, damage) : null;
 	}
 
-	/** Opens or deepens the wound at {@code hit}, a spot on {@code model} found while the body yawed {@code bodyYaw}. */
+	/** Projects an approved body-box contact onto the existing model without random replacement rays. */
+	public @Nullable Strike fragment(LivingEntity victim, dev.fluidgore.fragment.FragmentPath.Contact contact) {
+		Vec3 local = dev.fluidgore.fragment.FragmentTrace.turn(contact.local(), victim.yBodyRot);
+		Vec3 at = victim.position().add(local.x * victim.getBbWidth() * 0.5, local.y * victim.getBbHeight(), local.z * victim.getBbWidth() * 0.5);
+		Vec3 direction = dev.fluidgore.fragment.FragmentTrace.turn(contact.direction(), victim.yBodyRot);
+		double span = Math.max(1.0, victim.getBbWidth() + victim.getBbHeight());
+		return strike(victim, at.subtract(direction.scale(span)), direction, span * 2, Weapon.PIERCE, contact.damage());
+	}
+
+	/** Opens a model wound; fragment box contacts are projected here without inventing random substitute hits. */
 	private @Nullable Strike open(LivingEntity victim, Model<?> model, ModelHit.Result hit, float bodyYaw, Weapon weapon, float damage) {
 		GoreLevel level = GoreConfig.get().goreLevel;
 		if (!level.enabled() || !applies(victim)) {
@@ -245,12 +264,26 @@ public final class Wounds {
 			sets.put(victim.getId(), set);
 		}
 
+		// A blade to the head of a four-legged animal goes into its throat (see Sticking).
+		ModelParts.Posed posed = ModelParts.pose(victim);
+		boolean stick = false;
+		int angle = 0;
+		if (posed != null && posed.model() == model && Sticking.sticks(model, hit, weapon)) {
+			Sticking.Spot spot = Sticking.at(victim, posed);
+			if (spot != null) {
+				hit = spot.hit();
+				angle = spot.angle();
+				stick = true;
+			}
+		}
+
 		// Damage relative to how much the body can take: a sword on a chicken opens it up, on a horse it gashes.
 		float relative = damage / Math.max(4.0F, victim.getMaxHealth());
 		float amount = Math.max(0.12F, relative * 0.9F) * weapon.depth * level.woundRate;
 		float cap = Math.min(weapon.cap, level.woundDepth);
 		Vec3 offset = hit.point().subtract(victim.position());
-		WoundSet.Change change = set.add(hit, weapon, amount, cap, offset, bodyYaw, RANDOM);
+		long now = now();
+		WoundSet.Change change = set.add(hit, weapon, amount, cap, offset, bodyYaw, stick, angle, now, RANDOM);
 		// Through a limb already cut as deep as it goes, it may come off; through the carcass, it splits (see Butchery).
 		boolean through = weapon.cuts() && change.before() >= cap - 1.0E-3F;
 		boolean cut = through && (hit.bodyPart() == null || RANDOM.nextFloat() < Math.min(1.0F, level.partChance * 2.0F));
@@ -372,6 +405,45 @@ public final class Wounds {
 		}
 	}
 
+	/**
+	 * Lets the blood of a body's open wounds run down its skin. A wound runs once it has bled for {@link #RUN_AFTER}
+	 * ticks, against the pose then (not mid-flinch from the blow), and again whenever a blow deepens it; once a body
+	 * has come to lie, what still bleeds runs again across the side it lies on.
+	 */
+	private void runs(WoundSet set, @Nullable Corpse corpse, @Nullable Entity entity) {
+		long now = now();
+		boolean lying = corpse != null && !set.lyingTraced && corpse.groundTicks() >= LIE_TRACE;
+		boolean due = false;
+		for (int i = 0; i < set.count && !due; i++) {
+			due = set.born[i] > set.tracedUpTo && now - set.born[i] >= RUN_AFTER;
+		}
+
+		if (!lying && !due) {
+			return;
+		}
+
+		LivingEntity body = corpse != null ? corpse.entity : entity instanceof LivingEntity living ? living : null;
+		ModelParts.Posed posed = body != null ? ModelParts.pose(body) : null;
+		if (posed == null || !set.drawsOn(posed.model())) {
+			return;
+		}
+
+		long upTo = set.tracedUpTo;
+		for (int i = 0; i < set.count; i++) {
+			boolean fresh = set.born[i] > set.tracedUpTo && now - set.born[i] >= RUN_AFTER;
+			if (fresh || lying && (set.morph[i] == WoundSet.STICK || set.severity[i] >= 0.5F)) {
+				Runs.trace(set, body, posed, i, now, RANDOM);
+			}
+
+			if (fresh) {
+				upTo = Math.max(upTo, set.born[i]);
+			}
+		}
+
+		set.tracedUpTo = upTo;
+		set.lyingTraced |= lying;
+	}
+
 	/** One body's wounds bleeding for this step. */
 	private void bleed(ClientLevel level, BloodWorld blood, WoundSet set, @Nullable Corpse corpse, @Nullable Entity entity, Vec3 base, float yaw, float puddles) {
 		// The living clot: the drip thins out after the last blow and stops, so a wounded survivor does not pool forever.
@@ -382,6 +454,10 @@ public final class Wounds {
 			if (flow <= 0.0F) {
 				return;
 			}
+		}
+
+		if (GoreConfig.get().bloodRuns) {
+			runs(set, corpse, entity);
 		}
 
 		if (set.trauma > 0.8F && RANDOM.nextFloat() < Math.min(0.6F, (set.trauma - 0.8F) * 0.35F) * flow) {
@@ -474,6 +550,12 @@ public final class Wounds {
 		int best = -1;
 		float deepest = 0.25F;
 		for (int i = 0; i < set.count; i++) {
+			if (!Float.isNaN(set.ox[i]) && set.morph[i] == WoundSet.STICK && set.severity[i] >= 0.25F) {
+				// A cut throat is where it bleeds out, whatever else it has.
+				best = i;
+				break;
+			}
+
 			if (!Float.isNaN(set.ox[i]) && set.severity[i] >= deepest) {
 				deepest = set.severity[i];
 				best = i;
