@@ -6,13 +6,13 @@ The same veterinary model of a ewe as `../sheep_anatomy`, at the scale of the ga
 
 | File | What | Cubes |
 |---|---|---|
-| `sheep_trunk_64x.bbmodel` | Sheep trunk at 64x (as the mod draws it) | 1613 |
-| `sheep_organs_64x.bbmodel` | Sheep organs at 64x (skeleton and diaphragm left out) | 1114 |
-| `sheep_liver_64x.bbmodel` | Sheep liver at 64x | 79 |
-| `sheep_heart_lungs_64x.bbmodel` | Sheep heart and lungs at 64x | 345 |
-| `sheep_stomachs_64x.bbmodel` | Sheep stomachs at 64x | 364 |
+| `sheep_trunk_64x.bbmodel` | Sheep trunk at 64x (as the mod draws it) | 5219 |
+| `sheep_organs_64x.bbmodel` | Sheep organs at 64x (skeleton and diaphragm left out) | 4660 |
+| `sheep_liver_64x.bbmodel` | Sheep liver at 64x | 73 |
+| `sheep_heart_lungs_64x.bbmodel` | Sheep heart and lungs at 64x | 359 |
+| `sheep_stomachs_64x.bbmodel` | Sheep stomachs at 64x | 421 |
 | `sheep_guts_64x.bbmodel` | Sheep intestines, kidneys, spleen at 64x | 207 |
-| `sheep_skeleton_64x.bbmodel` | Sheep trunk skeleton at 64x | 431 |
+| `sheep_skeleton_64x.bbmodel` | Sheep trunk skeleton at 64x | 497 |
 
 - Blockbench units are the vanilla sheep's own model pixels: the body is x -4..4, 12..18 up, z -8..8, the head
   towards north (-Z). As in the game's model, the sheep's right is -X.

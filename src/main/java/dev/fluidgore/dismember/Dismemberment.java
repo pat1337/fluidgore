@@ -3,6 +3,7 @@ package dev.fluidgore.dismember;
 import dev.fluidgore.blood.BloodSupply;
 import java.util.HashMap;
 import dev.fluidgore.GoreSystems;
+import dev.fluidgore.anatomy.Anatomy;
 import dev.fluidgore.anatomy.Melting;
 import dev.fluidgore.mixin.ModelPartAccessor;
 import dev.fluidgore.rot.Rot;
@@ -204,7 +205,9 @@ public final class Dismemberment {
 		int organs = Viscera.blow(level, blood, giblets, entity, missingMask(entity.getId()), from, tntKg, seen, 0.0F, burnt);
 		vaporized.add(entity.getId());
 		if (organs > 0) {
-			giblets.burstFlesh(level, blood, entity, from, 0.6F);
+			// A body whose anatomy holds its own hide and muscle has thrown them already: only the fine scraps are left.
+			Anatomy.Beast beast = Anatomy.Beast.of(entity.getType());
+			giblets.burstFlesh(level, blood, entity, from, beast != null && beast.walled() ? 0.2F : 0.6F);
 		} else {
 			giblets.burst(level, blood, entity, from);
 		}
@@ -751,6 +754,13 @@ public final class Dismemberment {
 		melting.forget(entityId);
 		wool.forget(entityId);
 		butchery.forget(entityId);
+	}
+
+	/** Takes away every loose piece, scrap and feather inside {@code box}. */
+	public void removeIn(net.minecraft.world.phys.AABB box) {
+		parts.removeIn(box);
+		giblets.removeIn(box);
+		feathers.removeIn(box);
 	}
 
 	public void clear() {

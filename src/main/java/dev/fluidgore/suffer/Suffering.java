@@ -79,8 +79,12 @@ public final class Suffering {
 	private static final float ON_SIDE = 1.4F;
 	/** Lean past which a body lies on its back. */
 	private static final float ON_BACK = 2.2F;
-	/** Ticks after the fall a four-legged body still rolls off its back. */
+	/** Ticks after the fall (or after it last tumbled) a four-legged body still rolls off its back. */
 	private static final int RIGHTING_TICKS = 60;
+	/** Ticks a body rolled off its back one way may get no further before it is rolled the other way. */
+	private static final int RIGHTING_STALL = 12;
+	/** Faster than this (blocks per second, as a whole) a body is still tumbling or sliding, not settling over. */
+	private static final float TUMBLING = 1.5F;
 	/** Ticks over which a dead body's legs set straight out (see {@link #legStiffness}). */
 	private static final int STIFFEN_TICKS = 30;
 	/** Bodies overlapping are eased apart by this share of the overlap a tick, at most {@link #SPREAD_MAX} blocks. */
@@ -763,20 +767,41 @@ public final class Suffering {
 				// still on its belly after the fall (short legs, wide trunk: pig, sheep) is not at rest there: it slumps over.
 				Rigging.lean(c, c.fallSide, c.body.onGround || c.age - c.toppledAt >= GUIDED_FALL ? 3.5F : 1.5F);
 			} else if (c.toppled && Math.abs(c.body.roll) < ON_SIDE * 0.8F && c.rig.skeleton.plan == Skeleton.Plan.QUADRUPED
-					&& c.age - c.toppledAt < RIGHTING_TICKS * 2) {
-				// Still propped up on its legs, or on a body beside or under it: a dead weight settles over the way it already
-				// leans.
+					&& c.age - Math.max(c.toppledAt, c.movedAt) < RIGHTING_TICKS * 2) {
+				// Still propped up on its legs, or on a body or a step beside or under it: a dead weight settles over the way it
+				// already leans. Counted from when it last tumbled, so a body that rolled down a flight of steps settles too.
 				Rigging.lean(c, Math.abs(c.body.roll) > 0.2F ? Math.signum(c.body.roll) : c.fallSide, 2.0F);
 			} else if (c.toppled && c.body.onGround && Math.abs(c.body.roll) > ON_BACK && c.rig.skeleton.plan != Skeleton.Plan.BIPED
-					&& c.age - c.toppledAt < RIGHTING_TICKS) {
+					&& c.age - Math.max(c.toppledAt, c.movedAt) < RIGHTING_TICKS) {
 				// A four-legged body does not stay on its back (a fall off a cliff can leave it there): its legs and the
-				// round of its ribs tip it onto the nearer side. A person lies on their back.
-				Rigging.lean(c, -Math.signum(c.body.roll), 2.5F);
+				// round of its ribs tip it onto the nearer side. A person lies on their back. Wedged against a step's riser
+				// or a wall that way, it goes over the other way.
+				float off = Mth.PI - Math.abs(c.body.roll);
+				if (c.rightSide == 0.0F) {
+					c.rightSide = c.body.roll != 0.0F ? -Math.signum(c.body.roll) : c.fallSide;
+					c.rightBest = off;
+					c.rightStall = 0;
+				} else if (off > c.rightBest + 0.05F) {
+					c.rightBest = off;
+					c.rightStall = 0;
+				} else if (++c.rightStall > RIGHTING_STALL) {
+					c.rightSide = -c.rightSide;
+					c.rightBest = off;
+					c.rightStall = 0;
+				}
+
+				Rigging.lean(c, c.rightSide, 2.5F);
+			} else {
+				c.rightSide = 0.0F;
 			}
 
 
 			spread(c);
 			float landing = Rigging.tick(level, c);
+			if (c.rig.velocity().lengthSqr() > TUMBLING * TUMBLING) {
+				c.movedAt = c.age;
+			}
+
 			if (landing > 0.0F && c.toppled) {
 				if (!c.landed || landing > 0.1F) {
 					slam(level, c, landing, color, gore);
@@ -1374,6 +1399,36 @@ public final class Suffering {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Every body lying inside {@code box} is gone from this screen at once, without a puff (the area is being cleared, see
+	 * {@code GoreClear}); the server removes those it keeps. Returns how many there were.
+	 */
+	public int removeIn(net.minecraft.world.phys.AABB box) {
+		Dismemberment dismemberment = GoreSystems.dismemberment();
+		int removed = 0;
+		Iterator<Corpse> it = corpses.values().iterator();
+		while (it.hasNext()) {
+			Corpse corpse = it.next();
+			if (!box.contains(centre(corpse))) {
+				continue;
+			}
+
+			it.remove();
+			int id = corpse.entity.getId();
+			states.remove(id);
+			if (corpse.unloaded) {
+				dismemberment.onEntityUnload(id);
+				BloodSupply.drop(id);
+			} else {
+				dismemberment.hide(id);
+			}
+
+			removed++;
+		}
+
+		return removed;
 	}
 
 	static Supplier<Vec3> follow(LivingEntity entity) {

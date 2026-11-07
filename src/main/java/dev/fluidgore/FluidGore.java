@@ -2,6 +2,7 @@ package dev.fluidgore;
 
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.server.BurningBodies;
+import dev.fluidgore.server.ClearCommand;
 import dev.fluidgore.server.EvidenceStore;
 import dev.fluidgore.server.HitReports;
 import dev.fluidgore.server.KeptBodies;
@@ -28,6 +29,7 @@ public class FluidGore implements ModInitializer {
 		BurningBodies.register();
 		EvidenceStore.register();
 		HitReports.register();
+		ClearCommand.register();
 		// Sent by add-ons that make pressure vessels; registered here so any of them can use it.
 		PayloadTypeRegistry.clientboundPlay().register(VesselBurstPayload.TYPE, VesselBurstPayload.CODEC);
 	}

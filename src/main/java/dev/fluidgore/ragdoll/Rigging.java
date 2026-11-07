@@ -3,6 +3,7 @@ package dev.fluidgore.ragdoll;
 import dev.fluidgore.GoreSystems;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.ModelParts;
+import dev.fluidgore.net.FallSync;
 import dev.fluidgore.physics.BodySlide;
 import dev.fluidgore.suffer.Corpse;
 import dev.fluidgore.suffer.Ragdoll;
@@ -32,6 +33,15 @@ public final class Rigging {
 	private static final double TICKS = 20.0;
 	/** How far a kept body's rig may drift from where the server has the body before it is drawn back. */
 	private static final double LEASH = 0.35;
+	/** Further than this from the server's body (blocks), a rig is out of step and is put there at once. */
+	private static final double SNAP = 3.0;
+	/** How fast a rig is drawn after the server's body: blocks per second for each block beyond the leash, and at most. */
+	private static final double PULL = 3.0;
+	private static final double PULL_MAX = 1.5;
+	/** How fast a rig the server took down a step slumps over the edge, blocks per second. */
+	private static final double SLUMP = 1.0;
+	/** Ticks a rig is drawn without getting closer before it is left where it lies. */
+	private static final int STALL_TICKS = 40;
 	/** How much of a spasm on the old joints becomes spin on a segment (the twitch is drawn on top as well). */
 	private static final float KICK = 0.25F;
 	/** How hard each knee and hock is set folding as a body goes down, radians per second. */
@@ -40,10 +50,17 @@ public final class Rigging {
 	private static final double SLIDE = 2.5;
 	/** Upward pushes below this (blocks per tick) are a spasm's hop, not a blow. */
 	private static final double HOP = 0.05;
-	/** How far below the rig a kept body may be on the server before the rig is put down there (blocks). */
+	/** How far below the rig a kept body may be on the server before the rig goes down after it (blocks). */
 	private static final double DROP = 0.75;
 	/** How far legs folded under a trunk can hold it above what it lies on (blocks). */
 	private static final double PROPPED = 0.5;
+	/** Ticks between reports of where a kept body this game leads has got to, while it moves. */
+	private static final int REPORT_TICKS = 4;
+	/**
+	 * How far the server's body may be from the line through this game's last reports and still be where this game put
+	 * it (blocks): the server is a tick or two behind, and every game draws a body between the places it is sent.
+	 */
+	private static final double REPORTED = 0.3;
 
 	/** Time spent stepping rigs and how many steps, for the performance test. */
 	public static long nanos;
@@ -74,7 +91,7 @@ public final class Rigging {
 			return null;
 		}
 
-		Rig rig = Rig.of(pose, Cremation.kilograms(entity));
+		Rig rig = Rig.of(pose, Cremation.kilograms(entity), Weights.of(skeleton, entity));
 		rig.push(body.vx * TICKS, body.vy * TICKS, body.vz * TICKS);
 		body.sentVx = body.vx;
 		body.sentVy = body.vy;
@@ -130,7 +147,7 @@ public final class Rigging {
 
 		rig.beginTick();
 		kicks(rig, body.kicks);
-		follow(rig, c);
+		follow(level, rig, c);
 		slide(level, rig, c);
 		long start = System.nanoTime();
 		if (rig.stepsNext()) {
@@ -138,6 +155,7 @@ public final class Rigging {
 		}
 		rig.lift = c.lift();
 		rig.tick(level);
+		lead(rig, c);
 		nanos += System.nanoTime() - start;
 		steps++;
 		if (rig.asleep()) {
@@ -244,37 +262,136 @@ public final class Rigging {
 	}
 
 	/**
-	 * A body the server keeps is where the server has it: if this one has drifted further than {@link #LEASH} from it
-	 * across the ground, it is drawn back by the difference. Falling and folding stay the rig's own.
+	 * A body the server keeps is where the server has it. When the server moves it (a shove, a slump down a step) the rig
+	 * goes after it through the world: drawn across the ground, over the edge and down, every segment meeting what is in
+	 * the way. Moving it by hand would put it into steps and through fences, and lose which side of a wall it came from.
+	 * Only a body out of step by more than {@link #SNAP} (moved while this game was not looking) is put there at once.
+	 * Falling and folding stay the rig's own. In water each floats or sinks on its own: the server's box is not the shape
+	 * the rig lies in, so it floats at another height.
 	 */
-	private static void follow(Rig rig, Corpse c) {
+	private static void follow(ClientLevel level, Rig rig, Corpse c) {
+		rig.pulled = false;
 		if (!c.held || c.unloaded) {
 			return;
 		}
 
 		LivingEntity entity = c.entity;
+		if (FallSync.leads(entity.getId()) && rig.onReported(entity.getX(), entity.getZ(), REPORTED)) {
+			// The server has the body where this game put it: this ragdoll is the one that moves it (see lead).
+			return;
+		}
+
 		Vec3 centre = rig.centre();
 		double dx = entity.getX() - centre.x;
 		double dz = entity.getZ() - centre.z;
 		double dist = Math.sqrt(dx * dx + dz * dz);
 		double dy = entity.getY() - rig.bottom();
-		// The server took it down a step or a ledge the rig still lies on: it goes there (the segments then settle). In
-		// water each floats or sinks on its own: the server's box is not the shape the rig lies in, so it floats at
-		// another height.
-		if (dist > 8.0 || dy < -DROP && !rig.inWater) {
+		if (dist > SNAP || dy < -SNAP && !rig.inWater) {
 			rig.shift(dx, dy, dz);
-		} else if (dist > LEASH) {
-			double k = (dist - LEASH) / dist * 0.5;
-			rig.shift(dx * k, 0.0, dz * k);
+			rig.leashStall = 0;
+			rig.pulled = true;
+			return;
+		}
+
+		// Somewhere new to go: try again even if it could not get to the last place.
+		if (!(Math.abs(entity.getX() - rig.leashX) + Math.abs(entity.getZ() - rig.leashZ) <= 0.05)) {
+			rig.leashX = entity.getX();
+			rig.leashZ = entity.getZ();
+			rig.leashBest = Double.MAX_VALUE;
+			rig.leashStall = 0;
+		}
+
+		boolean below = dy < -DROP && !rig.inWater;
+		// Somewhere else than this ragdoll: the server moved the body (a shove, a blow), and this one goes after it.
+		rig.pulled = dist > LEASH || below;
+		// Not while it falls: it lands first. A body in water drifts after it as it floats.
+		if (dist <= LEASH && !below || !rig.grounded && !rig.asleep() && !rig.inWater) {
+			return;
+		}
+
+		// Getting no closer (wedged, or the server's box went where the body does not fit): it is left where it lies.
+		if (dist < rig.leashBest - 0.01) {
+			rig.leashBest = dist;
+			rig.leashStall = 0;
+		} else if (++rig.leashStall > STALL_TICKS) {
+			return;
+		}
+
+		double ux;
+		double uz;
+		double target;
+		Vec3 down = below ? BodySlide.pull(level, box(entity, centre, rig.bottom())) : Vec3.ZERO;
+		if (below && down.horizontalDistanceSqr() > 1.0E-8) {
+			// The server took it down a step it still lies on: over the edge the way down goes.
+			double d = down.horizontalDistance();
+			ux = down.x / d;
+			uz = down.z / d;
+			target = SLUMP;
+		} else if (dist > 1.0E-3) {
+			ux = dx / dist;
+			uz = dz / dist;
+			target = Math.min(PULL_MAX, Math.max(dist - LEASH, below ? SLUMP / PULL : 0.0) * PULL);
+		} else {
+			return;
+		}
+
+		// Brought up to that pace, never past it.
+		Vec3 v = rig.velocity();
+		double missing = target - (v.x * ux + v.z * uz);
+		if (missing > 0.0) {
+			rig.push(ux * missing, 0.0, uz * missing);
 		}
 	}
 
 	/**
+	 * A kept body whose fall this game leads ({@link FallSync}, see {@code server/FallLeads}): while its ragdoll moves on
+	 * its own, where it has got to is sent to the server a few times a second, and once more when it comes to rest, and
+	 * the server moves its body there. Not while the ragdoll is drawn after the server's body (the server moved it), nor
+	 * in water, where the server floats its body itself.
+	 */
+	private static void lead(Rig rig, Corpse c) {
+		int id = c.entity.getId();
+		if (!c.held || c.unloaded || rig.pulled || rig.inWater || !FallSync.leads(id)) {
+			return;
+		}
+
+		boolean resting = rig.asleep();
+		if (!resting) {
+			rig.reportedRest = false;
+		}
+
+		boolean first = !rig.hasReported();
+		if (!first && (resting ? rig.reportedRest : ++rig.reportTicks < REPORT_TICKS)) {
+			return;
+		}
+
+		Vec3 centre = rig.centre();
+		if (FallSync.report(id, centre.x, rig.bottom(), centre.z, resting)) {
+			if (first) {
+				// Where the server had it until now: it is drawn from there to the first report.
+				rig.reported(c.entity.getX(), c.entity.getZ());
+			}
+
+			rig.reported(centre.x, centre.z);
+			rig.reportTicks = 0;
+			rig.reportedRest = resting;
+		}
+	}
+
+	/** The body's box (as wide and tall as the entity) round {@code centre}, standing at {@code bottom}. */
+	private static AABB box(LivingEntity entity, Vec3 centre, double bottom) {
+		double halfWidth = entity.getBbWidth() * 0.5;
+		return new AABB(centre.x - halfWidth, bottom, centre.z - halfWidth, centre.x + halfWidth, bottom + entity.getBbHeight(), centre.z + halfWidth);
+	}
+
+	/**
 	 * A body only this game has, lying over a drop (stairs, a ledge), slumps over the edge and goes down it, as a kept
-	 * body is taken down by the server (see {@link BodySlide}); the segments then fall and fold on their own.
+	 * body is taken down by the server (see {@link BodySlide}); the segments then fall and fold on their own. A kept body
+	 * whose fall this game leads slumps here too: the server leaves its moving to this game (see {@link #lead}).
 	 */
 	private static void slide(ClientLevel level, Rig rig, Corpse c) {
-		if (c.held && !c.unloaded || !GoreConfig.get().bodySlide || !rig.grounded && !rig.asleep()) {
+		boolean kept = c.held && !c.unloaded;
+		if (kept && !FallSync.leads(c.entity.getId()) || !GoreConfig.get().bodySlide || !rig.grounded && !rig.asleep()) {
 			return;
 		}
 

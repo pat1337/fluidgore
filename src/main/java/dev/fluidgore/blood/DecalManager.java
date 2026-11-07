@@ -8,6 +8,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.LightCoordsUtil;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import org.jspecify.annotations.Nullable;
 
@@ -60,6 +61,18 @@ public final class DecalManager {
 				double h = SurfaceProbe.surfaceBelow(level, (a0 + a1) * 0.5, surfaceY + MAX_STEP, surfaceY - MAX_STEP, (b0 + b1) * 0.5);
 				if (Double.isNaN(h)) {
 					continue;
+				}
+
+				// Only as far as the face it lies on: a fence rail takes a strip of a splat, not a sheet beside it.
+				AABB top = SurfaceProbe.topFace(level, a0, a1, h, b0, b1);
+				if (top != null) {
+					a0 = Math.max(a0, top.minX);
+					a1 = Math.min(a1, top.maxX);
+					b0 = Math.max(b0, top.minZ);
+					b1 = Math.min(b1, top.maxZ);
+					if (a1 - a0 < 0.01 || b1 - b0 < 0.01) {
+						continue;
+					}
 				}
 
 				int o = count * Decal.PIECE_STRIDE;
@@ -236,6 +249,11 @@ public final class DecalManager {
 
 	void removeChunk(int chunkX, int chunkZ) {
 		decals.removeIf(d -> (d.anchor.getX() >> 4) == chunkX && (d.anchor.getZ() >> 4) == chunkZ);
+	}
+
+	/** Takes away every mark inside {@code box}, on the floor or on a wall. */
+	void removeIn(net.minecraft.world.phys.AABB box) {
+		decals.removeIf(d -> box.contains(d.anchor.getX() + 0.5, d.anchor.getY() + 0.5, d.anchor.getZ() + 0.5));
 	}
 
 	void clear() {

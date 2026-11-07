@@ -1,6 +1,0 @@
-# Fluid Gore generated textures as they were: SHA-256 of each PNG, and of each anatomy.png tile's pixels.
-# Checked by tools/VerifyTextures.java; new tiles in free slots are allowed, changed ones are not.
-file icon.png b500eeb6bd6b7b8cf2b9a35909b19bb448350206f730ad810e2a74d35e609a6c
-file textures/block/cobble_tank_scars_1.png 51eb8e92735ad156fdde11126b4acd795440847ca7f58769302ece7fa0d5689b
-file textures/block/cobble_tank_scars_2.png ad1107b179fcb896075a574b484414c1b5083de0fb878758d9b721c6dfface4a
-file textures/block/cobble_tank_scars_3.png 1a22056d26ad14de915b68bba98c72a66d853d7323de78b46b8b94e1a01e316d

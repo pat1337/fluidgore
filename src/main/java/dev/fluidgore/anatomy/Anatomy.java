@@ -200,6 +200,14 @@ public final class Anatomy {
 
 			return type == EntityTypes.COW || type == EntityTypes.MOOSHROOM ? COW : null;
 		}
+
+		/**
+		 * Whether this animal's anatomy carries its own body wall (the hide, the fat under it and the named muscles) out to
+		 * the faces of its trunk, so a blast throws real flesh and needs few made-up scraps besides.
+		 */
+		public boolean walled() {
+			return this == SHEEP;
+		}
 	}
 
 	/**
@@ -473,6 +481,11 @@ public final class Anatomy {
 	private static final Piece[] LEFT_FORELEG = mirror(RIGHT_FORELEG);
 	private static final Piece[] RIGHT_HINDLEG = beastLeg(false);
 	private static final Piece[] LEFT_HINDLEG = mirror(RIGHT_HINDLEG);
+	// A sheep's legs are generated (SheepLegs): its own bones, muscles, tendons, skin and claws.
+	private static final Piece[] SHEEP_RIGHT_FORELEG = SheepLegs.fore();
+	private static final Piece[] SHEEP_LEFT_FORELEG = mirror(SHEEP_RIGHT_FORELEG);
+	private static final Piece[] SHEEP_RIGHT_HINDLEG = SheepLegs.hind();
+	private static final Piece[] SHEEP_LEFT_HINDLEG = mirror(SHEEP_RIGHT_HINDLEG);
 
 	private Anatomy() {
 	}
@@ -896,8 +909,8 @@ public final class Anatomy {
 			case BEAST_HEAD -> beast == Beast.SHEEP ? SHEEP_HEAD : beast.ruminant ? RUMINANT_HEAD : PIG_HEAD;
 			case BEAST_TRUNK -> beast == Beast.COW ? turned ? COW_TRUNK_TURNED : COW_TRUNK
 					: beast.ruminant ? turned ? RUMINANT_TRUNK_TURNED : RUMINANT_TRUNK : turned ? PIG_TRUNK_TURNED : PIG_TRUNK;
-			case FORELEG -> left ? LEFT_FORELEG : RIGHT_FORELEG;
-			case HINDLEG -> left ? LEFT_HINDLEG : RIGHT_HINDLEG;
+			case FORELEG -> beast == Beast.SHEEP ? left ? SHEEP_LEFT_FORELEG : SHEEP_RIGHT_FORELEG : left ? LEFT_FORELEG : RIGHT_FORELEG;
+			case HINDLEG -> beast == Beast.SHEEP ? left ? SHEEP_LEFT_HINDLEG : SHEEP_RIGHT_HINDLEG : left ? LEFT_HINDLEG : RIGHT_HINDLEG;
 		};
 	}
 

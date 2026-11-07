@@ -300,7 +300,18 @@ public final class Viscera {
 	 */
 	public static boolean whole(Organ organ) {
 		Material m = Material.of(organ.kind());
-		return organ.modelShape() != null && organ.modelShape().cubes() <= OrganModel.MOST_CUBES && !m.bone() && m != Material.KERATIN;
+		return organ.modelShape() != null && organ.modelShape().cubes() <= OrganModel.MOST_CUBES && !m.bone() && m != Material.KERATIN && !wall(organ);
+	}
+
+	/**
+	 * True for a piece of the body wall rather than an organ: the hide, the fat under it, a muscle or a patch of one. A
+	 * blast tears a body into dozens of these, so they fly as giblets (drawn by their shapes all the same) and never fill
+	 * the pool of loose pieces a player carries and cuts.
+	 */
+	public static boolean wall(Organ organ) {
+		Anatomy.Kind k = organ.kind();
+		return k == Anatomy.Kind.MUTTON || k == Anatomy.Kind.PORK || k == Anatomy.Kind.BEEF || k == Anatomy.Kind.DERMIS
+				|| organ.name().endsWith("_fat") && !organ.name().equals("kidney_fat");
 	}
 
 	/**

@@ -7,12 +7,10 @@ import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.util.RandomSource;
-import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.shapes.CollisionContext;
 
 /**
  * Ballistic blood droplets. They fly under gravity and drag, ray-cast against block collision shapes each tick,
@@ -79,6 +77,13 @@ public final class DropletSystem {
 		droplets.add(new Droplet(x, y, z, vx, vy, vz, real, rgb, size * Math.max(0.4F, shrink)));
 	}
 
+	/** Blood already out of a body running on (off a rail it landed on): drawn from no one. */
+	void runoff(double x, double y, double z, double vx, double vz, float volume, int rgb) {
+		if (hasRoom() && volume > 0.0F) {
+			droplets.add(new Droplet(x, y, z, vx, 0.0, vz, volume, rgb, 0.035F));
+		}
+	}
+
 	void tick(Level level) {
 		int write = 0;
 		for (int i = 0; i < droplets.size(); i++) {
@@ -115,7 +120,7 @@ public final class DropletSystem {
 
 		Vec3 from = new Vec3(d.x, d.y, d.z);
 		Vec3 to = new Vec3(d.x + d.vx, d.y + d.vy, d.z + d.vz);
-		BlockHitResult hit = level.clip(new ClipContext(from, to, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, CollisionContext.empty()));
+		BlockHitResult hit = SurfaceProbe.clip(level, from, to);
 
 		if (hit.getType() != HitResult.Type.BLOCK) {
 			d.x = to.x;
@@ -182,6 +187,11 @@ public final class DropletSystem {
 		d.x += face.getStepX() * 0.02;
 		d.z += face.getStepZ() * 0.02;
 		return true;
+	}
+
+	/** Takes away every drop in flight inside {@code box}. */
+	void removeIn(net.minecraft.world.phys.AABB box) {
+		droplets.removeIf(d -> box.contains(d.x, d.y, d.z));
 	}
 
 	void clear() {

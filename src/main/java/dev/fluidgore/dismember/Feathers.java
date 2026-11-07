@@ -357,6 +357,15 @@ public final class Feathers {
 		life[to] = life[from];
 	}
 
+	/** Takes away every feather inside {@code box}. */
+	public void removeIn(net.minecraft.world.phys.AABB box) {
+		for (int i = count - 1; i >= 0; i--) {
+			if (box.contains(x[i], y[i], z[i])) {
+				remove(i);
+			}
+		}
+	}
+
 	public void clear() {
 		count = 0;
 	}

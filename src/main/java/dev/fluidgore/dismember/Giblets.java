@@ -1220,7 +1220,7 @@ public final class Giblets {
 				|| solid(level, x[i], y[i], z[i] - reach);
 	}
 
-	/** True if the point is inside a block's collision box (shape bounds: exact for full blocks and slabs). */
+	/** True if the point is inside a block as it is drawn (shape bounds: exact for full blocks and slabs). */
 	private static boolean solid(ClientLevel level, double wx, double wy, double wz) {
 		BlockPos pos = BlockPos.containing(wx, wy, wz);
 		BlockState state = level.getBlockState(pos);
@@ -1228,7 +1228,7 @@ public final class Giblets {
 			return false;
 		}
 
-		VoxelShape shape = state.getCollisionShape(level, pos);
+		VoxelShape shape = dev.fluidgore.blood.SurfaceProbe.shape(level, pos, state);
 		if (shape.isEmpty()) {
 			return false;
 		}
@@ -1241,10 +1241,10 @@ public final class Giblets {
 				&& lz >= shape.min(Direction.Axis.Z) && lz <= shape.max(Direction.Axis.Z);
 	}
 
-	/** Top of the collision box at a point inside it. */
+	/** Top of the drawn block at a point inside it. */
 	private static double surface(ClientLevel level, double wx, double wy, double wz) {
 		BlockPos pos = BlockPos.containing(wx, wy, wz);
-		VoxelShape shape = level.getBlockState(pos).getCollisionShape(level, pos);
+		VoxelShape shape = dev.fluidgore.blood.SurfaceProbe.shape(level, pos, level.getBlockState(pos));
 		return shape.isEmpty() ? wy : pos.getY() + shape.max(Direction.Axis.Y);
 	}
 
@@ -1378,6 +1378,29 @@ public final class Giblets {
 		}
 
 		return squashed;
+	}
+
+	/** Takes away every piece inside {@code box}, keeping the rest in the order they came. */
+	public void removeIn(net.minecraft.world.phys.AABB box) {
+		int kept = 0;
+		for (int i = 0; i < count; i++) {
+			if (box.contains(x[i], y[i], z[i])) {
+				continue;
+			}
+
+			if (kept != i) {
+				move(i, kept);
+			}
+
+			kept++;
+		}
+
+		for (int i = kept; i < count; i++) {
+			texture[i] = null;
+			shape[i] = null;
+		}
+
+		count = kept;
 	}
 
 	public void clear() {

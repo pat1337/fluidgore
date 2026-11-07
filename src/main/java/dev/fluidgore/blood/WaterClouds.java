@@ -197,6 +197,11 @@ public final class WaterClouds {
 		clouds.removeIf(c -> (Mth.floor(c.x) >> 4) == chunkX && (Mth.floor(c.z) >> 4) == chunkZ);
 	}
 
+	/** Takes away every cloud inside {@code box}. */
+	public void removeIn(net.minecraft.world.phys.AABB box) {
+		clouds.removeIf(c -> box.contains(c.x, c.y, c.z));
+	}
+
 	public void clear() {
 		clouds.clear();
 	}

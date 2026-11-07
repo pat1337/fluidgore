@@ -170,6 +170,12 @@ public final class Spurts {
 		return false;
 	}
 
+	/** Stops every jet and ooze coming out of a body inside {@code box}. */
+	void removeIn(net.minecraft.world.phys.AABB box) {
+		spurts.removeIf(s -> box.contains(s.wound.get()));
+		oozes.removeIf(o -> box.contains(o.top.get()));
+	}
+
 	void clear() {
 		spurts.clear();
 		oozes.clear();

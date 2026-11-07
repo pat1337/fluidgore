@@ -15,7 +15,7 @@ final class SheepHead {
 	private SheepHead() {
 	}
 
-	/** The head: 276 cubes. */
+	/** The head: 287 cubes. */
 	static Piece[] pieces() {
 		return new Piece[] {
 			p(Kind.SKULL, 0.0F, 2.6667F, -7.5F, 0.6667F, 3.3333F, -7.0F, true, 1.0F, "jawbone"),
@@ -32,15 +32,21 @@ final class SheepHead {
 			p(Kind.SKULL, 1.3333F, 2.0F, -6.5F, 2.0F, 2.6667F, -6.0F, true, 1.0F, "jawbone"),
 			p(Kind.SKULL, -2.6667F, 2.0F, -4.5F, -2.0F, 2.6667F, -3.0F, true, 1.0F, "jawbone"),
 			p(Kind.SKULL, 2.0F, 2.0F, -4.5F, 2.6667F, 2.6667F, -3.0F, true, 1.0F, "jawbone"),
+			p(Kind.MUTTON, -3.3333F, 0.0F, -4.0F, -2.6667F, 2.6667F, -2.5F, false, 1.0F, "masseter"),
 			p(Kind.SKULL, -2.0F, 2.0F, -4.0F, -1.3333F, 2.6667F, -2.5F, true, 1.0F, "jawbone"),
 			p(Kind.SKULL, 1.3333F, 2.0F, -4.0F, 2.0F, 2.6667F, -2.5F, true, 1.0F, "jawbone"),
+			p(Kind.MUTTON, 2.6667F, 0.0F, -4.0F, 3.3333F, 2.6667F, -2.5F, false, 1.0F, "masseter"),
 			p(Kind.SKULL, -1.3333F, 1.3333F, -7.0F, 1.3333F, 2.0F, -4.5F, false, 1.0F, "upper_jaw"),
+			p(Kind.MUTTON, -3.3333F, 0.6667F, -4.5F, -2.6667F, 2.0F, -4.0F, false, 1.0F, "masseter"),
 			p(Kind.TONGUE, -1.3333F, 1.3333F, -4.5F, 1.3333F, 2.0F, -4.0F, true, 1.0F, "tongue"),
+			p(Kind.MUTTON, 2.6667F, 0.6667F, -4.5F, 3.3333F, 2.0F, -4.0F, false, 1.0F, "masseter"),
 			p(Kind.TONGUE, -0.6667F, 1.3333F, -4.0F, 0.6667F, 2.0F, -2.0F, true, 1.0F, "tongue"),
 			p(Kind.SKULL, -2.6667F, 1.3333F, -3.5F, -1.3333F, 2.0F, -2.5F, true, 1.0F, "jawbone"),
 			p(Kind.SKULL, 1.3333F, 1.3333F, -3.5F, 2.6667F, 2.0F, -2.5F, true, 1.0F, "jawbone"),
+			p(Kind.MUTTON, -3.3333F, 0.6667F, -2.5F, -2.6667F, 2.0F, -2.0F, false, 1.0F, "masseter"),
 			p(Kind.SKULL, -2.0F, 0.0F, -2.5F, -1.3333F, 2.0F, -2.0F, true, 1.0F, "jawbone"),
 			p(Kind.SKULL, 1.3333F, 0.0F, -2.5F, 2.0F, 2.0F, -2.0F, true, 1.0F, "jawbone"),
+			p(Kind.MUTTON, 2.6667F, 0.6667F, -2.5F, 3.3333F, 2.0F, -2.0F, false, 1.0F, "masseter"),
 			p(Kind.CARTILAGE, -0.6667F, 1.3333F, -1.5F, 0.6667F, 2.0F, -0.5F, false, 1.0F, "larynx"),
 			p(Kind.SKULL, -0.6667F, 0.6667F, -8.0F, 0.6667F, 1.3333F, -7.5F, false, 1.0F, "upper_jaw"),
 			p(Kind.SKULL, -2.6667F, -0.6667F, -7.0F, -1.3333F, 1.3333F, -4.5F, false, 1.0F, "upper_jaw"),
@@ -49,6 +55,7 @@ final class SheepHead {
 			p(Kind.SKULL, -2.0F, 0.6667F, -3.0F, -1.3333F, 1.3333F, -2.5F, true, 1.0F, "jawbone"),
 			p(Kind.TONGUE, -0.6667F, 0.6667F, -3.0F, 0.6667F, 1.3333F, -2.0F, true, 1.0F, "tongue"),
 			p(Kind.SKULL, 1.3333F, 0.6667F, -3.0F, 2.0F, 1.3333F, -2.5F, true, 1.0F, "jawbone"),
+			p(Kind.MUTTON, 2.0F, 0.6667F, -3.0F, 2.6667F, 1.3333F, -2.5F, false, 1.0F, "masseter"),
 			p(Kind.SKULL, -2.0F, 0.0F, -2.0F, -1.3333F, 1.3333F, -1.5F, true, 1.0F, "jawbone"),
 			p(Kind.SOCKET, -0.6667F, 0.0F, -2.0F, 0.6667F, 1.3333F, -1.5F, false, 1.0F, "pharynx"),
 			p(Kind.SKULL, 1.3333F, 0.0F, -2.0F, 2.0F, 1.3333F, -1.5F, true, 1.0F, "jawbone"),
@@ -64,11 +71,13 @@ final class SheepHead {
 			p(Kind.SKULL, -2.6667F, -0.6667F, -4.5F, -2.0F, 0.0F, -3.5F, false, 1.0F, "eye_socket"),
 			p(Kind.SKULL, 2.0F, -0.6667F, -4.5F, 2.6667F, 0.0F, -3.5F, false, 1.0F, "eye_socket"),
 			p(Kind.SKULL, 3.3333F, -0.6667F, -4.5F, 4.0F, 0.0F, -3.5F, false, 1.0F, "cheekbone"),
+			p(Kind.MUTTON, -3.3333F, -0.6667F, -4.0F, -2.6667F, 0.0F, -3.5F, false, 1.0F, "masseter"),
 			p(Kind.SKULL, -0.6667F, -0.6667F, -4.0F, 0.6667F, 0.0F, -3.0F, false, 1.0F, "cranium"),
 			p(Kind.SKULL, -2.0F, -0.6667F, -3.5F, -1.3333F, 0.0F, -2.5F, true, 1.0F, "jawbone"),
 			p(Kind.SKULL, -1.3333F, -0.6667F, -3.5F, -0.6667F, 0.0F, -2.0F, false, 1.0F, "cranium"),
 			p(Kind.SKULL, 0.6667F, -0.6667F, -3.5F, 1.3333F, 0.0F, -2.0F, false, 1.0F, "cranium"),
 			p(Kind.SKULL, 1.3333F, -0.6667F, -3.5F, 2.0F, 0.0F, -2.5F, true, 1.0F, "jawbone"),
+			p(Kind.MUTTON, 2.6667F, -0.6667F, -3.5F, 3.3333F, 0.0F, -2.5F, false, 1.0F, "masseter"),
 			p(Kind.SKULL, -0.6667F, -0.6667F, -2.0F, 0.6667F, 0.0F, -1.0F, false, 1.0F, "cranium"),
 			p(Kind.SKULL, -1.3333F, -2.6667F, -1.5F, -0.6667F, 0.0F, -1.0F, false, 1.0F, "cranium"),
 			p(Kind.SKULL, 0.6667F, -2.6667F, -1.5F, 1.3333F, 0.0F, -1.0F, false, 1.0F, "cranium"),
@@ -100,6 +109,8 @@ final class SheepHead {
 			p(Kind.SKULL, 0.6667F, -2.6667F, -4.5F, 1.3333F, -1.3333F, -4.0F, false, 1.0F, "cranium"),
 			p(Kind.SKULL, -2.0F, -2.0F, -3.5F, -1.3333F, -1.3333F, -2.0F, false, 1.0F, "cranium"),
 			p(Kind.SKULL, 1.3333F, -2.6667F, -3.5F, 2.0F, -1.3333F, -2.0F, false, 1.0F, "cranium"),
+			p(Kind.MUTTON, -2.0F, -2.6667F, -2.0F, -1.3333F, -1.3333F, -1.5F, false, 1.0F, "temporalis"),
+			p(Kind.MUTTON, 1.3333F, -2.6667F, -2.0F, 2.0F, -1.3333F, -1.5F, false, 1.0F, "temporalis"),
 			p(Kind.SKULL, -0.6667F, -3.3333F, -1.0F, 0.6667F, -1.3333F, -0.5F, false, 1.0F, "cranium"),
 			p(Kind.SKULL, -0.6667F, -2.6667F, -4.5F, 0.6667F, -2.0F, -4.0F, false, 1.0F, "cranium"),
 			p(Kind.SKULL, -1.3333F, -2.6667F, -4.0F, -0.6667F, -2.0F, -3.5F, false, 1.0F, "cranium"),
@@ -297,7 +308,7 @@ final class SheepHead {
 		};
 	}
 
-	/** A lamb's head: its milk teeth, and its thymus up the throat. 248 cubes. */
+	/** A lamb's head: its milk teeth, and its thymus up the throat. 259 cubes. */
 	static Piece[] lamb() {
 		return new Piece[] {
 			p(Kind.SKULL, -0.6667F, 2.0F, -7.5F, 0.0F, 3.3333F, -7.0F, true, 1.0F, "jawbone"),
@@ -315,15 +326,21 @@ final class SheepHead {
 			p(Kind.SKULL, 1.3333F, 2.0F, -6.5F, 2.0F, 2.6667F, -6.0F, true, 1.0F, "jawbone"),
 			p(Kind.SKULL, -2.6667F, 2.0F, -4.5F, -2.0F, 2.6667F, -3.0F, true, 1.0F, "jawbone"),
 			p(Kind.SKULL, 2.0F, 2.0F, -4.5F, 2.6667F, 2.6667F, -3.0F, true, 1.0F, "jawbone"),
+			p(Kind.MUTTON, -3.3333F, 0.0F, -4.0F, -2.6667F, 2.6667F, -2.5F, false, 1.0F, "masseter"),
 			p(Kind.SKULL, -2.0F, 2.0F, -4.0F, -1.3333F, 2.6667F, -2.5F, true, 1.0F, "jawbone"),
 			p(Kind.SKULL, 1.3333F, 2.0F, -4.0F, 2.0F, 2.6667F, -2.5F, true, 1.0F, "jawbone"),
+			p(Kind.MUTTON, 2.6667F, 0.0F, -4.0F, 3.3333F, 2.6667F, -2.5F, false, 1.0F, "masseter"),
 			p(Kind.SKULL, -1.3333F, 1.3333F, -7.0F, 1.3333F, 2.0F, -4.5F, false, 1.0F, "upper_jaw"),
+			p(Kind.MUTTON, -3.3333F, 0.6667F, -4.5F, -2.6667F, 2.0F, -4.0F, false, 1.0F, "masseter"),
 			p(Kind.TONGUE, -1.3333F, 1.3333F, -4.5F, 1.3333F, 2.0F, -4.0F, true, 1.0F, "tongue"),
+			p(Kind.MUTTON, 2.6667F, 0.6667F, -4.5F, 3.3333F, 2.0F, -4.0F, false, 1.0F, "masseter"),
 			p(Kind.TONGUE, -0.6667F, 1.3333F, -4.0F, 0.6667F, 2.0F, -2.0F, true, 1.0F, "tongue"),
 			p(Kind.SKULL, -2.6667F, 1.3333F, -3.5F, -1.3333F, 2.0F, -2.5F, true, 1.0F, "jawbone"),
 			p(Kind.SKULL, 1.3333F, 1.3333F, -3.5F, 2.6667F, 2.0F, -2.5F, true, 1.0F, "jawbone"),
+			p(Kind.MUTTON, -3.3333F, 0.6667F, -2.5F, -2.6667F, 2.0F, -2.0F, false, 1.0F, "masseter"),
 			p(Kind.SKULL, -2.0F, 0.0F, -2.5F, -1.3333F, 2.0F, -2.0F, true, 1.0F, "jawbone"),
 			p(Kind.SKULL, 1.3333F, 0.0F, -2.5F, 2.0F, 2.0F, -2.0F, true, 1.0F, "jawbone"),
+			p(Kind.MUTTON, 2.6667F, 0.6667F, -2.5F, 3.3333F, 2.0F, -2.0F, false, 1.0F, "masseter"),
 			p(Kind.CARTILAGE, -0.6667F, 1.3333F, -1.5F, 0.6667F, 2.0F, -0.5F, false, 1.0F, "larynx"),
 			p(Kind.SKULL, -0.6667F, 0.6667F, -8.0F, 0.6667F, 1.3333F, -7.5F, false, 1.0F, "upper_jaw"),
 			p(Kind.SKULL, -2.6667F, -0.6667F, -7.0F, -1.3333F, 1.3333F, -4.5F, false, 1.0F, "upper_jaw"),
@@ -332,6 +349,7 @@ final class SheepHead {
 			p(Kind.SKULL, -2.0F, 0.6667F, -3.0F, -1.3333F, 1.3333F, -2.5F, true, 1.0F, "jawbone"),
 			p(Kind.TONGUE, -0.6667F, 0.6667F, -3.0F, 0.6667F, 1.3333F, -2.0F, true, 1.0F, "tongue"),
 			p(Kind.SKULL, 1.3333F, 0.6667F, -3.0F, 2.0F, 1.3333F, -2.5F, true, 1.0F, "jawbone"),
+			p(Kind.MUTTON, 2.0F, 0.6667F, -3.0F, 2.6667F, 1.3333F, -2.5F, false, 1.0F, "masseter"),
 			p(Kind.SKULL, -2.0F, 0.0F, -2.0F, -1.3333F, 1.3333F, -1.5F, true, 1.0F, "jawbone"),
 			p(Kind.SOCKET, -0.6667F, 0.0F, -2.0F, 0.6667F, 1.3333F, -1.5F, false, 1.0F, "pharynx"),
 			p(Kind.SKULL, 1.3333F, 0.0F, -2.0F, 2.0F, 1.3333F, -1.5F, true, 1.0F, "jawbone"),
@@ -347,11 +365,13 @@ final class SheepHead {
 			p(Kind.SKULL, -2.6667F, -0.6667F, -4.5F, -2.0F, 0.0F, -3.5F, false, 1.0F, "eye_socket"),
 			p(Kind.SKULL, 2.0F, -0.6667F, -4.5F, 2.6667F, 0.0F, -3.5F, false, 1.0F, "eye_socket"),
 			p(Kind.SKULL, 3.3333F, -0.6667F, -4.5F, 4.0F, 0.0F, -3.5F, false, 1.0F, "cheekbone"),
+			p(Kind.MUTTON, -3.3333F, -0.6667F, -4.0F, -2.6667F, 0.0F, -3.5F, false, 1.0F, "masseter"),
 			p(Kind.SKULL, -0.6667F, -0.6667F, -4.0F, 0.6667F, 0.0F, -3.0F, false, 1.0F, "cranium"),
 			p(Kind.SKULL, -2.0F, -0.6667F, -3.5F, -1.3333F, 0.0F, -2.5F, true, 1.0F, "jawbone"),
 			p(Kind.SKULL, -1.3333F, -0.6667F, -3.5F, -0.6667F, 0.0F, -2.0F, false, 1.0F, "cranium"),
 			p(Kind.SKULL, 0.6667F, -0.6667F, -3.5F, 1.3333F, 0.0F, -2.0F, false, 1.0F, "cranium"),
 			p(Kind.SKULL, 1.3333F, -0.6667F, -3.5F, 2.0F, 0.0F, -2.5F, true, 1.0F, "jawbone"),
+			p(Kind.MUTTON, 2.6667F, -0.6667F, -3.5F, 3.3333F, 0.0F, -2.5F, false, 1.0F, "masseter"),
 			p(Kind.SKULL, -0.6667F, -0.6667F, -2.0F, 0.6667F, 0.0F, -1.0F, false, 1.0F, "cranium"),
 			p(Kind.SKULL, -1.3333F, -2.6667F, -1.5F, -0.6667F, 0.0F, -1.0F, false, 1.0F, "cranium"),
 			p(Kind.SKULL, 0.6667F, -2.6667F, -1.5F, 1.3333F, 0.0F, -1.0F, false, 1.0F, "cranium"),
@@ -383,6 +403,8 @@ final class SheepHead {
 			p(Kind.SKULL, 0.6667F, -2.6667F, -4.5F, 1.3333F, -1.3333F, -4.0F, false, 1.0F, "cranium"),
 			p(Kind.SKULL, -2.0F, -2.0F, -3.5F, -1.3333F, -1.3333F, -2.0F, false, 1.0F, "cranium"),
 			p(Kind.SKULL, 1.3333F, -2.6667F, -3.5F, 2.0F, -1.3333F, -2.0F, false, 1.0F, "cranium"),
+			p(Kind.MUTTON, -2.0F, -2.6667F, -2.0F, -1.3333F, -1.3333F, -1.5F, false, 1.0F, "temporalis"),
+			p(Kind.MUTTON, 1.3333F, -2.6667F, -2.0F, 2.0F, -1.3333F, -1.5F, false, 1.0F, "temporalis"),
 			p(Kind.SKULL, -0.6667F, -3.3333F, -1.0F, 0.6667F, -1.3333F, -0.5F, false, 1.0F, "cranium"),
 			p(Kind.SKULL, -0.6667F, -2.6667F, -4.5F, 0.6667F, -2.0F, -4.0F, false, 1.0F, "cranium"),
 			p(Kind.SKULL, -1.3333F, -2.6667F, -4.0F, -0.6667F, -2.0F, -3.5F, false, 1.0F, "cranium"),

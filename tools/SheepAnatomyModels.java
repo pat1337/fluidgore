@@ -14,7 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.UUID;
+import java.util.Set;
 import java.util.function.Predicate;
 import javax.imageio.ImageIO;
 
@@ -36,19 +36,175 @@ import javax.imageio.ImageIO;
  * <p>Each organ is one group in the outliner; its lobes, chambers, loops and vessels are subgroups, so an organ can
  * be shown, hidden, moved or broken apart in Blockbench as one anatomical object, its pieces as its parts.
  */
-public final class SheepAnatomyModels {
-	/** The voxel edge being cut, in cm. Thin parts are thickened to at least about one voxel so they never vanish. */
-	private static double VOX = 1.0;
-	/** The radius a {@link Tube#duct} keeps at least: a little over half the tallest side of a voxel, so a thin duct running down across the grid stays one piece. */
-	private static double DUCT = 0;
-	/** The least radius of a thin part, in voxels: enough to light one voxel centre, more at the mod's coarse grain. */
-	private static double THIN = 0.55;
-	/** How far past a shape its box reaches: past the thickening of thin parts at the coarsest grain (0.8 of a 4.7 cm voxel). */
-	private static final double PAD = 4.0;
+public final class SheepAnatomyModels extends Quadruped {
 	private static final double YC = 17.0;
-	private static final List<Part> PARTS = new ArrayList<>();
+
+	// What the shared kit leaves to each generator: the sheep's body plan, fine parts, output frame and anatomy.png tiles.
+	static {
+		BODY = sheep();
+		FINE = Set.of("disc", "median_sacral_crest", "spine_of_scapula", "renal_vein", "renal_artery",
+				"ureter", "right_ureter", "left_ureter", "urethra", "brachiocephalic_trunk", "left_pulmonary_artery", "right_pulmonary_artery",
+				"cranial_vena_cava", "caudal_vena_cava", "thoracic_caudal_vena_cava", "abdominal_caudal_vena_cava", "portal_vein",
+				"hepatic_caudal_vena_cava", "tracheal_bronchus", "left_principal_bronchus", "right_principal_bronchus", "scapular_cartilage");
+		FRAME = (g, i, j, k) -> new double[] {cx(g, i), cy(g, j), cz(g, k)};
+		TILE_OF = SheepAnatomyModels::tile;
+	}
 
 	private SheepAnatomyModels() {
+	}
+
+	/** A ewe's measurements for the shared {@link Quadruped} body plan (vertebral formula C7 T13 L6, the first four tail vertebrae). */
+	static Body sheep() {
+		Body b = new Body();
+		b.yc = YC;
+		b.halfWidth = new double[] {-41, 4.0, -38, 5.5, -34, 7.5, -30, 9.3, -26, 10.8, -20, 12.4, -14, 13.6, -8, 14.4, -2, 14.9, 4, 15.1,
+				14, 15.0, 22, 14.2, 28, 12.8, 34, 10.5, 40, 8.0};
+		b.sternum = new double[] {-41, 14.0, -38, 10.5, -34, 7.0, -30, 4.8, -25, 3.3, -20, 2.6, -14, 2.2, -9, 2.0, 0, 1.5};
+		b.spine = new double[] {-48, 26.5, -40, 28.5, -36, 29.5, -28, 30.2, -10, 30.4, 0, 30.5, 20, 30.6, 26, 30.0, 36, 28.0, 46, 26.0};
+		b.neck = new double[] {-72, 24.6, -66, 25.3, -58, 26.1, -50, 27.0, -42, 27.8};
+		b.bone = (x, y, z, f, ax, ay, az) -> {
+			int c = mix(0xCFC09F, 0xEDE4CF, noise(x * 1.2, y * 1.2, z * 1.2, 141));
+			return noise(x * 4, y * 4, z * 4, 142) > 0.83 ? mix(c, 0xB8A784, 0.5) : c;
+		};
+		b.neckBone = (x, y, z, f, ax, ay, az) -> {
+			int c = mix(0xCFC09F, 0xEDE4CF, noise(x * 1.2, y * 1.2, z * 1.2, 151));
+			return noise(x * 4, y * 4, z * 4, 152) > 0.83 ? mix(c, 0xB8A784, 0.5) : c;
+		};
+		b.joint = organic(0xEEEAE0, 0xDAD3C4, 0xF8F6F0, 1.5, 143);
+		b.cartilage = organic(0xC9D3CF, 0xAAB8B4, 0xE1E8E4, 1.4, 144);
+		b.disc = organic(0xD8D0C0, 0xC4B9A4, 0xE6E0D2, 1.4, 145);
+
+		b.thoracicZ = -38;
+		b.thoracicStep = 3;
+		b.thoracicHalf = 1.25;
+		b.thoracicRx = 1.4;
+		b.thoracicRy = 1.3;
+		b.thoracicDiscEnd = 1.75;
+		b.thoracicDiscR = 1.3;
+		b.withers = new double[] {6.5, 8.5, 9.0, 8.5, 7.5, 6.5, 5.5, 4.6, 4.0, 3.6, 3.3, 3.1, 3.0};
+		b.thoracicSpinous = new double[] {1.0, 0.8, 0.3, 1.3, 0.35, 0.65, 0.28, 0.6, 0.4};
+
+		b.lumbarZ = 1.5;
+		b.lumbarStep = 4.0;
+		b.lumbarHalf = 1.7;
+		b.lumbarRx = 1.6;
+		b.lumbarRy = 1.4;
+		b.lumbarDiscEnd = 2.3;
+		b.lumbarDiscR = 1.45;
+		b.lumbarSpinous = new double[][] {{0, 1.2, 0, 1.2, 0.3}, {0, 4.8, -0.4, 1.0, 0.35}};
+		b.transverse = new double[] {6.0, 7.2, 8.0, 8.0, 7.4, 6.4};
+		b.transverseShape = new double[] {1.4, -0.2, 0.9, 0.3, -0.4, -0.2, 0.75, 0.25, -1.0, -0.8, 0.7, 0.3};
+
+		b.sacrum = new double[][] {{0, 30.2, 24.2, 1.7, 1.2}, {0, 29.4, 30, 1.4, 1.0}, {0, 28.2, 35.8, 1.1, 0.8}};
+		b.sacralCrest = new double[][] {{0, 31.4, 24.8, 0.35}, {0, 32.2, 28, 0.35}, {0, 30.8, 34, 0.35}};
+		b.sacralWing = new double[] {0.5, 30.4, 24.0, 4.2, 30.6, 24.8, 1.2, 29.8, 28.5};
+		b.sacralWingHalf = 0.6;
+		b.tail = new double[] {37.0, 39.2, 41.2, 43.0};
+		b.tailHalf = 0.85;
+		b.tailR = 0.95;
+		b.tailTaper = 0.08;
+
+		b.sternalRibs = new double[] {-38.8, -35.5, -32.0, -28.5, -25.0, -21.5, -18.0, -14.5};
+		b.manubriumZ = -40.5;
+		b.sternebraGap = 0.4;
+		b.sternebraLift = 0.8;
+		b.sternebraR = new double[] {1.3, 0.8, 1.35, 0.85};
+		b.xiphoidRoot = new double[] {-14.3, 0.6, 1.1, 0.3};
+		b.xiphoid = new double[][] {{0, 2.3, -11, 1.4, 0.25}, {0, 2.1, -7.0, 1.6, 0.25}};
+
+		b.ribHead = new double[] {1.5, -0.3, 0.5, 0.45};
+		b.firstRibSlope = 1.5;
+		b.ribSlope = 3.0;
+		b.ribSlopePerRib = 0.45;
+		b.ribJunctionFirst = 10.5;
+		b.ribJunctionSternal = 8.5;
+		b.ribJunctionAsternal = 7.5;
+		b.ribJunctionPerRib = 0.8;
+		b.ribJunctionFloating = 13.5;
+		b.ribArcInset = 0.3;
+		b.ribArcTop = 12.8;
+		b.ribMinX = 2.2;
+		b.ribInset = 0.6;
+		b.ribWidth = new double[] {0.55, 0.25, 0.004};
+		b.ribThickness = 0.42;
+		b.ribLod = 2;
+		b.sternalCartilage = new double[] {1.0, 0.7};
+		b.asternalBend = new double[] {0.6, 0.5};
+		b.floatingTip = new double[] {1.4, 0.3, 2.6, 0.4};
+		b.cartilageR = new double[] {0.5, 0.36, 0.45, 0.34, 0.4, 0.32};
+
+		b.glenoid = new double[] {10.2, 15.5, -37.5, 1.2, 1.4, 1.5};
+		b.blade = new double[] {10.2, 17.0, -36.8, 9.0, 30.5, -33.6, 9.2, 29.5, -25.2};
+		b.bladeHalf = 0.35;
+		b.scapularSpine = new double[][] {{10.9, 18.5, -36.0, 0.45}, {11.1, 25.0, -32.0, 0.4}, {10.6, 29.8, -29.6, 0.3}};
+		b.scapularCartilage = new double[][] {{8.8, 31.4, -33.4, 1.1, 0.3}, {8.9, 31.6, -29.2, 1.3, 0.3}, {9.0, 30.6, -25.0, 1.0, 0.3}};
+
+		b.iliumWing = new double[] {11.0, 28.8, 22.0, 2.8, 31.0, 25.0, 6.0, 25.5, 29.0};
+		b.iliumHalf = 0.45;
+		b.iliumShaft = new double[][] {{6.0, 25.5, 29.0, 1.0}, {6.5, 19.5, 32.5, 0.85}};
+		b.acetabulum = new double[] {6.9, 19.0, 33.3, 1.5, 1.6, 1.6};
+		b.acetabularFossa = new double[] {8.4, 19.0, 33.3, 1.15};
+		b.pubis = new double[] {6.2, 18.0, 32.3, 0, 16.6, 32.6, 0, 16.6, 35.2};
+		b.ischium = new double[] {6.4, 18.3, 34.5, 5.6, 22.0, 43.0, 0, 16.8, 41.0, 0, 16.6, 37.4};
+		b.pelvisHalf = 0.45;
+		b.ischiumBlend = 0.2;
+
+		b.cervical = new double[] {-68.5, -64.0, -59.5, -55.0, -50.5, -46.0, -42.0};
+		b.cervicalHalf = 1.7;
+		b.cervicalRx = 1.5;
+		b.cervicalRy = 1.4;
+		b.cervicalSpinous = new double[] {1.1, 0.5, 0.7, 0.3, 3.4, 1.7, 2.1, 1.0, 0.55, 0.3};
+		b.cervicalWings = new double[] {4.3, 2.7, 1.7};
+		b.cervicalThick = new double[] {1.0, 0.42};
+		b.cervicalWingShape = new double[] {1.2, -0.1, 0.8, -0.2, -0.3, 0.55, 1.2};
+
+		b.cordTissue = organic(0xEDE3D6, 0xD6C8B8, 0xF8F2EA, 1.4, 129);
+		b.cordLift = 2.4;
+		b.cord = new double[][] {{-46, 0.8}, {-38, 0.8}, {-26, 0.78}, {-10, 0.76}, {2, 0.8}, {12, 0.78}, {20, 0.7}, {25, 0.6}};
+		// Mutton: dark brick red, fine grained; sheep fat: hard and chalk white; a shorn sheep's skin: pale pink.
+		b.lean = streaked(0x8E3E34, 0x6B2A22, 0xAC5A4C, 321);
+		b.fat = crumbly(0xF1EBDC, 0xDCD2BE, 0xFBF8F0, 322);
+		b.skin = organic(0xE6C2AE, 0xCFA593, 0xF2D8C8, 1.6, 323);
+
+		// The legs of a 65 kg ewe, the hooves on the ground 38.6 cm under the floor of the belly: the shoulder joint about
+		// 54 cm up, the elbow at the floor of the chest, the knee (the carpus) about 20 cm up, the hock about 18 cm.
+		double[] down = {0, 0, 1};
+		b.horn = organic(0x3C3631, 0x28231F, 0x5A5149, 1.8, 324);
+		b.coffinBone = b.bone;
+		b.fore = new Limb("forelimb", new Bone[] {
+				tubeBone("humerus", BONE, null, v(9.8, 14.8, -38.0, 1.2, 1.05), v(9.2, 7.0, -35.0, 1.25, 1.1), v(8.6, 1.5, -32.5, 1.1, 0.95)),
+				tubeBone("point_of_elbow", BONE, down, v(8.6, 1.5, -32.5, 1.05, 0.72), v(8.4, -2.0, -31.4, 0.95, 0.68)),
+				tubeBone("ulna", BONE, null, v(8.5, -1.5, -31.0, 0.76, 0.62), v(8.0, -10.0, -31.2, 0.64, 0.52), v(7.8, -16.5, -31.3, 0.55, 0.45)),
+				tubeBone("radius", BONE, null, v(8.4, -0.5, -32.2, 1.15, 0.95), v(7.8, -10.5, -32.0, 1.05, 0.86), v(7.6, -17.2, -32.0, 0.95, 0.76)),
+				ellBone("knee_carpus", JOINT, 7.6, -18.9, -32.0, 1.25, 1.4, 1.15),
+				tubeBone("cannon_bone", BONE, down, v(7.4, -20.2, -32.1, 0.84, 0.7), v(7.2, -27.5, -32.2, 0.76, 0.64), v(7.1, -30.6, -32.3, 0.82, 0.68)),
+				tubeBone("flexor_tendon", CARTILAGE, null, v(7.1, -21.0, -31.2, 0.4), v(7.0, -29.5, -31.1, 0.38)),
+				ellBone("fetlock", JOINT, 7.1, -31.6, -32.3, 1.05, 0.9, 0.95)},
+				7.1, new Bone[] {
+				tubeBone("proximal_phalanx", BONE, null, v(0.62, -32.6, -32.3, -0.24, 0.55, 0.48), v(0.7, -34.6, -33.0, -0.33, 0.5, 0.45)),
+				tubeBone("middle_phalanx", BONE, null, v(0.7, -34.6, -33.0, -0.33, 0.5, 0.45), v(0.76, -36.0, -33.6, -0.38, 0.48, 0.43)),
+				new Bone("distal_phalanx", COFFIN, null, false, true, new double[][] {{0.78, -36.8, -33.9, -0.43, 0.48, 0.45, 0.6}}),
+				new Bone("hoof", HORN, down, true, false, new double[][] {{0.8, -36.5, -33.8, -0.43, 0.77, 0.72}, {0.86, -38.4, -34.2, -0.48, 0.88, 0.81}}),
+				new Bone("sesamoid", BONE, null, false, true, new double[][] {{0.55, -31.2, -31.4, 0, 0.36, 0.36, 0.36}})},
+				new Bone[] {ellBone("dewclaws", BONE, 7.15, -30.4, -31.1, 0.4, 0.64, 0.4)});
+		b.hind = new Limb("hindlimb", new Bone[] {
+				tubeBone("femur", BONE, null, v(7.9, 19.0, 33.3, 1.3, 1.15), v(8.4, 10.5, 30.0, 1.3, 1.15), v(8.6, 3.2, 27.8, 1.2, 1.05)),
+				ellBone("kneecap", BONE, 8.9, 2.2, 26.0, 0.8, 1.1, 0.62),
+				tubeBone("tibia", BONE, null, v(8.6, 1.2, 28.0, 1.2, 1.0), v(8.5, -9.5, 29.4, 1.1, 0.9), v(8.3, -17.4, 30.4, 1.0, 0.8)),
+				tubeBone("achilles_tendon", CARTILAGE, null, v(8.4, -4.5, 31.6, 0.48), v(8.2, -18.4, 32.4, 0.43)),
+				tubeBone("point_of_hock", BONE, null, v(8.2, -18.4, 32.6, 0.9, 0.72), v(8.2, -22.2, 33.4, 0.8, 0.64)),
+				ellBone("hock_tarsus", JOINT, 8.2, -21.0, 30.6, 1.25, 1.4, 1.15),
+				tubeBone("cannon_bone", BONE, down, v(8.1, -22.2, 30.7, 0.84, 0.7), v(7.95, -28.0, 30.6, 0.76, 0.64), v(7.9, -30.6, 30.6, 0.82, 0.68)),
+				tubeBone("flexor_tendon", CARTILAGE, null, v(7.9, -22.9, 31.6, 0.4), v(7.8, -29.5, 31.7, 0.38)),
+				ellBone("fetlock", JOINT, 7.9, -31.6, 30.6, 1.05, 0.9, 0.95)},
+				7.9, new Bone[] {
+				tubeBone("proximal_phalanx", BONE, null, v(0.62, -32.6, 30.6, 0.24, 0.55, 0.48), v(0.7, -34.6, 29.9, 0.33, 0.5, 0.45)),
+				tubeBone("middle_phalanx", BONE, null, v(0.7, -34.6, 29.9, 0.33, 0.5, 0.45), v(0.76, -36.0, 29.3, 0.38, 0.48, 0.43)),
+				new Bone("distal_phalanx", COFFIN, null, false, true, new double[][] {{0.78, -36.8, 29.0, 0.43, 0.48, 0.45, 0.6}}),
+				new Bone("hoof", HORN, down, true, false, new double[][] {{0.8, -36.5, 29.1, 0.43, 0.77, 0.72}, {0.86, -38.4, 28.7, 0.48, 0.88, 0.81}}),
+				new Bone("sesamoid", BONE, null, false, true, new double[][] {{0.55, -31.2, 31.5, 0, 0.36, 0.36, 0.36}})},
+				new Bone[] {ellBone("dewclaws", BONE, 7.95, -30.4, 31.6, 0.4, 0.64, 0.4)});
+		return b;
 	}
 
 	public static void main(String[] args) throws IOException {
@@ -75,7 +231,11 @@ public final class SheepAnatomyModels {
 		rows.add(export(out, "sheep_skull", "Sheep skull, jaw and teeth", 0.5, p -> p.under("skeleton/skull")));
 		rows.add(export(out, "sheep_brain", "Sheep brain", 0.5, p -> p.under("head/brain")));
 		rows.add(export(out, "sheep_head", "Sheep head (skull, jaw, teeth, brain)", 0.5, p -> p.under("skeleton/skull") || p.under("head/brain")));
-		rows.add(export(out, "sheep_in_situ", "Sheep anatomy in place", 1.0, p -> true));
+		Predicate<Part> soft = p -> p.under("muscles") || p.under("fat") || p.under("skin");
+		rows.add(export(out, "sheep_in_situ", "Sheep anatomy in place", 1.0, soft.negate()));
+		rows.add(export(out, "sheep_muscles", "Sheep muscles on the skeleton (the loin eye, the shoulder, the leg, the belly wall in its layers)", 0.5,
+				p -> p.under("muscles") || p.under("skeleton")));
+		rows.add(export(out, "sheep_whole", "Whole sheep under its skin: skin, fat, muscles, bones and organs in place", 1.0, p -> true));
 		Predicate<Part> tract = p -> p.under("reproductive") || p.under("abdomen/urinary") || p.under("skeleton/pelvis");
 		rows.add(export(out, "sheep_ewe_reproductive", "Ewe reproductive tract and udder, with the bladder and pelvis", 0.5, tract));
 		MALE = true;
@@ -128,6 +288,10 @@ public final class SheepAnatomyModels {
 		Path java = Path.of("src/main/java/dev/fluidgore/anatomy/SheepTrunk.java");
 		Files.writeString(java, trunkJava(tables, mixed, ram, lambs.get(0), lambs.get(1)), StandardCharsets.UTF_8);
 		System.out.println("Wrote " + java.toAbsolutePath());
+		Path legs = Path.of("src/main/java/dev/fluidgore/anatomy/SheepLegs.java");
+		Path legArt = art.resolve("sheep_anatomy_legs_" + MOD_RES + "x");
+		Files.writeString(legs, legsJava(legTable(legArt, true, MOD_RES), legTable(legArt, false, MOD_RES)), StandardCharsets.UTF_8);
+		System.out.println("Wrote " + legs.toAbsolutePath());
 		Path headJava = Path.of("src/main/java/dev/fluidgore/anatomy/SheepHead.java");
 		Files.writeString(headJava, headJava(), StandardCharsets.UTF_8);
 		System.out.println("Wrote " + headJava.toAbsolutePath());
@@ -155,14 +319,16 @@ public final class SheepAnatomyModels {
 	static List<String> mob(Path out, int res) throws IOException {
 		Files.createDirectories(out.resolve("previews"));
 		double vox = 16.0 / res;
-		// Pixels to centimetres (the model has the right at -x, the anatomy at +x): the body's interior, +-3.32 px across, 12.64 to 17.36 px up, -8 to 8 along, holds the
-		// ewe's +-15.5 cm, -3 to 35 cm (so the four rows of whole pixels fall on the breastbone, the belly, the middle
-		// of the chest and the spine) and -44 to 44 cm.
-		SCALE = new double[] {-15.5 / 3.32, 38.0 / 4.72, 5.5};
-		SHIFT = new double[] {0, -3.0 - 38.0 / 4.72 * 12.64, 0};
-		CLIP_LO = new double[] {-3.32, 12.64, -8};
-		CLIP_HI = new double[] {3.32, 17.36, 8};
-		LOD = vox * 5.5;
+		// Pixels to centimetres (the model has the right at -x, the anatomy at +x): the vanilla body cube, +-4 px across, 12 to
+		// 18 px up, -8 to 8 along, holds the ewe under her skin: +-18.6 cm across the barrel, from 4 cm under the belly to
+		// 41 cm, over the tips of the withers' spines (7.5 cm a pixel up, near enough the 8 cm the organs were first fitted at:
+		// the heart's quarter-pixel cut stays few enough cubes to carry), from the brisket to the seat of the leg, -44.8 to 44.8 cm. The legs below the elbow and the stifle, the neck and the head are other
+		// parts of the model.
+		SCALE = new double[] {-18.6 / 4, 45.0 / 6, 5.6};
+		SHIFT = new double[] {0, -4.0 - 45.0 / 6 * 12, 0};
+		CLIP_LO = new double[] {-4, 12, -8};
+		CLIP_HI = new double[] {4, 18, 8};
+		LOD = vox * 5.6;
 		THIN = res <= 16 ? 0.8 : 0.55;
 		TILES = ImageIO.read(Path.of("src/main/resources/assets/fluidgore/textures/misc/anatomy.png").toFile());
 		PARTS.clear();
@@ -187,7 +353,7 @@ public final class SheepAnatomyModels {
 					for (int k = 0; k < g.nz; k++) {
 						List<String> in = new ArrayList<>();
 						for (Part p : PARTS) {
-							if (p.shape.in(g.cx(i), g.cy(j), g.cz(k))) {
+							if (p.shape.in(cx(g, i), cy(g, j), cz(g, k))) {
 								in.add(modPiece(p)[1]);
 							}
 						}
@@ -222,6 +388,7 @@ public final class SheepAnatomyModels {
 		TILES = null;
 		THIN = 0.55;
 		LOD = 0.5;
+		FULL_BODY = true;
 		return table;
 	}
 
@@ -264,8 +431,29 @@ public final class SheepAnatomyModels {
 	 * fine organ keeps its cavity, its edges on the half-pixel cubes round it, and every other organ is untouched.
 	 */
 	static List<String> mixed() {
-		return mixed(GRIDS.get(MOD_RES), KEYS.get(MOD_RES), GRIDS.get(MOD_RES * 2), KEYS.get(MOD_RES * 2), HERO, SheepAnatomyModels::line);
+		// An organ a player can pick up, carry and cut is at most this many cubes (the mod's Anatomy.Shape.INTERACTIVE_CUBES):
+		// one whose quarter-pixel recut comes to more is kept at half pixels instead.
+		java.util.Set<String> hero = new java.util.HashSet<>(HERO);
+		while (true) {
+			List<String> lines = mixed(GRIDS.get(MOD_RES), KEYS.get(MOD_RES), GRIDS.get(MOD_RES * 2), KEYS.get(MOD_RES * 2), hero, SheepAnatomyModels::line);
+			Map<String, Integer> cubes = new java.util.HashMap<>();
+			for (String l : lines) {
+				int q = l.indexOf('"');
+				cubes.merge(l.substring(q + 1, l.indexOf('"', q + 1)), 1, Integer::sum);
+			}
+
+			List<String> over = hero.stream().filter(h -> cubes.getOrDefault(h, 0) > CARRIED_CUBES).sorted().toList();
+			if (over.isEmpty()) {
+				return lines;
+			}
+
+			System.out.println("mixed: too many cubes to carry at quarter pixels, kept at half pixels " + over.stream().map(o -> o + "=" + cubes.get(o)).toList());
+			hero.removeAll(over);
+		}
 	}
+
+	/** The most cubes an organ may have and still be carried and cut in the mod. */
+	static final int CARRIED_CUBES = 56;
 
 	/** Fewer quarter-pixel cells than this, cut off from the rest of their organ, are a speck and left out of a mixed table. */
 	static final int SPECK = 4;
@@ -488,6 +676,7 @@ public final class SheepAnatomyModels {
 		DUCT = 0;
 		LOD = vox * 1.9;
 		THIN = res <= 16 ? 0.8 : 0.55;
+		FULL_BODY = false;
 		PARTS.clear();
 		build();
 		Grid g = voxelize(vox, p -> headPiece(p) != null);
@@ -503,6 +692,7 @@ public final class SheepAnatomyModels {
 		VOX = 1.0;
 		LOD = 0.5;
 		THIN = 0.55;
+		FULL_BODY = true;
 		return g;
 	}
 
@@ -590,12 +780,137 @@ public final class SheepAnatomyModels {
 		return key == 0 ? null : keys[key - 1];
 	}
 
+	/** A Java method holds at most 64 KB of code: tables longer than this are split into parts joined at load. */
 	static String line(String[] mp, double x0, double x1, double y0, double y1, double z0, double z1) {
-		return "p(Kind." + mp[0] + ", " + fl(x0 * 1.25) + ", " + fl(-(y1 - 15) / 0.75) + ", " + fl(z0) + ", " + fl(x1 * 1.25) + ", "
-				+ fl(-(y0 - 15) / 0.75) + ", " + fl(z1) + ", \"" + mp[1] + "\")";
+		double[] c = {x0 * 1.25, -(y1 - 15) / 0.75, z0, x1 * 1.25, -(y0 - 15) / 0.75, z1};
+		String owner = owner(mp, c);
+		return "p(Kind." + mp[0] + ", " + fl(c[0]) + ", " + fl(c[1]) + ", " + fl(c[2]) + ", " + fl(c[3]) + ", " + fl(c[4]) + ", " + fl(c[5])
+				+ ", \"" + mp[1] + "\"" + (owner == null ? "" : ", \"" + owner + "\"") + ")";
 	}
 
-	/** A Java method holds at most 64 KB of code: tables longer than this are split into parts joined at load. */
+	/** The tissues of the body wall, which tear into patches in a blast rather than fly as one body-sized piece. */
+	static final java.util.Set<String> PATCHES = java.util.Set.of("skin", "subcutaneous_fat", "other_muscle");
+
+	/**
+	 * The object a piece of soft tissue belongs to, from its canonical box {x0, y0, z0, x1, y1, z1} (the right side at
+	 * -x): a named muscle is its side's own ("right:longissimus"), torn across every four pixels of its length so a long
+	 * one comes away in a few chunks; the hide, the fat under it and the unnamed muscle in patches of 3 x 3 x 4 pixels.
+	 * Null for anything else (organs and bones have theirs from their names).
+	 */
+	static String owner(String[] mp, double[] c) {
+		boolean muscle = mp[0].equals("MUTTON");
+		boolean patch = PATCHES.contains(mp[1]);
+		// One object however its pieces fall: the uterus's body and both its horns, which a coarse grain can part.
+		if (mp[1].equals("brisket_fat") || mp[1].equals("tailhead_fat") || mp[1].equals("uterus")) {
+			return ":" + mp[1];
+		}
+
+		if (!muscle && !patch) {
+			return null;
+		}
+
+		double x = (c[0] + c[3]) / 2;
+		double y = (c[1] + c[4]) / 2;
+		double z = (c[2] + c[5]) / 2;
+		int along = (int) Math.floor((z + 8) / 4);
+		if (patch) {
+			int across = (int) Math.floor((x + 5) / 3);
+			int up = (int) Math.floor((y + 4) / 3);
+			return ":" + mp[1] + "_" + across + "_" + up + "_" + along;
+		}
+
+		return (x < 0 ? "right:" : "left:") + mp[1] + "_" + along;
+	}
+
+	/**
+	 * A right leg as the mod draws it, in the vanilla leg's own cube (4 x 12 x 4 px, canonical: the body towards +x, the
+	 * front at -z, y down from the leg's top at the floor of the body to the ground at 12): the elbow or the stifle and
+	 * everything under it down to the hooves, with its own skin, the little fat a leg has, its muscles and tendons. The
+	 * output units are those canonical pixels. Returns the table's lines, and writes the art for review into {@code out}.
+	 */
+	static List<String> legTable(Path out, boolean fore, int res) throws IOException {
+		Files.createDirectories(out.resolve("previews"));
+		double vox = 16.0 / res;
+		// The leg starts where the trunk's cube ends (see mob), 4 cm under the floor of the belly.
+		double top = -4.0;
+		double ground = BODY.fore.toes[3].points()[1][1];
+		double centreX = fore ? 7.8 : 8.2;
+		double centreZ = fore ? -32.0 : 30.9;
+		// 1.5 cm a pixel across and along (a sheep's cannon is about 3 cm thick, its forearm 5), 3 cm a pixel down.
+		SCALE = new double[] {-1.5, -(top - ground) / 12, 1.5};
+		SHIFT = new double[] {centreX, top, centreZ};
+		CLIP_LO = new double[] {-2, 0, -2};
+		CLIP_HI = new double[] {2, 12, 2};
+		LOD = vox * 1.5;
+		THIN = 0.55;
+		TILES = ImageIO.read(Path.of("src/main/resources/assets/fluidgore/textures/misc/anatomy.png").toFile());
+		PARTS.clear();
+		build();
+		String name = "sheep_" + (fore ? "foreleg" : "hindleg") + "_" + res + "x";
+		export(out, name, "Sheep right " + (fore ? "foreleg" : "hind leg") + " at " + res + "x (as the mod draws it)", vox, p -> true);
+		Grid g = voxelize(vox, p -> true);
+		List<String> lines = new ArrayList<>();
+		for (Box b : boxes(g)) {
+			String[] mp = modPiece(PARTS.get(b.key - 1));
+			double[] c = {g.ox + b.x0 * g.vox, g.oy + b.y0 * g.vox, g.oz + b.z0 * g.vox, g.ox + b.x1 * g.vox, g.oy + b.y1 * g.vox, g.oz + b.z1 * g.vox};
+			String owner = mp[0].equals("MUTTON") ? "right:" + mp[1] : PATCHES.contains(mp[1]) ? ":" + mp[1] + "_" + (int) Math.floor((c[1] + c[4]) / 2 / 3) : null;
+			lines.add("p(Kind." + mp[0] + ", " + fl(c[0]) + ", " + fl(c[1]) + ", " + fl(c[2]) + ", " + fl(c[3]) + ", " + fl(c[4]) + ", " + fl(c[5])
+					+ ", \"" + mp[1] + "\"" + (owner == null ? "" : ", \"" + owner + "\"") + ")");
+		}
+
+		SCALE = new double[] {1, 1, 1};
+		SHIFT = new double[] {0, 0, 0};
+		CLIP_LO = null;
+		CLIP_HI = null;
+		TILES = null;
+		LOD = 0.5;
+		return lines;
+	}
+
+	/** The generated {@code SheepLegs}: a sheep's right foreleg and hind leg, from {@link #legTable}. */
+	static String legsJava(List<String> fore, List<String> hind) {
+		StringBuilder sb = new StringBuilder("""
+				package dev.fluidgore.anatomy;
+
+				import dev.fluidgore.anatomy.Anatomy.Kind;
+				import dev.fluidgore.anatomy.Anatomy.Piece;
+
+				/**
+				 * Generated by {@code tools/SheepAnatomyModels.java}; do not edit by hand. A sheep's right legs in the vanilla leg's
+				 * cube (canonical pixels: the body towards +x, the front at -z, y down from the top of the leg to the ground at 12):
+				 * the foreleg from the elbow (the humerus's end, the point of the elbow, the radius and ulna, the knee, the cannon
+				 * bone, the fetlock, the two toes in their claws and the dewclaws), the hind leg from the stifle (the femur's end,
+				 * the kneecap, the tibia, the hock on the Achilles tendon, the cannon, the toes), with the muscles of the forearm and
+				 * the gaskin, the tendons down the back, the skin, and the little fat a leg has.
+				 */
+				final class SheepLegs {
+					private SheepLegs() {
+					}
+
+				""");
+		String[] names = {"fore", "hind"};
+		List<List<String>> tables = List.of(fore, hind);
+		for (int t = 0; t < 2; t++) {
+			sb.append("\tstatic Piece[] ").append(names[t]).append("() {\n\t\treturn new Piece[] {\n");
+			for (String l : tables.get(t)) {
+				sb.append("\t\t\t").append(l).append(",\n");
+			}
+
+			sb.append("\t\t};\n\t}\n\n");
+		}
+
+		sb.append("""
+					private static Piece p(Kind kind, float x0, float y0, float z0, float x1, float y1, float z1, String name) {
+						return new Piece(kind, x0, y0, z0, x1, y1, z1, false, 1.0F, name);
+					}
+
+					private static Piece p(Kind kind, float x0, float y0, float z0, float x1, float y1, float z1, String name, String owner) {
+						return new Piece(kind, x0, y0, z0, x1, y1, z1, false, 1.0F, name, owner);
+					}
+				}
+				""");
+		return sb.toString();
+	}
 	static final int CHUNK = 900;
 
 	/** {@code anatomy/SheepTrunk.java}: one method per grain ({@link #MOD_GRAINS}), and {@code pieces()}, the mixed table the mod draws. */
@@ -684,6 +999,10 @@ public final class SheepAnatomyModels {
 					private static Piece p(Kind kind, float x0, float y0, float z0, float x1, float y1, float z1, String name) {
 						return new Piece(kind, x0, y0, z0, x1, y1, z1, false, 1.0F, name);
 					}
+
+					private static Piece p(Kind kind, float x0, float y0, float z0, float x1, float y1, float z1, String name, String owner) {
+						return new Piece(kind, x0, y0, z0, x1, y1, z1, false, 1.0F, name, owner);
+					}
 				}
 				""");
 		return sb.toString();
@@ -696,22 +1015,6 @@ public final class SheepAnatomyModels {
 
 	// ------------------------------------------------------------------------------------------------ the body frame
 
-	/** The half width of the trunk at the ribs: narrow at the chest's entrance between the forelegs, a barrel behind. */
-	static double halfWidth(double z) {
-		return curve(z, -41, 4.0, -38, 5.5, -34, 7.5, -30, 9.3, -26, 10.8, -20, 12.4, -14, 13.6, -8, 14.4, -2, 14.9, 4, 15.1,
-				14, 15.0, 22, 14.2, 28, 12.8, 34, 10.5, 40, 8.0);
-	}
-
-	/** The height of the breastbone, rising towards the entrance of the chest. */
-	static double sternumY(double z) {
-		return curve(z, -41, 14.0, -38, 10.5, -34, 7.0, -30, 4.8, -25, 3.3, -20, 2.6, -14, 2.2, -9, 2.0, 0, 1.5);
-	}
-
-	/** The height of the middle of the vertebral bodies. */
-	static double spineY(double z) {
-		return curve(z, -48, 26.5, -40, 28.5, -36, 29.5, -28, 30.2, -10, 30.4, 0, 30.5, 20, 30.6, 26, 30.0, 36, 28.0, 46, 26.0);
-	}
-
 	/**
 	 * Where the diaphragm crosses (x, y): a dome bulging forward into the chest, its top under the 8th-9th rib, its
 	 * edge sloping back so it meets the spine far behind where it meets the breastbone.
@@ -719,22 +1022,6 @@ public final class SheepAnatomyModels {
 	static double diaphragmZ(double x, double y) {
 		double ry = y < 16 ? sq((y - 16) / 11.0) * 4.5 : sq((y - 16) / 14.0) * 5.0;
 		return -14.0 + 0.42 * (y - 16) + ry + 5.0 * sq(x / 14.0);
-	}
-
-	/** Piecewise linear through (x, y) pairs, flat beyond the ends. */
-	static double curve(double x, double... xy) {
-		if (x <= xy[0]) {
-			return xy[1];
-		}
-
-		for (int i = 2; i < xy.length; i += 2) {
-			if (x <= xy[i]) {
-				double t = (x - xy[i - 2]) / (xy[i] - xy[i - 2]);
-				return xy[i - 1] + (xy[i + 1] - xy[i - 1]) * t;
-			}
-		}
-
-		return xy[xy.length - 1];
 	}
 
 	// --------------------------------------------------------------------------------------------------- the anatomy
@@ -765,6 +1052,12 @@ public final class SheepAnatomyModels {
 		skeleton();
 		spinalCord();
 		head();
+		headMuscles();
+		if (FULL_BODY) {
+			limbs();
+			softTissue();
+		}
+
 		// The skeleton was added last but must win every overlap: move it to the front, with the cord ahead of it, which
 		// fills the canal the vertebral arches would leave.
 		List<Part> cord = new ArrayList<>();
@@ -1307,27 +1600,10 @@ public final class SheepAnatomyModels {
 	}
 
 	/**
-	 * The spinal cord in the canal above the vertebral bodies, from the neck to where it tapers out over the sacrum. The
-	 * vertebral arches round it are left out at this scale, so the cord fills the canal they would leave. On a grid whose
-	 * cells are taller than the cord (the game's, 2 cm a quarter pixel up) it is drawn taller, so where it steps from one
-	 * row of cells to the next both rows hold it and it stays one piece.
+	 * Whether {@link #build} makes the whole body: the legs and feet, and the skin, fat and muscles round the skeleton. Off
+	 * for the mod's tables, which do not carry them yet (they lay their own fat and muscle, see {@code Anatomy.Region}).
 	 */
-	private static void spinalCord() {
-		Mat cord = organic(0xEDE3D6, 0xD6C8B8, 0xF8F2EA, 1.4, 129);
-		Tube t = tube().up((x, y, z) -> new double[] {0, 1, 0});
-		double[][] at = {{-46, 0.8}, {-38, 0.8}, {-26, 0.78}, {-10, 0.76}, {2, 0.8}, {12, 0.78}, {20, 0.7}, {25, 0.6}};
-		for (double[] a : at) {
-			t.p(0, spineY(a[0]) + 2.4, a[0], a[1], 1.0 * a[1] / 0.8);
-		}
-
-		Shape tube = t.build();
-		Shape tall = new Shape(tube.lo, tube.hi, (x, y, z) -> {
-			double stretch = Math.max(1.0, DUCT * 1.5);
-			double c = spineY(z) + 2.4;
-			return tube.f.at(x, c + (y - c) / stretch, z);
-		});
-		part("nervous/spinal_cord", "spinal_cord", cord, tall);
-	}
+	static boolean FULL_BODY = true;
 
 	/** Whether {@link #build} makes a ram (true) or a ewe. */
 	static boolean MALE = false;
@@ -1568,159 +1844,6 @@ public final class SheepAnatomyModels {
 	}
 
 	/**
-	 * The trunk's bones: thirteen thoracic vertebrae with the tall spines of the withers, six lumbar ones with their long
-	 * flat transverse processes, the sacrum and the root of the tail; thirteen pairs of ribs, the first eight joined to
-	 * the breastbone by costal cartilage, the next four by the cartilage of the costal arch, the last floating; the seven
-	 * sternebrae and the xiphoid; the shoulder blades on the chest wall; the pelvis.
-	 */
-	private static void skeleton() {
-		Mat bone = (x, y, z, f, ax, ay, az) -> {
-			int c = mix(0xCFC09F, 0xEDE4CF, noise(x * 1.2, y * 1.2, z * 1.2, 141));
-			return noise(x * 4, y * 4, z * 4, 142) > 0.83 ? mix(c, 0xB8A784, 0.5) : c;
-		};
-		Mat joint = organic(0xEEEAE0, 0xDAD3C4, 0xF8F6F0, 1.5, 143);
-		Mat cartilage = organic(0xC9D3CF, 0xAAB8B4, 0xE1E8E4, 1.4, 144);
-		Mat disc = organic(0xD8D0C0, 0xC4B9A4, 0xE6E0D2, 1.4, 145);
-		double[] spine = {6.5, 8.5, 9.0, 8.5, 7.5, 6.5, 5.5, 4.6, 4.0, 3.6, 3.3, 3.1, 3.0};
-		for (int i = 1; i <= 13; i++) {
-			double z = -38 + 3 * (i - 1);
-			double y = spineY(z);
-			String g = String.format(Locale.ROOT, "skeleton/spine/thoracic/T%02d", i);
-			part(g, "body", bone, tube().p(0, y, z - 1.25, 1.4, 1.3).p(0, spineY(z + 1.25), z + 1.25, 1.4, 1.3).flat(true, true).build());
-			part(g, "disc", disc, tube().p(0, spineY(z + 1.25), z + 1.25, 1.3).p(0, spineY(z + 1.75), z + 1.75, 1.3).flat(true, true).build());
-			double h = spine[i - 1];
-			part(g, "spinous_process", bone, tube().up((a, b, c) -> new double[] {1, 0, 0})
-					.p(0, y + 1.0, z, 0.8, 0.3).p(0, y + 1.3 + h * 0.6, z + 0.35 * h * 0.6, 0.65, 0.28).p(0, y + 1.3 + h, z + 0.35 * h, 0.6, 0.4).build());
-		}
-
-		double[] transverse = {6.0, 7.2, 8.0, 8.0, 7.4, 6.4};
-		for (int i = 1; i <= 6; i++) {
-			double z = 1.5 + 4.0 * (i - 1);
-			double y = spineY(z);
-			String g = String.format(Locale.ROOT, "skeleton/spine/lumbar/L%02d", i);
-			part(g, "body", bone, tube().p(0, spineY(z - 1.7), z - 1.7, 1.6, 1.4).p(0, spineY(z + 1.7), z + 1.7, 1.6, 1.4).flat(true, true).build());
-			if (i < 6) {
-				part(g, "disc", disc, tube().p(0, spineY(z + 1.7), z + 1.7, 1.45).p(0, spineY(z + 2.3), z + 2.3, 1.45).flat(true, true).build());
-			}
-
-			part(g, "spinous_process", bone, tube().up((a, b, c) -> new double[] {1, 0, 0})
-					.p(0, y + 1.2, z, 1.2, 0.3).p(0, y + 4.8, z - 0.4, 1.0, 0.35).build());
-			double reach = transverse[i - 1];
-			for (int s = -1; s <= 1; s += 2) {
-				part(g, s > 0 ? "right_transverse_process" : "left_transverse_process", bone, tube().up((a, b, c) -> new double[] {0, 1, 0})
-						.p(s * 1.4, y - 0.2, z, 0.9, 0.3).p(s * reach * 0.55, y - 0.4, z - 0.2, 0.75, 0.25).p(s * reach, y - 1.0, z - 0.8, 0.7, 0.3).build());
-			}
-		}
-
-		part("skeleton/spine/sacrum", "sacrum", bone, tube().p(0, 30.2, 24.2, 1.7, 1.2).p(0, 29.4, 30, 1.4, 1.0).p(0, 28.2, 35.8, 1.1, 0.8)
-				.up((a, b, c) -> new double[] {0, 1, 0}).build());
-		part("skeleton/spine/sacrum", "median_sacral_crest", bone, tube().p(0, 31.4, 24.8, 0.35).p(0, 32.2, 28, 0.35).p(0, 30.8, 34, 0.35).build());
-		for (int s = -1; s <= 1; s += 2) {
-			part("skeleton/spine/sacrum", s > 0 ? "right_wing" : "left_wing", bone, tri(v(s * 0.5, 30.4, 24.0), v(s * 4.2, 30.6, 24.8), v(s * 1.2, 29.8, 28.5), 0.6));
-		}
-
-		double[] tailZ = {37.0, 39.2, 41.2, 43.0};
-		for (int i = 0; i < tailZ.length; i++) {
-			double r = 0.95 - 0.08 * i;
-			part(String.format(Locale.ROOT, "skeleton/spine/tail/Cd%02d", i + 1), "body", bone, tube()
-					.p(0, spineY(tailZ[i] - 0.85), tailZ[i] - 0.85, r).p(0, spineY(tailZ[i] + 0.85), tailZ[i] + 0.85, r).build());
-		}
-
-		ribs(bone, cartilage);
-		double[] zs = {-38.8, -35.5, -32.0, -28.5, -25.0, -21.5, -18.0, -14.5};
-		for (int k = 0; k < 7; k++) {
-			double a = (k == 0 ? -40.5 : zs[k]) + 0.4;
-			double b = zs[k + 1] - 0.4;
-			part(String.format(Locale.ROOT, "skeleton/sternum/sternebra_%d", k + 1), "sternebra", bone, tube().up((p, q, r) -> new double[] {0, 1, 0})
-					.p(0, sternumY(a) + 0.8, a, 1.3, 0.8).p(0, sternumY((a + b) / 2) + 0.8, (a + b) / 2, 1.35, 0.85).p(0, sternumY(b) + 0.8, b, 1.3, 0.8)
-					.build());
-		}
-
-		part("skeleton/sternum/xiphoid", "xiphoid_cartilage", cartilage, tube().up((p, q, r) -> new double[] {0, 1, 0})
-				.p(0, sternumY(-14.3) + 0.6, -14.3, 1.1, 0.3).p(0, 2.3, -11, 1.4, 0.25).p(0, 2.1, -7.0, 1.6, 0.25).build());
-		for (int s = -1; s <= 1; s += 2) {
-			String side = s > 0 ? "right" : "left";
-			String g = "skeleton/shoulder_blades/" + side + "_scapula";
-			part(g, "glenoid", joint, ell(s * 10.2, 15.5, -37.5, 1.2, 1.4, 1.5));
-			part(g, "blade", bone, tri(v(s * 10.2, 17.0, -36.8), v(s * 9.0, 30.5, -33.6), v(s * 9.2, 29.5, -25.2), 0.35));
-			part(g, "spine_of_scapula", bone, tube().p(s * 10.9, 18.5, -36.0, 0.45).p(s * 11.1, 25.0, -32.0, 0.4).p(s * 10.6, 29.8, -29.6, 0.3).build());
-			part(g, "scapular_cartilage", cartilage, tube().up((p, q, r) -> new double[] {1, 0, 0})
-					.p(s * 8.8, 31.4, -33.4, 1.1, 0.3).p(s * 8.9, 31.6, -29.2, 1.3, 0.3).p(s * 9.0, 30.6, -25.0, 1.0, 0.3).build());
-			String pg = "skeleton/pelvis/" + side + "_hip_bone";
-			part(pg, "ilium_wing", bone, tri(v(s * 11.0, 28.8, 22.0), v(s * 2.8, 31.0, 25.0), v(s * 6.0, 25.5, 29.0), 0.45));
-			part(pg, "ilium_shaft", bone, tube().p(s * 6.0, 25.5, 29.0, 1.0).p(s * 6.5, 19.5, 32.5, 0.85).build());
-			part(pg, "acetabulum", joint, cut(ell(s * 6.9, 19.0, 33.3, 1.5, 1.6, 1.6), ell(s * 8.4, 19.0, 33.3, 1.15, 1.15, 1.15)));
-			part(pg, "pubis", bone, tri(v(s * 6.2, 18.0, 32.3), v(0, 16.6, 32.6), v(0, 16.6, 35.2), 0.45));
-			part(pg, "ischium", bone, union(0.2, tri(v(s * 6.4, 18.3, 34.5), v(s * 5.6, 22.0, 43.0), v(0, 16.8, 41.0), 0.45),
-					tri(v(s * 6.4, 18.3, 34.5), v(0, 16.8, 41.0), v(0, 16.6, 37.4), 0.45)));
-		}
-	}
-
-	/** The ribs, each sweeping out and down from its vertebra and back as it goes, with its costal cartilage. */
-	private static void ribs(Mat bone, Mat cartilage) {
-		double[][] cart = new double[14][];
-		double[] zs = {-38.8, -35.5, -32.0, -28.5, -25.0, -21.5, -18.0, -14.5};
-		for (int s = -1; s <= 1; s += 2) {
-			String side = s > 0 ? "right" : "left";
-			int sign = s;
-			for (int i = 1; i <= 13; i++) {
-				double zh = -38 + 3 * (i - 1);
-				double slope = (i == 1 ? 1.5 : 3.0 + 0.45 * i);
-				double yJ = i <= 8 ? (i < 3 ? 10.5 : 8.5) : i < 13 ? 7.5 + (i - 9) * 0.8 : 13.5;
-				double hb = YC - sternumY(zh + slope * 0.75) - 0.3;
-				double phiEnd = Math.asin(clamp((yJ - YC) / hb, -1, 1));
-				Tube rib = tube().up((x, y, z) -> norm(new double[] {x / sq(halfWidth(z)), (y - YC) / sq(y >= YC ? 12.8 : hb), 0}));
-				rib.p(sign * 1.5, spineY(zh) - 0.3, zh, 0.5, 0.45);
-				double[] last = null;
-				int steps = 14;
-				double phi0 = Math.toRadians(78);
-				for (int k = 0; k <= steps; k++) {
-					double phi = phi0 + (phiEnd - phi0) * k / steps;
-					double sp = Math.sin(phi);
-					double zz = zh + slope * (1 - sp) / 2;
-					double y = YC + (sp >= 0 ? 12.8 : hb) * sp;
-					double x = sign * Math.max(2.2, (halfWidth(zz) - 0.6) * Math.cos(phi));
-					double width = 0.55 + 0.25 * Math.sin(Math.PI * k / steps) + 0.004 * i * 10;
-					rib.p(x, y, zz, width, 0.42);
-					last = new double[] {x, y, zz};
-				}
-
-				String g = String.format(Locale.ROOT, "skeleton/ribcage/%s_rib_%02d", side, i);
-				// Coarse grains keep only every second or fourth rib, so a gap still shows between them.
-				boolean kept = (i - 1) % (LOD >= 4 ? 4 : LOD >= 2 ? 2 : 1) == 0;
-				if (kept) {
-					part(g, "rib", bone, rib.build());
-				}
-				Tube c = tube().up((x, y, z) -> norm(new double[] {x / sq(halfWidth(z)), (y - YC) / sq(hb), 0}));
-				double[] mid;
-				double[] end;
-				if (i <= 8) {
-					end = new double[] {sign * 1.0, sternumY(zs[i - 1]) + 0.7, zs[i - 1]};
-					mid = new double[] {last[0] * 0.72, last[1] - (last[1] - end[1]) * 0.6, last[2] - (last[2] - end[2]) * 0.3};
-				} else if (i < 13) {
-					double[] pc = cart[i - 1];
-					end = new double[] {pc[0] + (pc[3] - pc[0]) * 0.45, pc[1] + (pc[4] - pc[1]) * 0.45, pc[2] + (pc[5] - pc[2]) * 0.45};
-					mid = new double[] {(last[0] + end[0]) / 2 + sign * 0.6, (last[1] + end[1]) / 2 - 0.5, (last[2] + end[2]) / 2};
-				} else {
-					mid = new double[] {last[0] * 0.95, last[1] - 1.4, last[2] + 0.3};
-					end = new double[] {last[0] * 0.88, last[1] - 2.6, last[2] + 0.4};
-				}
-
-				cart[i] = new double[] {last[0], last[1], last[2], mid[0], mid[1], mid[2]};
-				c.p(last[0], last[1], last[2], 0.5, 0.36).p(mid[0], mid[1], mid[2], 0.45, 0.34).p(end[0], end[1], end[2], 0.4, 0.32);
-				if (kept) {
-					part(g, "costal_cartilage", cartilage, c.build());
-				}
-			}
-		}
-	}
-
-	/** The height of the middle of the cervical vertebral bodies: the neck carried forward and gently down to the skull. */
-	static double neckY(double z) {
-		return curve(z, -72, 24.6, -66, 25.3, -58, 26.1, -50, 27.0, -42, 27.8);
-	}
-
-	/**
 	 * The head, forward of the trunk on the neck. A ewe's grazing skull: long and narrow, the eyes high and to the
 	 * sides for a prey animal's wide field, no upper incisors (a hard dental pad the lower ones press against), six
 	 * selenodont cheek teeth a side, and a small brain held in a hollow braincase. The braincase is a shell, so
@@ -1768,26 +1891,16 @@ public final class SheepAnatomyModels {
 		part("head/nose", "nasal_cavity", dark, region(v(-1.3, 21.8, -97.0), v(1.3, 24.0, -84.0), (x, y, z) -> true));
 	}
 
-	/** The seven cervical vertebrae: C1 the atlas with its broad wings, C2 the axis with its tall spine, then five alike. */
-	private static void neck() {
-		Mat bone = (x, y, z, f, ax, ay, az) -> {
-			int c = mix(0xCFC09F, 0xEDE4CF, noise(x * 1.2, y * 1.2, z * 1.2, 151));
-			return noise(x * 4, y * 4, z * 4, 152) > 0.83 ? mix(c, 0xB8A784, 0.5) : c;
-		};
-		double[] zs = {-68.5, -64.0, -59.5, -55.0, -50.5, -46.0, -42.0};
-		for (int i = 0; i < zs.length; i++) {
-			double z = zs[i];
-			double y = neckY(z);
-			String g = String.format(Locale.ROOT, "skeleton/spine/cervical/C%02d", i + 1);
-			part(g, "body", bone, tube().p(0, y, z - 1.7, 1.5, 1.4).p(0, neckY(z + 1.7), z + 1.7, 1.5, 1.4).flat(true, true).build());
-			part(g, "spinous_process", bone, tube().up((a, b, c) -> new double[] {1, 0, 0})
-					.p(0, y + 1.1, z + 0.5, 0.7, 0.3).p(0, y + (i == 1 ? 3.4 : 2.1), z + (i == 1 ? 1.7 : 1.0), 0.55, 0.3).build());
-			double wing = i == 0 ? 4.3 : i == 1 ? 2.7 : 1.7;
-			double thick = i == 0 ? 1.0 : 0.42;
-			for (int s = -1; s <= 1; s += 2) {
-				part(g, s > 0 ? "right_transverse_process" : "left_transverse_process", bone, tube().up((a, b, c) -> new double[] {0, 1, 0})
-						.p(s * 1.2, y - 0.1, z, 0.8, thick).p(s * wing, y - 0.2, z - 0.3, 0.55, i == 0 ? 1.2 : thick * 0.9).build());
-			}
+	/**
+	 * The muscles of chewing: the masseter, the thick cheek muscle from the zygomatic arch down over the back of the jaw
+	 * (a grazer's is large, for grinding all day), and the temporalis in the temple above the arch, behind the orbit,
+	 * on the side of the braincase.
+	 */
+	private static void headMuscles() {
+		for (int s = -1; s <= 1; s += 2) {
+			String side = s > 0 ? "right_" : "left_";
+			part("muscles/head/" + side + "masseter", "masseter", lean(90), lumpy(ell(s * 4.3, 21.8, -79.5, 0.9, 2.4, 2.6), 0.15, 2.0, 331 + s));
+			part("muscles/head/" + side + "temporalis", "temporalis", lean(91), ell(s * 2.6, 27.2, -77.2, 0.7, 1.4, 1.8));
 		}
 	}
 
@@ -1884,499 +1997,15 @@ public final class SheepAnatomyModels {
 		part("head/brain/brainstem", "brainstem", folds, tube().p(0, 25.4, -76.2, 0.75).p(0, 24.4, -74.8, 0.65).p(0, 23.6, -73.9, 0.6).build());
 	}
 
-	// --------------------------------------------------------------------------------------------------- shapes
-
-	interface Field {
-		/** Below 0 inside; for the simple shapes roughly the distance to the surface in cm. */
-		double at(double x, double y, double z);
-	}
-
-	interface P3 {
-		boolean test(double x, double y, double z);
-	}
-
-	interface Up {
-		double[] at(double x, double y, double z);
-	}
-
-	/** A field with the box outside which it is certainly outside. */
-	static final class Shape {
-		final double[] lo;
-		final double[] hi;
-		final Field f;
-
-		Shape(double[] lo, double[] hi, Field f) {
-			this.lo = lo;
-			this.hi = hi;
-			this.f = f;
-		}
-
-		boolean in(double x, double y, double z) {
-			return x >= lo[0] && x <= hi[0] && y >= lo[1] && y <= hi[1] && z >= lo[2] && z <= hi[2] && f.at(x, y, z) < 0;
-		}
-	}
-
-	/** Shapes made while this is under 1 are smaller by it about {@link #GROW_AT}: a lamb's immature organs, made from the grown ones. */
-	static double GROW = 1.0;
-	static double[] GROW_AT = {0, 0, 0};
-
-	/** Coordinate {@code a} (0 x, 1 y, 2 z) of a point, moved in to {@link #GROW_AT} by {@link #GROW}. */
-	static double grown(double v, int a) {
-		return GROW_AT[a] + (v - GROW_AT[a]) * GROW;
-	}
-
-	/** Grows the shapes made from now on by {@code g} about (x, y, z); {@code grow(1, 0, 0, 0)} ends it. */
-	static void grow(double g, double x, double y, double z) {
-		GROW = g;
-		GROW_AT = new double[] {x, y, z};
-	}
-
-	static Shape ell(double cx, double cy, double cz, double rx, double ry, double rz) {
-		if (GROW != 1.0) {
-			return ellAt(grown(cx, 0), grown(cy, 1), grown(cz, 2), rx * GROW, ry * GROW, rz * GROW);
-		}
-
-		return ellAt(cx, cy, cz, rx, ry, rz);
-	}
-
-	static Shape ellAt(double cx, double cy, double cz, double rx, double ry, double rz) {
-		double p = PAD;
-		return new Shape(v(cx - rx - p, cy - ry - p, cz - rz - p), v(cx + rx + p, cy + ry + p, cz + rz + p), (x, y, z) -> {
-			double ax = Math.max(rx, VOX * THIN);
-			double ay = Math.max(ry, VOX * THIN);
-			double az = Math.max(rz, VOX * THIN);
-			double dx = (x - cx) / ax;
-			double dy = (y - cy) / ay;
-			double dz = (z - cz) / az;
-			return (Math.sqrt(dx * dx + dy * dy + dz * dz) - 1) * Math.min(ax, Math.min(ay, az));
-		});
-	}
-
-	static Shape torus(double[] c, double[] axis, double big, double small) {
-		double e = big + small + PAD;
-		return new Shape(v(c[0] - e, c[1] - e, c[2] - e), v(c[0] + e, c[1] + e, c[2] + e), (x, y, z) -> {
-			double[] q = {x - c[0], y - c[1], z - c[2]};
-			double h = dot(q, axis);
-			double rho = len(sub(q, mul(axis, h)));
-			return Math.hypot(rho - big, h) - Math.max(small, VOX * THIN);
-		});
-	}
-
-	/** A thick triangle with rounded edges: the flat bones. */
-	static Shape tri(double[] a, double[] b, double[] c, double half) {
-		double[] lo = new double[3];
-		double[] hi = new double[3];
-		for (int i = 0; i < 3; i++) {
-			lo[i] = Math.min(a[i], Math.min(b[i], c[i])) - half - PAD;
-			hi[i] = Math.max(a[i], Math.max(b[i], c[i])) + half + PAD;
-		}
-
-		return new Shape(lo, hi, (x, y, z) -> distTriangle(new double[] {x, y, z}, a, b, c) - Math.max(half, VOX * THIN));
-	}
-
-	static Shape region(double[] lo, double[] hi, P3 inside) {
-		return new Shape(lo, hi, (x, y, z) -> x >= lo[0] && x <= hi[0] && y >= lo[1] && y <= hi[1] && z >= lo[2] && z <= hi[2] && inside.test(x, y, z) ? -1 : 1);
-	}
-
-	static Shape union(double k, Shape... s) {
-		double[] lo = s[0].lo.clone();
-		double[] hi = s[0].hi.clone();
-		for (Shape t : s) {
-			for (int i = 0; i < 3; i++) {
-				lo[i] = Math.min(lo[i], t.lo[i] - k * 0.25);
-				hi[i] = Math.max(hi[i], t.hi[i] + k * 0.25);
-			}
-		}
-
-		return new Shape(lo, hi, (x, y, z) -> {
-			double d = s[0].f.at(x, y, z);
-			for (int i = 1; i < s.length; i++) {
-				d = smin(d, s[i].f.at(x, y, z), k);
-			}
-
-			return d;
-		});
-	}
-
-	/** How much the smooth union of {@code s} adds at a point beyond the plain union: above 0 in the grooves between them. */
-	static double crease(Shape[] s, double k, double x, double y, double z) {
-		double plain = Double.MAX_VALUE;
-		double smooth = 0;
-		for (int i = 0; i < s.length; i++) {
-			double d = s[i].f.at(x, y, z);
-			plain = Math.min(plain, d);
-			smooth = i == 0 ? d : smin(smooth, d, k);
-		}
-
-		return plain - smooth;
-	}
-
-	static Shape cut(Shape a, Shape b) {
-		return new Shape(a.lo, a.hi, (x, y, z) -> {
-			double d = a.f.at(x, y, z);
-			return d >= 0 ? d : Math.max(d, -b.f.at(x, y, z));
-		});
-	}
-
-	static Shape both(Shape a, Shape b) {
-		double[] lo = new double[3];
-		double[] hi = new double[3];
-		for (int i = 0; i < 3; i++) {
-			lo[i] = Math.max(a.lo[i], b.lo[i]);
-			hi[i] = Math.min(a.hi[i], b.hi[i]);
-		}
-
-		return new Shape(lo, hi, (x, y, z) -> Math.max(a.f.at(x, y, z), b.f.at(x, y, z)));
-	}
-
-	/** An organic, lumpy surface: the field pushed in and out by noise. */
-	static Shape lumpy(Shape a, double amp, double freq, int seed) {
-		return new Shape(v(a.lo[0] - amp, a.lo[1] - amp, a.lo[2] - amp), v(a.hi[0] + amp, a.hi[1] + amp, a.hi[2] + amp),
-				(x, y, z) -> a.f.at(x, y, z) + amp * (2 * noise(x * freq, y * freq, z * freq, seed) - 1));
-	}
-
-	static Tube tube() {
-		return new Tube();
-	}
-
-	/**
-	 * A tube along a smooth curve through control points, each with its own radii. With {@link #up} its cross-section
-	 * is an ellipse whose second radius lies along the given direction (a rib's thickness along the body's outward
-	 * normal); otherwise round. Ends are rounded unless {@link #flat}: a cut vessel or gut, which with {@link #hollow}
-	 * shows its lumen.
-	 */
-	static final class Tube {
-		private final List<double[]> ctrl = new ArrayList<>();
-		private Up up;
-		private boolean flat0;
-		private boolean flat1;
-		private double hollow;
-		private boolean duct;
-		private double beadAmp;
-		private double beadLen = 1;
-
-		Tube p(double x, double y, double z, double r) {
-			return p(x, y, z, r, r);
-		}
-
-		Tube p(double x, double y, double z, double rx, double ry) {
-			ctrl.add(new double[] {grown(x, 0), grown(y, 1), grown(z, 2), rx * GROW, ry * GROW});
-			return this;
-		}
-
-		Tube up(Up u) {
-			up = u;
-			return this;
-		}
-
-		Tube flat(boolean start, boolean end) {
-			flat0 = start;
-			flat1 = end;
-			return this;
-		}
-
-		Tube hollow(double ratio) {
-			hollow = ratio;
-			return this;
-		}
-
-		/** A duct too thin for the grid (a ureter): kept at least {@link #DUCT} thick, so it does not break into loose cells. */
-		Tube duct() {
-			duct = true;
-			return this;
-		}
-
-		/** Pellets forming inside: the radius swells and narrows every {@code len} cm. */
-		Tube beads(double amp, double len) {
-			beadAmp = amp;
-			beadLen = len;
-			return this;
-		}
-
-		Shape build() {
-			List<double[]> s = new ArrayList<>();
-			int n = ctrl.size();
-			for (int i = 0; i < n - 1; i++) {
-				double[] p0 = i > 0 ? ctrl.get(i - 1) : extrapolate(ctrl.get(0), ctrl.get(1));
-				double[] p1 = ctrl.get(i);
-				double[] p2 = ctrl.get(i + 1);
-				double[] p3 = i + 2 < n ? ctrl.get(i + 2) : extrapolate(ctrl.get(n - 1), ctrl.get(n - 2));
-				int steps = Math.max(2, (int) Math.ceil(dist(p1, p2) / 0.3));
-				for (int k = 0; k < steps; k++) {
-					double t = k / (double) steps;
-					double[] q = new double[5];
-					for (int a = 0; a < 3; a++) {
-						q[a] = catmull(p0[a], p1[a], p2[a], p3[a], t);
-					}
-
-					q[3] = p1[3] + (p2[3] - p1[3]) * t;
-					q[4] = p1[4] + (p2[4] - p1[4]) * t;
-					s.add(q);
-				}
-			}
-
-			s.add(ctrl.get(n - 1).clone());
-			int m = s.size();
-			double[][] pt = s.toArray(double[][]::new);
-			double[] cum = new double[m];
-			for (int i = 1; i < m; i++) {
-				cum[i] = cum[i - 1] + dist(pt[i - 1], pt[i]);
-			}
-
-			double[][] tan = new double[m - 1][];
-			double[][] nrm = new double[m - 1][];
-			double[][] bin = new double[m - 1][];
-			double[] lo = {1e9, 1e9, 1e9};
-			double[] hi = {-1e9, -1e9, -1e9};
-			for (int i = 0; i < m - 1; i++) {
-				tan[i] = norm(sub(pt[i + 1], pt[i]));
-				if (up != null) {
-					double[] mid = mul(add(pt[i], pt[i + 1]), 0.5);
-					double[] u = up.at(mid[0], mid[1], mid[2]);
-					double[] nn = sub(u, mul(tan[i], dot(u, tan[i])));
-					if (len(nn) < 1e-6) {
-						nn = Math.abs(tan[i][1]) < 0.9 ? new double[] {0, 1, 0} : new double[] {1, 0, 0};
-						nn = sub(nn, mul(tan[i], dot(nn, tan[i])));
-					}
-
-					nrm[i] = norm(nn);
-					bin[i] = cross(tan[i], nrm[i]);
-				}
-			}
-
-			for (double[] q : pt) {
-				double r = Math.max(q[3], q[4]) * (1 + beadAmp) + PAD;
-				for (int a = 0; a < 3; a++) {
-					lo[a] = Math.min(lo[a], q[a] - r);
-					hi[a] = Math.max(hi[a], q[a] + r);
-				}
-			}
-
-			boolean f0 = flat0;
-			boolean f1 = flat1;
-			double hol = hollow;
-			boolean isDuct = duct;
-			double ba = beadAmp;
-			double bl = beadLen;
-			Up hasUp = up;
-			return new Shape(lo, hi, (x, y, z) -> {
-				int best = 0;
-				double bestD = Double.MAX_VALUE;
-				double bestT = 0;
-				for (int i = 0; i < m - 1; i++) {
-					double[] a = pt[i];
-					double dx = pt[i + 1][0] - a[0];
-					double dy = pt[i + 1][1] - a[1];
-					double dz = pt[i + 1][2] - a[2];
-					double l2 = dx * dx + dy * dy + dz * dz;
-					double t = l2 == 0 ? 0 : ((x - a[0]) * dx + (y - a[1]) * dy + (z - a[2]) * dz) / l2;
-					t = t < 0 ? 0 : t > 1 ? 1 : t;
-					double ex = x - a[0] - dx * t;
-					double ey = y - a[1] - dy * t;
-					double ez = z - a[2] - dz * t;
-					double d = ex * ex + ey * ey + ez * ez;
-					if (d < bestD) {
-						bestD = d;
-						best = i;
-						bestT = t;
-					}
-				}
-
-				double[] a = pt[best];
-				double[] b = pt[best + 1];
-				double[] q = {a[0] + (b[0] - a[0]) * bestT, a[1] + (b[1] - a[1]) * bestT, a[2] + (b[2] - a[2]) * bestT};
-				double[] o = {x - q[0], y - q[1], z - q[2]};
-				double[] t = tan[best];
-				double along = dot(o, t);
-				double ot = 0;
-				if (best == 0 && bestT <= 0 && along < 0) {
-					if (f0) {
-						return 1;
-					}
-
-					ot = along;
-				} else if (best == m - 2 && bestT >= 1 && along > 0) {
-					if (f1) {
-						return 1;
-					}
-
-					ot = along;
-				}
-
-				double[] op = sub(o, mul(t, along));
-				double scale = 1;
-				if (ba > 0) {
-					double c = cum[best] + (cum[best + 1] - cum[best]) * bestT;
-					scale = 1 + ba * Math.sin(2 * Math.PI * c / bl);
-				}
-
-				double least = isDuct ? Math.max(VOX * THIN, DUCT) : VOX * THIN;
-				double rx = Math.max((a[3] + (b[3] - a[3]) * bestT) * scale, least);
-				double ry = Math.max((a[4] + (b[4] - a[4]) * bestT) * scale, least);
-				double e;
-				if (hasUp != null) {
-					double cb = dot(op, bin[best]);
-					double cn = dot(op, nrm[best]);
-					e = Math.sqrt(sq(cb / rx) + sq(cn / ry) + sq(ot / rx));
-				} else {
-					e = Math.sqrt(dot(op, op) + ot * ot) / rx;
-				}
-
-				double d = (e - 1) * Math.min(rx, ry);
-				if (hol > 0 && d < 0 && e < hol && Math.min(rx, ry) * (1 - hol) >= VOX * 0.5) {
-					return (hol - e) * Math.min(rx, ry);
-				}
-
-				return d;
-			});
-		}
-
-		private static double[] extrapolate(double[] end, double[] next) {
-			return new double[] {2 * end[0] - next[0], 2 * end[1] - next[1], 2 * end[2] - next[2], end[3], end[4]};
-		}
-	}
-
-	static double catmull(double p0, double p1, double p2, double p3, double t) {
-		double t2 = t * t;
-		double t3 = t2 * t;
-		return 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
-	}
-
-	static double distTriangle(double[] p, double[] a, double[] b, double[] c) {
-		double[] ab = sub(b, a);
-		double[] ac = sub(c, a);
-		double[] ap = sub(p, a);
-		double d1 = dot(ab, ap);
-		double d2 = dot(ac, ap);
-		if (d1 <= 0 && d2 <= 0) {
-			return len(ap);
-		}
-
-		double[] bp = sub(p, b);
-		double d3 = dot(ab, bp);
-		double d4 = dot(ac, bp);
-		if (d3 >= 0 && d4 <= d3) {
-			return len(bp);
-		}
-
-		double vc = d1 * d4 - d3 * d2;
-		if (vc <= 0 && d1 >= 0 && d3 <= 0) {
-			return len(sub(p, add(a, mul(ab, d1 / (d1 - d3)))));
-		}
-
-		double[] cp = sub(p, c);
-		double d5 = dot(ab, cp);
-		double d6 = dot(ac, cp);
-		if (d6 >= 0 && d5 <= d6) {
-			return len(cp);
-		}
-
-		double vb = d5 * d2 - d1 * d6;
-		if (vb <= 0 && d2 >= 0 && d6 <= 0) {
-			return len(sub(p, add(a, mul(ac, d2 / (d2 - d6)))));
-		}
-
-		double va = d3 * d6 - d5 * d4;
-		if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) {
-			return len(sub(p, add(b, mul(sub(c, b), (d4 - d3) / ((d4 - d3) + (d5 - d6))))));
-		}
-
-		double den = 1 / (va + vb + vc);
-		return len(sub(p, add(a, add(mul(ab, vb * den), mul(ac, vc * den)))));
-	}
-
-	// ------------------------------------------------------------------------------------------------ tissues
-
-	/** A tissue's colour at a voxel's centre, looking out of {@code face} into the empty voxel centred at (ax, ay, az). */
-	interface Mat {
-		int rgb(double x, double y, double z, int face, double ax, double ay, double az);
-	}
-
-	static Mat organic(int base, int dark, int light, double scale, int seed) {
-		return (x, y, z, f, ax, ay, az) -> {
-			double n = noise(x * scale, y * scale, z * scale, seed) * 0.7 + noise(x * scale * 3, y * scale * 3, z * scale * 3, seed + 1) * 0.3;
-			return n < 0.5 ? mix(dark, base, n * 2) : mix(base, light, (n - 0.5) * 2);
-		};
-	}
-
-	static Mat glossy(int base, int dark, int light, int sheen, double scale, int seed) {
-		Mat m = organic(base, dark, light, scale, seed);
-		return (x, y, z, f, ax, ay, az) -> {
-			int c = m.rgb(x, y, z, f, ax, ay, az);
-			return f == 2 && noise(x * 2.5, y * 2.5, z * 2.5, seed + 7) > 0.8 ? mix(c, sheen, 0.6) : c;
-		};
-	}
-
-	static Mat veined(int base, int dark, int light, int vessel, int seed) {
-		Mat m = organic(base, dark, light, 1.2, seed);
-		return (x, y, z, f, ax, ay, az) -> {
-			int c = m.rgb(x, y, z, f, ax, ay, az);
-			return ridge(x * 0.35, y * 0.35, z * 0.35, seed + 5) > 0.9 ? mix(c, vessel, 0.55) : c;
-		};
-	}
-
-	static Mat streaked(int base, int dark, int light, int seed) {
-		return (x, y, z, f, ax, ay, az) -> mix(mix(dark, light, noise(x * 3, y * 3, z * 0.4, seed)), base, 0.4);
-	}
-
-	static Mat crumbly(int base, int dark, int light, int seed) {
-		return (x, y, z, f, ax, ay, az) -> {
-			double[] c = cells(x * 1.4, y * 1.4, z * 1.4, seed);
-			return c[1] - c[0] < 0.1 ? dark : mix(base, light, c[2]);
-		};
-	}
-
-	static Mat heartMuscle(double[] apex, double[] axis) {
-		return (x, y, z, f, ax, ay, az) -> {
-			double[] p = {x - apex[0], y - apex[1], z - apex[2]};
-			double h = dot(p, axis);
-			double around = Math.atan2(p[2], p[0]);
-			double streak = frac((around * 2.2 + h * 0.35) + 0.3 * noise(x, y, z, 26));
-			int c = mix(0x5A1717, 0x7A2623, noise(x * 1.2, y * 1.2, z * 1.2, 27));
-			c = streak < 0.25 ? mix(c, 0x4C1212, 0.4) : c;
-			return noise(x * 3, y * 3, z * 3, 28) > 0.88 ? mix(c, 0x9A4E4A, 0.5) : c;
-		};
-	}
-
 	// ------------------------------------------------------------------------------------------------ parts
-
-	/** One named piece of an organ, at a path of groups ("abdomen/liver/caudate_lobe"). */
-	static final class Part {
-		final String path;
-		final String name;
-		final Mat mat;
-		final Shape shape;
-		int index;
-
-		Part(String path, String name, Mat mat, Shape shape) {
-			this.path = path;
-			this.name = name;
-			this.mat = mat;
-			this.shape = shape;
-		}
-
-		boolean under(String prefix) {
-			return path.equals(prefix) || path.startsWith(prefix + "/");
-		}
-	}
-
-	/** Vessels, ducts and small processes thinner than a pixel: left out at the mod's coarse grain, where they would fatten to a pixel. */
-	private static final java.util.Set<String> FINE = java.util.Set.of("disc", "median_sacral_crest", "spine_of_scapula", "renal_vein", "renal_artery",
-			"ureter", "right_ureter", "left_ureter", "urethra", "brachiocephalic_trunk", "left_pulmonary_artery", "right_pulmonary_artery",
-			"cranial_vena_cava", "caudal_vena_cava", "thoracic_caudal_vena_cava", "abdominal_caudal_vena_cava", "portal_vein",
-			"hepatic_caudal_vena_cava", "tracheal_bronchus", "left_principal_bronchus", "right_principal_bronchus", "scapular_cartilage");
-
-	static void part(String path, String name, Mat mat, Shape shape) {
-		if (LOD >= 2.5 && FINE.contains(name)) {
-			return;
-		}
-
-		PARTS.add(new Part(path, name, mat, shape));
-	}
 
 	/** {@link #modPiece} for the skull and the head, as "KIND name", or null for a part elsewhere. */
 	static String headPiece(Part p) {
 		String n = p.name;
+		if (p.under("muscles/head")) {
+			return "MUTTON " + n;
+		}
+
 		if (p.under("skeleton/skull/teeth")) {
 			return n.endsWith("upper_cheek_teeth") ? "TEETH upper_molars" : n.endsWith("lower_cheek_teeth") ? "TEETH lower_molars" : "TEETH incisors";
 		}
@@ -2630,6 +2259,30 @@ public final class SheepAnatomyModels {
 			return new String[] {"BLADDER", "bladder"};
 		}
 
+		if (p.under("skeleton/limbs")) {
+			// A toe's pieces are named with their toe ("lateral_toe/hoof"); the mod knows them by the piece alone.
+			String bone = n.substring(n.lastIndexOf('/') + 1);
+			return switch (bone) {
+				case "hoof" -> new String[] {"HOOF", "hoof"};
+				case "proximal_phalanx", "middle_phalanx", "distal_phalanx" -> new String[] {"PHALANGES", "pastern"};
+				case "knee_carpus", "hock_tarsus", "fetlock" -> new String[] {"BONE_END", bone};
+				case "flexor_tendon", "achilles_tendon" -> new String[] {"CARTILAGE", bone};
+				default -> new String[] {"BONE", bone};
+			};
+		}
+
+		if (p.under("muscles")) {
+			return new String[] {"MUTTON", n};
+		}
+
+		if (p.under("fat")) {
+			return new String[] {"SUET", n};
+		}
+
+		if (p.under("skin")) {
+			return new String[] {"DERMIS", "skin"};
+		}
+
 		throw new IllegalStateException("No tissue for " + path + "/" + n);
 	}
 
@@ -2639,84 +2292,13 @@ public final class SheepAnatomyModels {
 			Map.entry("STOMACH", 20), Map.entry("INTESTINE", 21), Map.entry("COLON", 22), Map.entry("KIDNEY", 23), Map.entry("SPLEEN", 24),
 			Map.entry("BLADDER", 25), Map.entry("TRACHEA", 26), Map.entry("SUET", 38), Map.entry("RUMEN", 45), Map.entry("GALLBLADDER", 49),
 			Map.entry("RETICULUM", 50), Map.entry("VEIN", 51), Map.entry("SKULL", 2), Map.entry("TEETH", 3), Map.entry("SOCKET", 4), Map.entry("BRAIN", 31),
-			Map.entry("EYE", 5), Map.entry("TONGUE", 12), Map.entry("DERMIS", 14), Map.entry("GLAND", 54), Map.entry("TESTIS", 55));
+			Map.entry("EYE", 5), Map.entry("TONGUE", 12), Map.entry("DERMIS", 14), Map.entry("GLAND", 54), Map.entry("TESTIS", 55), Map.entry("MUTTON", 40), Map.entry("PHALANGES", 32), Map.entry("HOOF", 43));
 
 	static int tile(Part p) {
 		return TILE.get(modPiece(p)[0]);
 	}
 
 	// ------------------------------------------------------------------------------------------------ export
-
-	/** Faces: 0 east +x, 1 west -x, 2 up +y, 3 down -y, 4 south +z, 5 north -z. */
-	private static final String[] FACE = {"east", "west", "up", "down", "south", "north"};
-	private static final int[][] NORMAL = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
-
-	static final class Grid {
-		final int nx;
-		final int ny;
-		final int nz;
-		final double vox;
-		final double ox;
-		final double oy;
-		final double oz;
-		final int[] cell;
-
-		Grid(int nx, int ny, int nz, double vox, double ox, double oy, double oz) {
-			this.nx = nx;
-			this.ny = ny;
-			this.nz = nz;
-			this.vox = vox;
-			this.ox = ox;
-			this.oy = oy;
-			this.oz = oz;
-			cell = new int[nx * ny * nz];
-		}
-
-		int at(int x, int y, int z) {
-			return x < 0 || y < 0 || z < 0 || x >= nx || y >= ny || z >= nz ? 0 : cell[(x * ny + y) * nz + z];
-		}
-
-		void set(int x, int y, int z, int v) {
-			cell[(x * ny + y) * nz + z] = v;
-		}
-
-		double wx(int i) {
-			return ox + (i + 0.5) * vox;
-		}
-
-		double wy(int j) {
-			return oy + (j + 0.5) * vox;
-		}
-
-		double wz(int k) {
-			return oz + (k + 0.5) * vox;
-		}
-
-		/** A voxel centre in the body's centimetres, where the shapes and tissues are defined. */
-		double cx(int i) {
-			if (WARP != null) {
-				return WARP[0].applyAsDouble(wx(i));
-			}
-
-			return wx(i) * SCALE[0] + SHIFT[0];
-		}
-
-		double cy(int j) {
-			if (WARP != null) {
-				return WARP[1].applyAsDouble(wy(j));
-			}
-
-			return wy(j) * SCALE[1] + SHIFT[1];
-		}
-
-		double cz(int k) {
-			if (WARP != null) {
-				return WARP[2].applyAsDouble(wz(k));
-			}
-
-			return wz(k) * SCALE[2] + SHIFT[2];
-		}
-	}
 
 	/**
 	 * The output frame: centimetres = output unit x {@code SCALE} + {@code SHIFT}, per axis. For the organ files the
@@ -2732,10 +2314,31 @@ public final class SheepAnatomyModels {
 	 * whose box squashes the braincase and the long muzzle by different amounts so the eyes fall where the skin draws them.
 	 */
 	static java.util.function.DoubleUnaryOperator[] WARP;
-	/** Centimetres per voxel, for choosing detail: every rib, or only some with a gap between them. */
-	static double LOD = 0.5;
-	/** Mod mode: anatomy.png, each part drawn with its tissue's 16px tile as the mod draws it. */
-	static BufferedImage TILES;
+
+	/** A voxel centre in the body's centimetres, where the shapes and tissues are defined. */
+	static double cx(Grid g, int i) {
+		if (WARP != null) {
+			return WARP[0].applyAsDouble(g.wx(i));
+		}
+
+		return g.wx(i) * SCALE[0] + SHIFT[0];
+	}
+
+	static double cy(Grid g, int j) {
+		if (WARP != null) {
+			return WARP[1].applyAsDouble(g.wy(j));
+		}
+
+		return g.wy(j) * SCALE[1] + SHIFT[1];
+	}
+
+	static double cz(Grid g, int k) {
+		if (WARP != null) {
+			return WARP[2].applyAsDouble(g.wz(k));
+		}
+
+		return g.wz(k) * SCALE[2] + SHIFT[2];
+	}
 
 	static Grid voxelize(double vox, Predicate<Part> keep) {
 		for (int i = 0; i < PARTS.size(); i++) {
@@ -2779,11 +2382,11 @@ public final class SheepAnatomyModels {
 		int[] max = {-1, -1, -1};
 		Part[] parts = PARTS.toArray(Part[]::new);
 		for (int i = 0; i < n[0]; i++) {
-			double x = raw.cx(i);
+			double x = cx(raw, i);
 			for (int j = 0; j < n[1]; j++) {
-				double y = raw.cy(j);
+				double y = cy(raw, j);
 				for (int k = 0; k < n[2]; k++) {
-					double z = raw.cz(k);
+					double z = cz(raw, k);
 					if (CLIP_LO != null && !(raw.wx(i) > CLIP_LO[0] && raw.wx(i) < CLIP_HI[0] && raw.wy(j) > CLIP_LO[1] && raw.wy(j) < CLIP_HI[1]
 							&& raw.wz(k) > CLIP_LO[2] && raw.wz(k) < CLIP_HI[2])) {
 						continue;
@@ -2808,6 +2411,45 @@ public final class SheepAnatomyModels {
 			}
 		}
 
+		if (TILES != null && WARP == null) {
+			// At the game's grain, whose squashed cells are not cubes, a small organ can fall between the voxel centres on the
+			// diagonal: an organ none of whose parts won a voxel takes the one at its own centre, unless a bone or an organ holds it.
+			java.util.Set<String> won = new java.util.HashSet<>();
+			for (int c : raw.cell) {
+				if (c != 0) {
+					won.add(modPiece(PARTS.get(c - 1))[1]);
+				}
+			}
+
+			for (Part p : PARTS) {
+				if (won.contains(modPiece(p)[1]) || !keep.test(p) || p.path.startsWith("skin") || p.path.startsWith("fat") || p.path.startsWith("muscles")) {
+					continue;
+				}
+
+				int[] at = new int[3];
+				for (int a = 0; a < 3; a++) {
+					double u = ((p.shape.lo[a] + p.shape.hi[a]) / 2 - SHIFT[a]) / SCALE[a];
+					at[a] = (int) Math.floor((u - (a == 0 ? raw.ox : a == 1 ? raw.oy : raw.oz)) / vox);
+				}
+
+				int[] size = {raw.nx, raw.ny, raw.nz};
+				if (at[0] < 0 || at[1] < 0 || at[2] < 0 || at[0] >= size[0] || at[1] >= size[1] || at[2] >= size[2]) {
+					continue;
+				}
+
+				int held = raw.at(at[0], at[1], at[2]);
+				String by = held == 0 ? "" : PARTS.get(held - 1).path;
+				if (held == 0 || by.startsWith("skin") || by.startsWith("fat") || by.startsWith("muscles")) {
+					raw.set(at[0], at[1], at[2], p.index + 1);
+					won.add(modPiece(p)[1]);
+					for (int a = 0; a < 3; a++) {
+						min[a] = Math.min(min[a], at[a]);
+						max[a] = Math.max(max[a], at[a]);
+					}
+				}
+			}
+		}
+
 		Grid g = new Grid(max[0] - min[0] + 1, max[1] - min[1] + 1, max[2] - min[2] + 1, vox, raw.ox + min[0] * vox, raw.oy + min[1] * vox,
 				raw.oz + min[2] * vox);
 		for (int i = 0; i < g.nx; i++) {
@@ -2819,159 +2461,6 @@ public final class SheepAnatomyModels {
 		}
 
 		return g;
-	}
-
-	record Box(int x0, int y0, int z0, int x1, int y1, int z1, int key) {
-	}
-
-	/** Greedy merge: each run of one part's voxels grown along x, then z, then y into the biggest box it fills. */
-	static List<Box> boxes(Grid g) {
-		boolean[] used = new boolean[g.cell.length];
-		List<Box> out = new ArrayList<>();
-		for (int j = 0; j < g.ny; j++) {
-			for (int k = 0; k < g.nz; k++) {
-				for (int i = 0; i < g.nx; i++) {
-					int key = g.at(i, j, k);
-					if (key == 0 || used[(i * g.ny + j) * g.nz + k]) {
-						continue;
-					}
-
-					int i1 = i + 1;
-					while (i1 < g.nx && g.at(i1, j, k) == key && !used[(i1 * g.ny + j) * g.nz + k]) {
-						i1++;
-					}
-
-					int k1 = k + 1;
-					grow:
-					while (k1 < g.nz) {
-						for (int a = i; a < i1; a++) {
-							if (g.at(a, j, k1) != key || used[(a * g.ny + j) * g.nz + k1]) {
-								break grow;
-							}
-						}
-
-						k1++;
-					}
-
-					int j1 = j + 1;
-					grow:
-					while (j1 < g.ny) {
-						for (int a = i; a < i1; a++) {
-							for (int c = k; c < k1; c++) {
-								if (g.at(a, j1, c) != key || used[(a * g.ny + j1) * g.nz + c]) {
-									break grow;
-								}
-							}
-						}
-
-						j1++;
-					}
-
-					for (int a = i; a < i1; a++) {
-						for (int b = j; b < j1; b++) {
-							for (int c = k; c < k1; c++) {
-								used[(a * g.ny + b) * g.nz + c] = true;
-							}
-						}
-					}
-
-					out.add(new Box(i, j, k, i1, j1, k1, key));
-				}
-			}
-		}
-
-		return out;
-	}
-
-	/** The voxel at column c, row r of a box's face as Blockbench maps its UV (seen from outside, top row up). */
-	static int[] texel(Box b, int face, int c, int r) {
-		return switch (face) {
-			case 0 -> new int[] {b.x1 - 1, b.y1 - 1 - r, b.z1 - 1 - c};
-			case 1 -> new int[] {b.x0, b.y1 - 1 - r, b.z0 + c};
-			case 2 -> new int[] {b.x0 + c, b.y1 - 1, b.z0 + r};
-			case 3 -> new int[] {b.x0 + c, b.y0, b.z1 - 1 - r};
-			case 4 -> new int[] {b.x0 + c, b.y1 - 1 - r, b.z1 - 1};
-			default -> new int[] {b.x1 - 1 - c, b.y1 - 1 - r, b.z0};
-		};
-	}
-
-	static int faceW(Box b, int face) {
-		return face < 2 ? b.z1 - b.z0 : b.x1 - b.x0;
-	}
-
-	static int faceH(Box b, int face) {
-		return face == 2 || face == 3 ? b.z1 - b.z0 : b.y1 - b.y0;
-	}
-
-	static boolean faceVisible(Grid g, Box b, int face) {
-		int[] nn = NORMAL[face];
-		int w = faceW(b, face);
-		int h = faceH(b, face);
-		for (int c = 0; c < w; c++) {
-			for (int r = 0; r < h; r++) {
-				int[] t = texel(b, face, c, r);
-				if (g.at(t[0] + nn[0], t[1] + nn[1], t[2] + nn[2]) == 0) {
-					return true;
-				}
-			}
-		}
-
-		return false;
-	}
-
-	/** A voxel face's colour: its tissue, darkened where the space in front of it is closed in (crevices, folds). */
-	static int shade(Grid g, int i, int j, int k, int face) {
-		Part p = PARTS.get(g.at(i, j, k) - 1);
-		int[] nn = NORMAL[face];
-		int ai = i + nn[0];
-		int aj = j + nn[1];
-		int ak = k + nn[2];
-		int c;
-		if (TILES != null) {
-			// As the mod draws it: the tissue's tile, one texel per pixel across the face.
-			int tile = tile(p);
-			int u = Math.floorMod(nn[0] != 0 ? k : i, 16);
-			int v = Math.floorMod(nn[1] != 0 ? k : -j, 16);
-			c = TILES.getRGB(tile % 8 * 16 + u, tile / 8 * 16 + v) & 0xFFFFFF;
-		} else {
-			c = p.mat.rgb(g.cx(i), g.cy(j), g.cz(k), face, g.cx(ai), g.cy(aj), g.cz(ak));
-		}
-
-		int solid = 0;
-		for (int du = -1; du <= 1; du++) {
-			for (int dv = -1; dv <= 1; dv++) {
-				if (du == 0 && dv == 0) {
-					continue;
-				}
-
-				int x = ai;
-				int y = aj;
-				int z = ak;
-				if (nn[0] != 0) {
-					y += du;
-					z += dv;
-				} else if (nn[1] != 0) {
-					x += du;
-					z += dv;
-				} else {
-					x += du;
-					y += dv;
-				}
-
-				if (g.at(x, y, z) != 0) {
-					solid++;
-				}
-			}
-		}
-
-		if (g.at(ai + nn[0], aj + nn[1], ak + nn[2]) != 0) {
-			solid += 2;
-		}
-
-		return mul(c, Math.max(0.7, 1 - 0.035 * solid));
-	}
-
-	record Rect(Box box, int face, int w, int h, int[] at) {
 	}
 
 	static String export(Path out, String file, String title, double vox, Predicate<Part> keep) throws IOException {
@@ -3066,23 +2555,6 @@ public final class SheepAnatomyModels {
 				g.ny, g.nz, vox, (System.nanoTime() - t0) / 1e9);
 		return String.format(Locale.ROOT, "| `%s.bbmodel` | %s | %d | %.1f cm | %.0f x %.0f x %.0f cm |", file, title, boxes.size(), vox, g.nx * vox,
 				g.ny * vox, g.nz * vox);
-	}
-
-	/** One group of the outliner, with its subgroups and cubes. */
-	static final class Node {
-		final String name;
-		final String path;
-		final Map<String, Node> kids = new LinkedHashMap<>();
-		final List<Integer> cubes = new ArrayList<>();
-		double sx;
-		double sy;
-		double sz;
-		double sw;
-
-		Node(String name, String path) {
-			this.name = name;
-			this.path = path;
-		}
 	}
 
 	static String bbmodel(String name, Grid g, List<Box> boxes, Map<Long, int[]> uv, int texW, int texH, String png) {
@@ -3225,18 +2697,6 @@ public final class SheepAnatomyModels {
 		sb.append("]}");
 	}
 
-	static String uuid(String s) {
-		return UUID.nameUUIDFromBytes(s.getBytes(StandardCharsets.UTF_8)).toString();
-	}
-
-	static String num(double d) {
-		if (d == Math.rint(d)) {
-			return Long.toString((long) d);
-		}
-
-		return String.format(Locale.ROOT, "%.3f", d).replaceAll("0+$", "");
-	}
-
 	// ------------------------------------------------------------------------------------------------ previews
 
 	/** Four orthographic views (left, right, from above, three-quarter from the front left), ray cast through the voxels. */
@@ -3265,101 +2725,6 @@ public final class SheepAnatomyModels {
 		gr.drawString(title, 8, 19);
 		gr.dispose();
 		ImageIO.write(img, "png", file.toFile());
-	}
-
-	static void render(BufferedImage img, Grid g, double[] d, int ox, int oy, int size, boolean top) {
-		double[] upRef = top ? new double[] {0, 0, -1} : new double[] {0, 1, 0};
-		double[] right = norm(cross(d, upRef));
-		double[] up = cross(right, d);
-		double[] c = {g.nx / 2.0, g.ny / 2.0, g.nz / 2.0};
-		double ext = 0;
-		for (int corner = 0; corner < 8; corner++) {
-			double[] p = {(corner & 1) * g.nx - c[0], ((corner >> 1) & 1) * g.ny - c[1], ((corner >> 2) & 1) * g.nz - c[2]};
-			ext = Math.max(ext, Math.max(Math.abs(dot(p, right)), Math.abs(dot(p, up))));
-		}
-
-		double scale = (size - 24) / (2 * ext);
-		double[] light = norm(new double[] {-0.35, 0.85, -0.4});
-		double far = g.nx + g.ny + g.nz;
-		for (int py = 0; py < size; py++) {
-			for (int px = 0; px < size; px++) {
-				double u = (px - size / 2.0) / scale;
-				double w = -(py - size / 2.0) / scale;
-				double[] o = add(add(c, add(mul(right, u), mul(up, w))), mul(d, -far));
-				int[] hit = cast(g, o, d);
-				if (hit != null) {
-					int col = shade(g, hit[0], hit[1], hit[2], hit[3]);
-					int[] nn = NORMAL[hit[3]];
-					double lam = 0.55 + 0.45 * Math.max(0, nn[0] * light[0] + nn[1] * light[1] + nn[2] * light[2]);
-					img.setRGB(ox + px, oy + py, mul(col, lam));
-				}
-			}
-		}
-	}
-
-	/** Amanatides-Woo through the grid: the first solid voxel and the face the ray came in by, or null. */
-	static int[] cast(Grid g, double[] o, double[] d) {
-		double t0 = 0;
-		double t1 = Double.MAX_VALUE;
-		int[] n = {g.nx, g.ny, g.nz};
-		int enter = 0;
-		for (int a = 0; a < 3; a++) {
-			if (Math.abs(d[a]) < 1e-9) {
-				if (o[a] < 0 || o[a] > n[a]) {
-					return null;
-				}
-
-				continue;
-			}
-
-			double ta = (0 - o[a]) / d[a];
-			double tb = (n[a] - o[a]) / d[a];
-			if (ta > tb) {
-				double s = ta;
-				ta = tb;
-				tb = s;
-			}
-
-			if (ta > t0) {
-				t0 = ta;
-				enter = a;
-			}
-
-			t1 = Math.min(t1, tb);
-		}
-
-		if (t0 > t1) {
-			return null;
-		}
-
-		double[] p = add(o, mul(d, t0 + 1e-7));
-		int[] cell = new int[3];
-		int[] step = new int[3];
-		double[] tMax = new double[3];
-		double[] tDelta = new double[3];
-		for (int a = 0; a < 3; a++) {
-			cell[a] = Math.min(n[a] - 1, Math.max(0, (int) Math.floor(p[a])));
-			step[a] = d[a] > 0 ? 1 : -1;
-			double next = d[a] > 0 ? cell[a] + 1 : cell[a];
-			tMax[a] = Math.abs(d[a]) < 1e-9 ? Double.MAX_VALUE : t0 + (next - p[a]) / d[a];
-			tDelta[a] = Math.abs(d[a]) < 1e-9 ? Double.MAX_VALUE : 1 / Math.abs(d[a]);
-		}
-
-		int axis = enter;
-		while (true) {
-			if (g.at(cell[0], cell[1], cell[2]) != 0) {
-				int face = axis * 2 + (step[axis] > 0 ? 1 : 0);
-				return new int[] {cell[0], cell[1], cell[2], face};
-			}
-
-			axis = tMax[0] < tMax[1] ? (tMax[0] < tMax[2] ? 0 : 2) : (tMax[1] < tMax[2] ? 1 : 2);
-			cell[axis] += step[axis];
-			if (cell[axis] < 0 || cell[axis] >= n[axis]) {
-				return null;
-			}
-
-			tMax[axis] += tDelta[axis];
-		}
 	}
 
 	static String mobReadme(String res, List<String> rows) {
@@ -3435,142 +2800,5 @@ public final class SheepAnatomyModels {
 				Proportions are scaled to a ewe of about 65 kg and simplified to blocks: they are meant to read correctly at a glance,
 				not to be measured.
 				""".formatted(String.join("\n", rows));
-	}
-
-	// ------------------------------------------------------------------------------------------------ maths
-
-	static double[] v(double... a) {
-		return a;
-	}
-
-	static double sq(double a) {
-		return a * a;
-	}
-
-	static double clamp(double a, double lo, double hi) {
-		return a < lo ? lo : a > hi ? hi : a;
-	}
-
-	static double frac(double a) {
-		return a - Math.floor(a);
-	}
-
-	static double smin(double a, double b, double k) {
-		double h = Math.max(k - Math.abs(a - b), 0) / k;
-		return Math.min(a, b) - h * h * k * 0.25;
-	}
-
-	static double[] add(double[] a, double[] b) {
-		return new double[] {a[0] + b[0], a[1] + b[1], a[2] + b[2]};
-	}
-
-	static double[] sub(double[] a, double[] b) {
-		return new double[] {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
-	}
-
-	static double[] mul(double[] a, double s) {
-		return new double[] {a[0] * s, a[1] * s, a[2] * s};
-	}
-
-	static double dot(double[] a, double[] b) {
-		return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-	}
-
-	static double[] cross(double[] a, double[] b) {
-		return new double[] {a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]};
-	}
-
-	static double len(double[] a) {
-		return Math.sqrt(dot(a, a));
-	}
-
-	static double dist(double[] a, double[] b) {
-		return Math.sqrt(sq(a[0] - b[0]) + sq(a[1] - b[1]) + sq(a[2] - b[2]));
-	}
-
-	static double[] norm(double[] a) {
-		double l = len(a);
-		return l == 0 ? a : mul(a, 1 / l);
-	}
-
-	static double hash(int x, int y, int z, int seed) {
-		long h = x * 374761393L + y * 668265263L + z * 2147483647L + seed * 144665L;
-		h = (h ^ (h >>> 13)) * 1274126177L;
-		h ^= h >>> 16;
-		return (h & 0xFFFFFF) / (double) 0x1000000;
-	}
-
-	/** Smooth value noise in [0, 1]. */
-	static double noise(double x, double y, double z, int seed) {
-		int xi = (int) Math.floor(x);
-		int yi = (int) Math.floor(y);
-		int zi = (int) Math.floor(z);
-		double fx = x - xi;
-		double fy = y - yi;
-		double fz = z - zi;
-		fx = fx * fx * (3 - 2 * fx);
-		fy = fy * fy * (3 - 2 * fy);
-		fz = fz * fz * (3 - 2 * fz);
-		double r = 0;
-		for (int c = 0; c < 8; c++) {
-			int dx = c & 1;
-			int dy = (c >> 1) & 1;
-			int dz = (c >> 2) & 1;
-			r += hash(xi + dx, yi + dy, zi + dz, seed) * (dx == 1 ? fx : 1 - fx) * (dy == 1 ? fy : 1 - fy) * (dz == 1 ? fz : 1 - fz);
-		}
-
-		return r;
-	}
-
-	/** Thin winding lines: near 1 along the zero set of a noise, for blood vessels and straw. */
-	static double ridge(double x, double y, double z, int seed) {
-		return 1 - Math.abs(2 * noise(x, y, z, seed) - 1);
-	}
-
-	/** Worley cells: the distances to the nearest and second nearest feature point, and the nearest one's random id. */
-	static double[] cells(double x, double y, double z, int seed) {
-		int xi = (int) Math.floor(x);
-		int yi = (int) Math.floor(y);
-		int zi = (int) Math.floor(z);
-		double f1 = 9;
-		double f2 = 9;
-		double id = 0;
-		for (int a = -1; a <= 1; a++) {
-			for (int b = -1; b <= 1; b++) {
-				for (int c = -1; c <= 1; c++) {
-					int cx = xi + a;
-					int cy = yi + b;
-					int cz = zi + c;
-					double px = cx + hash(cx, cy, cz, seed);
-					double py = cy + hash(cx, cy, cz, seed + 1);
-					double pz = cz + hash(cx, cy, cz, seed + 2);
-					double d = Math.sqrt(sq(x - px) + sq(y - py) + sq(z - pz));
-					if (d < f1) {
-						f2 = f1;
-						f1 = d;
-						id = hash(cx, cy, cz, seed + 3);
-					} else if (d < f2) {
-						f2 = d;
-					}
-				}
-			}
-		}
-
-		return new double[] {f1, f2, id};
-	}
-
-	static int mix(int a, int b, double t) {
-		t = clamp(t, 0, 1);
-		int r = (int) Math.round(((a >> 16) & 255) * (1 - t) + ((b >> 16) & 255) * t);
-		int g = (int) Math.round(((a >> 8) & 255) * (1 - t) + ((b >> 8) & 255) * t);
-		int bl = (int) Math.round((a & 255) * (1 - t) + (b & 255) * t);
-		return r << 16 | g << 8 | bl;
-	}
-
-	static int mul(int c, double f) {
-		int r = (int) clamp(((c >> 16) & 255) * f, 0, 255);
-		int g = (int) clamp(((c >> 8) & 255) * f, 0, 255);
-		int b = (int) clamp((c & 255) * f, 0, 255);
-		return r << 16 | g << 8 | b;
 	}
 }

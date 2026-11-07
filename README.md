@@ -20,14 +20,16 @@ drawn at the size of the model's own pixels. It should feel like part of the gam
 | **On the server too** (singleplayer, a LAN world you host, e4mc, a Fabric server) | Everything above, plus bodies that stay where they fell, exact server-reported hits, shared butchery and rot, bloody cleaning tools, burning bodies that spread fire. Fluid Gore registers no blocks, items or entities, so the server does not force it on players who join. |
 
 What the server half changes in the world, and nothing else:
-- A slaughtered animal's body stays as an entity until it is cleaned up or butchered apart. Its drops and experience
-  still come out when it dies, as in vanilla. A dead body cannot be milked, sheared, fed, leashed or ridden, and
-  bodies do not count towards the mob cap.
+- A slaughtered animal's body stays as an entity until it is cleaned up, butchered apart or cleared away with
+  `/fluidgore clear` (operators only, see [Demos](#demos)). Its drops and experience still come out when it dies, as
+  in vanilla. A dead body cannot be milked, sheared, fed, leashed or ridden, and bodies do not count towards the mob
+  cap. Where it ends up after a fall comes from the nearest player's game when that player has Ragdoll Physics on
+  (see [Multiplayer](#multiplayer)).
 - A sponge or brush used on blood gets stained (a model tint on that item), and a sponge washed clean becomes a wet
   sponge.
 - An animal running on fire, or a body that died burning, can light vanilla fire. The
   `fire_spread_radius_around_player` game rule still applies (Burning Bodies Spread Fire, on by default).
-- With the separate Cobble Tank add-on installed, the tank does real damage (see [Cobble Tank](#cobble-tank-add-on)).
+- With the separate Cobble Tank mod installed, the tank does real damage (see [Cobble Tank](#cobble-tank-separate-mod)).
 
 ## Features
 
@@ -92,8 +94,12 @@ Open wounds drip, so a wounded animal leaves a trail. How deep a wound can go de
   other rather than through each other. Walking through a pile of bodies slows you down. One death in
   twenty ends with the body bursting apart (Death Pop).
 - **Ragdoll Physics (experimental, off by default).** Dead bodies go limp, with the head, trunk and legs jointed
-  within natural limits. They fold and drape over steps and edges. A four-legged animal that dies on its side sets with
-  its legs locked straight out from the trunk, as a carcass lies on a killing floor.
+  within natural limits. They fold and drape over steps and edges, tumble down stairs, and stay on their side of a
+  fence. A four-legged animal that dies on its side sets with its legs locked straight out from the trunk, as a
+  carcass lies on a killing floor. A body carries its weight as the animal does, not as its blocks are sized: most of
+  it is in the trunk, and the head and legs are light. A body that goes over an edge falls trunk first with its legs
+  swinging loose, keeps its momentum and tumbles on down a slope or a flight of steps until it lies flat.
+  `/gore demo tumble` shows it.
 
 ### Animals that react
 No messages and no lectures. The world responds instead.
@@ -118,6 +124,8 @@ All of this is pose, sound and particles. The animals' actual AI and behaviour a
   pool in dips, run down stairs and drip off ledges. Arterial spurts pump in pulses.
 - **It shows what happened.** Blood that lands at a slant stretches into a teardrop pointing the way it flew. A
   bleeding body that is dragged or shoved smears a trail.
+- **It lies where it can.** Blood on a fence rail, a wall top or a pane leaves a thin line along it, and the rest runs
+  off and drips to the ground below.
 - **It ages and washes away.** Blood lands bright scarlet, darkens to the deep red of standing blood, then dries
   brown-black. A big bleed lies as one pool that stops spreading while still thick. Rain washes it away, and anything
   walking through a puddle leaves footprints.
@@ -186,7 +194,10 @@ the blast kills them.
   lungs and windpipe, the four stomachs, liver, kidneys, spleen, intestines, the glands (thyroid, thymus, adrenals,
   pancreas, salivary glands) and the caul fat. About half of all sheep are rams and half ewes, each with its own
   reproductive organs (a ewe's udder and uterus, a ram's testes), and every player sees the same animal. A lamb has
-  milk teeth, a big thymus and the stomachs of a suckling lamb. Pigs and cows have their own, simpler anatomy.
+  milk teeth, a big thymus and the stomachs of a suckling lamb. Under its skin it has its own body wall: the hide, the white fat under it and
+  its named muscles (the eye of the loin, the fillet, the chump, the shoulder, the leg and the cheek, the flank in
+  its layers), and its legs carry their own bones, tendons, muscles and hooves. Pigs and cows have their own, simpler
+  anatomy.
 - **Cut faces.** A blade through an organ shows its inside: a liver's parenchyma, a lung's sponge, a heart's
   chambers, a kidney's cortex and medulla.
 - **Organs are objects.** A sheep's or cow's liver, lungs and kidneys come out whole. You can carry, throw, punch,
@@ -237,6 +248,9 @@ wait.
     landed, a shield block draws no blood, and an arrow from a dispenser wounds where it strikes.
   - Chops, cuts, plucks and clean-ups on a kept body are shared as they happen. Loose pieces move the same for
     everyone when someone kicks, carries or throws them.
+  - With Ragdoll Physics on, the nearest player with the mod leads each kept body's fall: their game's ragdoll
+    tumbles it down the slope or the steps, and the server moves the body to where it came to rest, so everyone finds
+    it there. Other players' ragdolls fall on their own and are drawn to that spot.
   - What was done stays as evidence. Someone who walks in later finds the zombie missing its arm, and the arm lying
     where it fell.
 
@@ -248,21 +262,13 @@ Inventory sorting works the way it did in 1.7.10. A small sort button sits on ev
 shulker box, and one next to your inventory. You can also middle-click over either part. Stacks are merged and ordered
 by item id, and the hotbar is left alone. It uses ordinary inventory clicks, so it works on any server.
 
-### Cobble Tank (add-on)
-The Cobble Tank is a separate add-on jar, `cobbletank-<version>.jar`, built from this repository. It needs Fluid Gore,
-and because it registers a block, the server and every player who joins need the same version of it. Without it,
-Fluid Gore adds nothing to the game's registries. Crafted from TNT with cobblestone on four sides, it is a
-pressurised gas tank:
-- Sneak-use a stick to open a valve on the face you click. The jet pushes bodies and loose organs, and the recoil can
-  tear the tank loose.
-- External fire heats the gas and weakens the shell.
-- Redstone starts a countdown.
-- When it ruptures, casing fragments fly along traced paths and stop at the first wall or body. Glass breaks and
-  wooden doors blow open.
-
-The burst does real damage. The default size and pressure are a game preset, not a model of any real vehicle. Demos:
-`/gore demo tank`, `/gore demo roadster`, `/gore demo fragments`. [How it works and its limits](docs/TANK_OVERHAUL.md),
-[fragment contacts](docs/FRAGMENT_CONTACTS.md).
+### Cobble Tank (separate mod)
+The Cobble Tank is a mod of its own, `CobbleTank-<version>.jar`, with its own project and documentation. It is a
+crafted pressurised gas tank that does real damage, and it works with or without Fluid Gore. With both installed, its
+jets lift loose organs, its bursts and fragments play Fluid Gore's wounds and gore, its settings appear under Cobble
+Tank (Server), and its demos join `/gore demo`: `tank`, `roadster` and `fragments`. Because it registers a block, the
+server and every player who joins need the same version of it. Without it, Fluid Gore adds nothing to the game's
+registries. How Fluid Gore draws fragment wounds: [fragment contacts](docs/FRAGMENT_CONTACTS.md).
 
 ## Demos
 Every feature has a short scene you can play in game, set up in front of you. Type `/gore demo` for the list and
@@ -273,12 +279,17 @@ summoned.
 Demos summon animals with ordinary commands, so they need cheats (in singleplayer: Open to LAN, Allow Cheats) or
 operator rights on a server. Demos that dig or blow up terrain, such as `pit`, ask you to click once more first.
 
+To play a scene again, `/fluidgore clear` takes away the bodies and gore around you: the bodies the server keeps, and
+the blood, loose pieces and bodies every player with the mod sees there. Living animals stay. Give it a radius
+(`/fluidgore clear 30`), two corners as `/fill` takes them (`/fluidgore clear 0 -64 0 20 -40 20`), or `all`. It needs
+the mod on the server and operator rights, so a command block can run it.
+
 ## Install
 
 1. Install [Fabric Loader](https://fabricmc.net/use/) **0.19.5+** for Minecraft **26.3** and
    [Fabric API](https://modrinth.com/mod/fabric-api) (tested with 0.162.0+26.3).
 2. Put `fluidgore-<version>.jar` in your `mods` folder (`%APPDATA%\.minecraft\mods` on Windows). For the Cobble
-   Tank, add `cobbletank-<version>.jar` too, on the server and on every client.
+   Tank, add `CobbleTank-<version>.jar` too, on the server and on every client.
 3. Optional: [Mod Menu](https://modrinth.com/mod/modmenu) adds a config button in the mod list.
 
 Open the settings from **Options → Fluid Gore...** (top-left button) or from Mod Menu. Changes apply immediately and
@@ -397,7 +408,8 @@ bone. Off disables everything and clears existing blood and parts.
 | Burning Animals | On | Sheep, pigs and cows burn through their own anatomy. |
 | Burning Bodies Spread Fire | On | Needs the mod on the server: burning animals and bodies light vanilla fire. |
 
-**Cobble Tank (Server)**: shown only with the add-on installed, read from the server's `config/cobbletank.json`.
+**Cobble Tank (Server)**: shown only with the Cobble Tank installed, read from the server's `config/cobbletank.json`.
+The Cobble Tank's own settings screen in Mod Menu shows the same options.
 
 | Setting | Default | What it does |
 |---|---|---|
@@ -466,7 +478,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a map of the code.
 You need **JDK 25**.
 
 ```
-./gradlew build              # jars in build/libs/: fluidgore and the cobbletank add-on
+./gradlew build              # build/libs/fluidgore-<version>.jar
 ./gradlew runClient          # development client
 ./gradlew runClientGameTest  # automated in-game test, singleplayer and dedicated server
 ```
@@ -476,7 +488,7 @@ generated, not drawn by hand. See [CONTRIBUTING.md](CONTRIBUTING.md) for the pro
 generators.
 
 ## Known limitations
-- A server running the Cobble Tank add-on only admits players with the same add-on version, because the tank is a
+- A server running the Cobble Tank only admits players with the same Cobble Tank version, because the tank is a
   registered block. Fluid Gore on its own registers nothing, but joining a Fluid Gore server without the mod has not
   been tested yet.
 - Evidence covers only what a player with the mod did. Gore from hits nobody with the mod made (a skeleton's arrows,
@@ -486,6 +498,8 @@ generators.
   are left out because their model does not fit it.
 - Only a sheep's or lamb's head splits down the middle; a pig's or cow's head is several blocks and is hacked apart.
   A lamb's skull has the adult shape (a real lamb's face is shorter).
+- A sheep has no neck in the vanilla model, so its neck muscles and the rest of its neck are left out of its anatomy.
+  The two claws of each hoof come away together.
 - Where a large pool of blood meets dry floor, its edge can step along the block edges.
 - A body loaded from a save, or seen by a player who arrived after it died, keeps its normal colour: pallor is
   only seen by players who watched it bleed. The same goes for blood on coats.
@@ -493,7 +507,8 @@ generators.
   it stood.
 - In a tightly packed herd the crosshair stops at the nearest animal's box, so the legs of the ones behind it cannot
   be picked out.
-- Ragdoll Physics is experimental.
+- Ragdoll Physics is experimental. A kept body's fall is played out in one player's game; another player's ragdoll
+  can take a slightly different path down and is then drawn over to where the body came to rest.
 - Not yet tested on a public server with anti-cheat plugins that hide health.
 
 ## License

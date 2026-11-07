@@ -5,8 +5,8 @@ A map of the code in `src/main/java/dev/fluidgore/`, for anyone changing it. For
 
 ## The big picture
 
-One jar holds a client half and a small common (server) half. The Cobble Tank is a separate add-on in the same
-repository (`src/tank/`, its own jar), built on the physics and gore described here.
+One jar holds a client half and a small common (server) half. The Cobble Tank is a separate mod with its own
+project (`../CobbleTank`). It runs on its own, and plays the gore described here when Fluid Gore is installed.
 
 - **Client** (`FluidGoreClient`): detects hits, decides what they look like, simulates blood, pieces and dying bodies,
   and draws all of it. It needs nothing from the server beyond what vanilla already sends.
@@ -94,7 +94,10 @@ when a feature is turned off.
   same for bony mobs.
 - `DropletSystem`: ballistic droplets. `BloodFluidSim` + `BloodCell`: per-block puddle cells that flow downhill within
   a per-tick budget. `DecalManager` + `Decal`: splats cut into pieces that follow stairs and slabs. `SurfaceProbe`:
-  exact surface heights. `Spurts`: arterial jets. `Footprints`. `Gush`: rate-limited blood sounds.
+  exact surface heights on what a block draws (its collision shape cut to its outline: a fence's collision box stands
+  half a block above its rails), and the top face a mark lies on. Floor marks are cut to that face, and blood landing on
+  one too narrow for a pool (a rail, a wall top) runs off its edge. Giblets and ragdolls rest on the same shape.
+  `Spurts`: arterial jets. `Footprints`. `Gush`: rate-limited blood sounds.
 - `WaterClouds`: blood that reaches water (a drop, a flooded pool, a rinsed tool) becomes a cloud that joins nearby
   clouds, sinks, drifts with the current and thins away. `GoreRenderer` draws each as a few soft puffs.
 - `BloodAmount` + `BloodSupply`: how much blood each body holds in litres and how much has come out. Pool volume is
@@ -129,7 +132,14 @@ when a feature is turned off.
   layers under the skin. `Piece`s are bones and organs, and `Kind` gives each one its tile in `anatomy.png` and how it
   cooks. There are human regions (head, torso, arm, leg) and beast regions (head, trunk, foreleg, hindleg) for sheep,
   pigs and cows. A grown beast's trunk cube is stood on end in the vanilla model, so its pieces are pre-turned.
-- `SheepTrunk`, `SheepHead` and `CowTrunk` are **generated** organ tables (see `tools/`). The sheep's tables are mixed: half
+- `SheepTrunk`, `SheepHead`, `SheepLegs` and `CowTrunk` are **generated** tables (see `tools/`). A sheep's trunk table fills
+  the whole body cube under the skin (hide, fat, named muscles, organs, bones); the hide, fat and muscles carry owners
+  that tear them into patches and chunks in a blast (`Viscera.wall`: they fly as giblets, never as carried pieces), and
+  `MeltRenderer.inside` leaves the hide and fat to the burning shell and clips the lean to below it. `SheepLegs` is a
+  sheep's own right fore and hind leg; other beasts still use the hand-made `beastLeg`. The generators share two
+  files in `tools/`: `AnatomyKit` (shapes, tissues, the voxel grid, Blockbench export and previews) and `Quadruped`
+  (the trunk frame and the axial skeleton, written once and sized by each species' `Body`). A species file adds its
+  own organs, head and output tables. The sheep's tables are mixed: half
   pixels, with small organs (heart, great vessels, kidneys; brain, eyes, teeth) recut at quarter pixels inside the cells
   their half-pixel selves filled. `Anatomy.Detail` picks the even grains the `resolution` demo compares; only drawing
   uses them, and organ identity always comes from the mixed table. A sheep's trunk comes as a ewe's, a ram's, a ewe
@@ -167,12 +177,24 @@ when a feature is turned off.
   `CorpseStrike`: blows on bodies. `SufferPose` + `BodyPose`: animation channels for the renderer. Use `SufferPose.CLOCK`,
   not `ageInTicks`, because removed entities stop ticking.
 - `Ragdoll`: the coarse body every system reads (position, yaw, roll, on ground). With Ragdoll Physics on,
-  `ragdoll/Rig` (XPBD, 8 substeps, joint limits, block contacts, friction, sleep) drives it through `Rigging`. Each tick
+  `ragdoll/Rig` (XPBD, 8 substeps, joint limits, block contacts, friction, a small bounce on hard impacts, sleep)
+  drives it through `Rigging`. `Weights` shares the body's kilograms out among the segments as the real animal's are
+  (head, neck, each limb; the trunk has the rest), not by block volume. Each tick
   `Rigging` hands a rig the segments of the rigged bodies near it (`Rig.Block`, oriented boxes), and its points are
   pushed out of them a little each substep, so bodies lie against each other; sleeping bodies skip this. `Skeleton`
   defines body plans and joints, `CubeSplit` splits cubes with the vanilla constructor (so Sodium draws them exactly),
   and `Poser` swaps split parts in for the draw only. `Bends` maps wounds and hits on a bent stretch. Gore data never
   moves: wounds, rot and char stay on the original part and cube.
+  Block contacts test each segment's corners, edge middles and face middles, then every edge of the segment against the
+  block box and every edge of the block box against the segment, so a fence or a step's edge cannot slip between the
+  points. Each goes back out through the face it came in by. A block's lower edge where it stands on another box (a fence
+  post's foot, the foot of a riser) is an inside corner and is not tested. A segment a block has just pushed down (a leg
+  under a fence's lower rail) takes a tenth of its share of each joint correction for a tick, so the trunk gives way to
+  it instead of the hip pulling it back up into the block. A kept body's rig goes after the server's body through the
+  world (`Rigging.follow`: a pull across the ground, over an edge and down) and is put there at once only when more than
+  three blocks out of step. The game that leads a kept body's fall (`server/FallLeads`) does not: its rig moves on its
+  own, slumps down a drop as one of its own bodies does (`Rigging.slide`), and `Rigging.lead` reports where it got to,
+  unless the server moved the body elsewhere (a shove).
 - `Suffering.footprint`: what a lying body covers of the ground, a capsule along its length. `Suffering.spread` eases
   bodies only this client has out of each other through the old ragdoll's velocity (a rig takes it up as a push);
   the server spreads its kept bodies itself (`KeptBodies.spread`). A rig's leg joints can be driven back to the
@@ -182,7 +204,7 @@ when a feature is turned off.
   it pushes what it meets, plus the damage-type tags (`fluidgore:gas_jet`, `fluidgore:gas_embolism`) by which an
   add-on's jet damage is recognised.
 - `physics/BodySlide` (common): pulls a body hanging over stairs or a ledge towards the drop, on the server for kept
-  bodies and on the client for its own. `BodyMass`: weight, and so burn time.
+  bodies and on the client for its own and for kept bodies whose fall it leads. `BodyMass`: weight, and so burn time.
 - `physics/Buoyancy` (common): a body in water. How much of a span is under water, the current's pull, and the lift
   from how bloated it is (`RotClock.swell`, common, so the server can use it): below its weight fresh, above it
   bloated. Used by `Ragdoll.move`, by `Rig` per segment (with water drag, and a body asleep in water staying asleep
@@ -218,7 +240,14 @@ humanoid. `GameRendererMixin` adds stagger and the limp hitch to the camera.
 - `server/KeptBodies`: holds dead bodies (from `LivingEntityDeathMixin`), up to Most Kept Bodies per dimension. It
   refuses interactions with them, relays actions to players within 96 blocks, shoves, spreads and unsticks bodies, and
   counts rot. `NaturalSpawnerMixin` leaves kept bodies out of the mob cap.
+- `server/FallLeads`: who leads each kept body's fall. The nearest player with the mod is sent `net/BodyLead`; once
+  their game reports (`net/BodyFall`, via `net/FallSync`), the server moves its body to each report (only its leader,
+  only a kept body, a few blocks at a time, lifted out of blocks its box would cut into and stood on top of any it
+  only grazes, since vanilla movement lets a box that starts inside a block fall through it) and stops sliding, spreading
+  and knocking it itself. Until then, and with nobody near, it moves the body as before.
 - `server/BloodyTools`: stains on cleaning tools. `server/BurningBodies`: vanilla fire from burning bodies.
+- `server/ClearCommand`: `/fluidgore clear` (operators and command blocks) removes the kept bodies and the records of
+  pieces in a box and sends the box (`GoreClear`); each client takes away what it shows there (`GoreSystems.removeIn`).
 - **Every packet is hostile.** Check `finite()`, distance, ownership and kept status, and rate-limit with
   `server/Throttle` (per-player token buckets for actions, poses and evidence bytes). Manual CLEAN needs a cleaning
   tool in the server's copy of the main hand at ordinary reach. VAPORIZED is the separate automatic report and never
@@ -231,15 +260,13 @@ humanoid. `GameRendererMixin` adds stagger and the limp hitch to the camera.
 - `net/VesselBurstPayload` is a burst reported by the server (wave, fragment paths); `net/VesselBursts` plays it
   through `trigger/PressureVessel`, so a burst looks the same whatever made it. Add-ons can listen before the gore.
 
-## The Cobble Tank add-on (`src/tank/`, mod id `cobbletank`)
-- `CobbleTank` registers the block, item, block entity, flying entity and the jet, embolism and impact damage types;
-  `TankConfig` is its `config/cobbletank.json`. `TankState` holds the fill, the gas and shell temperatures, casing
-  damage and cracks, and integrates choked and subcritical outflow, blowdown cooling and heat exchange. `TankBlock` /
-  `TankBlockEntity` / `TankEntity` cover the block, its ticking and the flying tank. `Jet` hurts bodies in a valve jet.
-  `TankBurst` is the rupture: the real damage, glass and doors, and the `VesselBurstPayload` it sends.
-- `client/TankClient`: the renderer, leak sounds and hearing loss, and clearing the block when its burst arrives.
-  `TankSettings` and `TankDemos` add its section to the settings screen and its demos to `/gore demo`.
-- Fluid Gore never refers to these classes. Details and limits: [TANK_OVERHAUL.md](TANK_OVERHAUL.md).
+## The Cobble Tank (`../CobbleTank`, mod id `cobbletank`)
+- Its own project, documented there. With Fluid Gore installed it sends `net/VesselBurstPayload` from the server,
+  listens through `VesselBursts.listen` to clear its block before the gore, adds its section with
+  `GoreSettingsScreen.addSection` and its demos with `Demos.add`, and tags its jet damage `fluidgore:gas_jet` and
+  `fluidgore:gas_embolism`.
+- Fluid Gore never refers to its classes. The build compiles its sources from `../CobbleTank` (the `tank` source set)
+  only so the dev client and the game test can play it.
 
 ## Rendering and mixins (`render/`, `mixin/`)
 - `GoreRenderer` collects world geometry through `LevelRenderEvents.COLLECT_SUBMITS`. `GibletRenderer`,
@@ -278,5 +305,5 @@ humanoid. `GameRendererMixin` adds stagger and the limp hitch to the camera.
 ## Tests
 `src/gametest/java/dev/fluidgore/test/FluidGoreClientTest.java` is a Fabric client game test. It plays through the mod
 in singleplayer and then against a dedicated server: kills, wounds, severing, deaths, kept bodies, rot, fire,
-explosions, the Cobble Tank add-on, the settings screens and every demo. It loads both mods. Each feature has a named test that can be run
+explosions, the Cobble Tank, the settings screens and every demo. It loads both mods. Each feature has a named test that can be run
 on its own (see CONTRIBUTING.md).

@@ -10,12 +10,16 @@ This file covers how to build and test the mod and the rules the code follows. F
 
 ## Commands
 ```
-./gradlew build                 # jars -> build/libs/fluidgore-<version>.jar and cobbletank-<tank_version>.jar
-./gradlew runClient             # development client, with the Cobble Tank add-on
-./gradlew installMod            # build, then copy both jars into %APPDATA%\.minecraft\mods (or -PmodsDir=<dir>),
-                                # deleting older fluidgore-*.jar and cobbletank-*.jar there (two copies crash the game)
+./gradlew build                 # build/libs/fluidgore-<version>.jar
+./gradlew runClient             # development client, with the Cobble Tank (compiled from ../CobbleTank)
+./gradlew installMod            # build, then copy the jar into %APPDATA%\.minecraft\mods (or -PmodsDir=<dir>),
+                                # deleting older fluidgore-*.jar there (two copies crash the game)
 ./gradlew runClientGameTest     # the automated in-game test (singleplayer, then a dedicated server)
 ```
+
+The Cobble Tank is its own project, `../CobbleTank` (build and install it there). Fluid Gore's dev client, showcase
+runs and game test compile its sources from that folder (`-PcobbleTankDir=<dir>` to point elsewhere), so it must be
+checked out beside this one.
 
 Game test options:
 
@@ -35,15 +39,16 @@ The test's dedicated server uses port 25599.
 
 Generators (plain single-file Java programs, run with the JDK):
 ```
-java tools/GenerateTextures.java src/main/resources/assets/fluidgore              # every PNG, the add-on's too
+java tools/GenerateTextures.java src/main/resources/assets/fluidgore              # every PNG
 java tools/VerifyTextures.java check src/main/resources/assets/fluidgore tools/texture-manifest.txt
-java tools/VerifyTextures.java check src/tank/resources/assets/cobbletank tools/texture-manifest-cobbletank.txt
-java tools/SheepAnatomyModels.java art/sheep_anatomy                               # sheep art + anatomy/SheepTrunk.java, SheepHead.java
+java tools/SheepAnatomyModels.java art/sheep_anatomy                               # sheep art + anatomy/SheepTrunk, SheepHead, SheepLegs
 java tools/CowAnatomyModels.java art/cow_anatomy                                   # cow art and piece tables, then:
 powershell -File tools/ExportCowAnatomy.ps1                                        # anatomy/CowTrunk.java from them
 ```
 The anatomy tools write Blockbench models to `art/` (open them in Blockbench to review the art) and the generated
-Java tables the mod uses.
+Java tables the mod uses. Both anatomy tools pull in `tools/AnatomyKit.java` and `tools/Quadruped.java` (the
+shared modelling kit and four-legged body plan); a new species extends `Quadruped` and gives its own `Body`. After a
+change to the shared files, re-run both and check that `git status` shows only the changes you meant.
 
 ## What the mod is for
 Fluid Gore shows farm animals the way they are: the work of a farm and a butcher's yard (slaughter, jointing, the
@@ -68,15 +73,16 @@ husbandry and livestock biology. The rules below follow from that.
    sound events and particle types only, and do not register blocks, items, entities, particles or sounds. The
    one deliberate exception is the server half (`server/`, `net/`), which keeps bodies, reports hits and relays player
    actions. Anything that needs registered content is an add-on with its own mod id and jar, like the Cobble Tank
-   (`src/tank/`, mod id `cobbletank`). An add-on uses Fluid Gore's public physics and gore (`physics/`, `fragment/`,
-   `net/VesselBursts`, `Demos.add`, `GoreSettingsScreen.addSection`, damage-type tags such as `fluidgore:gas_jet`);
-   Fluid Gore never refers to an add-on's classes.
+   (its own project, `../CobbleTank`, mod id `cobbletank`). An add-on may use Fluid Gore's public hooks
+   (`net/VesselBurstPayload`, `net/VesselBursts`, `Demos.add`, `GoreSettingsScreen.addSection`, damage-type tags such
+   as `fluidgore:gas_jet`), and should run without Fluid Gore, as the Cobble Tank does. Fluid Gore never refers to an
+   add-on's classes.
 
    Every client feature must still work when `GoreSync.serverKeepsBodies()` and `GoreSync.serverReportsHits()` are
    false.
 2. **Visual by default.** Never change health, damage, drops, loot, AI or game rules. The exceptions are listed in the
    README under "Where it runs": kept bodies, stained cleaning tools and fire from burning bodies, and the
-   Cobble Tank add-on's own damage. A new exception has to be a deliberate decision, added to that list.
+   Cobble Tank's own damage. A new exception has to be a deliberate decision, added to that list.
 3. **The server half stays small.** The server says only what it knows (damage, weapon, ray, seed, what a player did)
    and never works out gore. Its work must be cheap and capped. Treat every packet as hostile: check that numbers are
    finite, check distances and ownership, and rate-limit per player (`server/Throttle`).
@@ -97,8 +103,8 @@ husbandry and livestock biology. The rules below follow from that.
    player. Use only tag-scoped commands:
    never `kill @e` without `tag=fluidgore_demo`, and never `item replace` (use `Script.hold`). A demo that changes
    terrain sets `destructive = true`. The `demos` game test plays every demo.
-9. **Generated files are never edited by hand.** This covers every PNG in `assets/fluidgore/textures` and
-   `assets/cobbletank`, `anatomy/SheepTrunk.java`, `anatomy/SheepHead.java` and `anatomy/CowTrunk.java`, and the READMEs in `art/`. Change the generator and re-run
+9. **Generated files are never edited by hand.** This covers every PNG in `assets/fluidgore/textures`,
+   `anatomy/SheepTrunk.java`, `anatomy/SheepHead.java`, `anatomy/SheepLegs.java` and `anatomy/CowTrunk.java`, and the READMEs in `art/`. Change the generator and re-run
    it. After a texture generator change, run `VerifyTextures check`: existing PNGs and anatomy tiles must not change
    unless that is the point (then re-record the manifest with `write`).
 

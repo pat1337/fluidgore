@@ -592,6 +592,11 @@ public final class GorePartManager {
 		parts.removeIf(p -> (((int) Math.floor(p.x)) >> 4) == chunkX && (((int) Math.floor(p.z)) >> 4) == chunkZ);
 	}
 
+	/** Takes away every loose piece inside {@code box}. */
+	public void removeIn(net.minecraft.world.phys.AABB box) {
+		parts.removeIf(p -> box.contains(p.x, p.y, p.z));
+	}
+
 	public void clear() {
 		parts.clear();
 	}

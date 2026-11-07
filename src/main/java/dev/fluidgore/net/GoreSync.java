@@ -51,6 +51,12 @@ public final class GoreSync {
 				GoreSystems.tracker().onReport(report);
 			}
 		});
+		ClientPlayNetworking.registerGlobalReceiver(GoreClear.TYPE, (clear, context) -> {
+			if (clear.finite()) {
+				GoreSystems.removeIn(clear.box());
+			}
+		});
+		FallSync.register();
 	}
 
 	/** The server reports every hit it deals (3.0, see {@link HitReport}): health drops need not be guessed from. */
@@ -188,5 +194,6 @@ public final class GoreSync {
 
 	public static void clear() {
 		GONE.clear();
+		FallSync.clear();
 	}
 }

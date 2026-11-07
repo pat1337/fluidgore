@@ -9,7 +9,6 @@ import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
@@ -40,8 +39,21 @@ public final class Rig {
 	/** How fast relative turning in a joint dies away: the friction of dead tissue, per second. */
 	private static final float JOINT_FRICTION = 15.0F;
 	private static final float ANGULAR_DAMPING = 0.6F;
-	/** Spin kept per contact per substep: rolling resistance of a soft body on the ground. */
+	/**
+	 * Spin a segment touching something keeps per substep: rolling resistance of a soft body on the ground. Taken once
+	 * per segment, not once per point it touches with: a trunk tipping over a step's edge goes on over it.
+	 */
 	private static final float ROLL_KEEP = 0.97F;
+	/**
+	 * Share of the speed it hit with that a segment comes back off a block with: a carcass lands with a dead thud, the
+	 * trunk barely leaves the ground again, and the skull and the bones of the legs rebound a little more. A game's
+	 * choice, not measured.
+	 */
+	private static final float TRUNK_BOUNCE = 0.1F;
+	private static final float HEAD_BOUNCE = 0.3F;
+	private static final float LIMB_BOUNCE = 0.2F;
+	/** Slower than this into a block (blocks per second, a drop of about a seventh of a block) and it does not bounce at all. */
+	private static final float BOUNCE_SPEED = 3.0F;
 	private static final float SLEEP_SPEED = 0.2F;
 	private static final float SLEEP_SPIN = 0.6F;
 	private static final int SLEEP_TICKS = 15;
@@ -62,6 +74,16 @@ public final class Rig {
 	 * the floor or a body beside it that stopped it short, so the body can come to rest and sleep.
 	 */
 	private static final int STRAIGHTEN_TICKS = 20;
+	/**
+	 * How much of its share of a joint's correction a segment held down by a block over it takes (a leg pushed out under a
+	 * fence's lower rail). A joint shares each correction by weight, so a sheep's leg, a fortieth of the trunk's weight,
+	 * would take nearly all of it: the hip pulls the leg up into the rail, the rail pushes it back down, and the trunk,
+	 * which would have to roll a little to let the leg lie under the rail, hardly moves. Counted heavier while the block
+	 * holds it, the leg moves the trunk instead. Free legs keep their own weight, so a fall is unchanged.
+	 */
+	private static final float PINNED_GIVE = 0.1F;
+	/** Substeps a segment counts as held down after a block last pushed it down: a tick. */
+	private static final int PIN_HOLD = SUBSTEPS;
 
 	public final Skeleton skeleton;
 	public final int n;
@@ -86,6 +108,16 @@ public final class Rig {
 	final Vector3f[] w;
 	final float[] invMass;
 	private final Vector3f[] invInertia;
+	/** How much of an impact each segment gives back (see {@link #TRUNK_BOUNCE}). */
+	private final float[] bounce;
+	/** The hardest each segment hit a block this substep (blocks per second into it), where and along which way out. */
+	private final float[] hitSpeed;
+	private final Vector3f[] hitArm;
+	private final Vector3f[] hitNormal;
+	/** The segment touched something this substep. */
+	private final boolean[] touched;
+	/** Substeps left in which the segment counts as held down by a block over it (see {@link #PINNED_GIVE}). */
+	private final int[] pinned;
 	/** Frame origin relative to the centre of mass, in the frame. */
 	final Vector3f[] frameOffset;
 	final Vector3f[] half;
@@ -139,13 +171,81 @@ public final class Rig {
 	/** The current it lies in, blocks per second. */
 	private double currentX;
 	private double currentZ;
+	/**
+	 * Where the server last had the body this rig goes after (see {@code Rigging.follow}), the closest the rig has come
+	 * to it, and the ticks since it last came closer.
+	 */
+	double leashX = Double.NaN;
+	double leashZ = Double.NaN;
+	double leashBest = Double.MAX_VALUE;
+	int leashStall;
+	/** This tick the rig is being drawn after the server's body (the server moved it), so it is not leading it. */
+	boolean pulled;
+	/**
+	 * For a kept body whose fall this game leads ({@code Rigging.lead}): the last places across the ground it told the
+	 * server the body was, oldest first; ticks since the last report; and whether it has reported it at rest.
+	 */
+	private final double[] reportX = new double[4];
+	private final double[] reportZ = new double[4];
+	private int reports;
+	int reportTicks;
+	boolean reportedRest;
+
+	/** Remembers a place reported to the server, dropping the oldest. */
+	void reported(double px, double pz) {
+		if (reports == reportX.length) {
+			System.arraycopy(reportX, 1, reportX, 0, reports - 1);
+			System.arraycopy(reportZ, 1, reportZ, 0, reports - 1);
+			reports--;
+		}
+
+		reportX[reports] = px;
+		reportZ[reports] = pz;
+		reports++;
+	}
+
+	boolean hasReported() {
+		return reports > 0;
+	}
+
+	/**
+	 * True if ({@code px, pz}) lies within {@code slack} of the line through the places last reported: the server's body
+	 * is where this game put it, or on its way there between two reports.
+	 */
+	boolean onReported(double px, double pz, double slack) {
+		for (int k = 0; k < reports; k++) {
+			double ax = reportX[k];
+			double az = reportZ[k];
+			double bx = k + 1 < reports ? reportX[k + 1] : ax;
+			double bz = k + 1 < reports ? reportZ[k + 1] : az;
+			double ux = bx - ax;
+			double uz = bz - az;
+			double len = ux * ux + uz * uz;
+			double s = len > 1.0E-9 ? Mth.clamp(((px - ax) * ux + (pz - az) * uz) / len, 0.0, 1.0) : 0.0;
+			double dx = px - (ax + ux * s);
+			double dz = pz - (az + uz * s);
+			if (dx * dx + dz * dz <= slack * slack) {
+				return true;
+			}
+		}
+
+		return false;
+	}
 
 	private final Vector3f r = new Vector3f();
 	private final Vector3f t = new Vector3f();
 	private final Vector3f u = new Vector3f();
 	private final Quaternionf dq = new Quaternionf();
+	/**
+	 * Scratch for the edge contacts: a segment's corners in its frame and in the world, a block box's corners in the
+	 * segment's frame, and a chord.
+	 */
+	private final float[] edgeLocal = new float[24];
+	private final double[] edgeWorld = new double[24];
+	private final double[] edgeBox = new double[24];
+	private final double[] edgeSpan = new double[2];
 
-	private Rig(Skeleton skeleton, float scale, float kilograms) {
+	private Rig(Skeleton skeleton, float scale, float kilograms, float[] shares) {
 		this.skeleton = skeleton;
 		this.n = skeleton.bones.length;
 		this.scale = scale;
@@ -173,9 +273,28 @@ public final class Rig {
 		thick = new float[n];
 		wet = new float[n];
 		samples = new float[n][];
-		float volume = 0.0F;
-		for (Skeleton.Bone bone : skeleton.bones) {
-			volume += bone.volume;
+		bounce = new float[n];
+		hitSpeed = new float[n];
+		hitArm = new Vector3f[n];
+		hitNormal = new Vector3f[n];
+		touched = new boolean[n];
+		pinned = new int[n];
+		java.util.Arrays.fill(bounce, TRUNK_BOUNCE);
+		if (skeleton.head >= 0) {
+			bounce[skeleton.head] = HEAD_BOUNCE;
+		}
+
+		for (int top : skeleton.limbs) {
+			if (top >= 0 && skeleton.bones[top].part != null) {
+				for (int segment : skeleton.bonesOf(skeleton.bones[top].part)) {
+					bounce[segment] = LIMB_BOUNCE;
+				}
+			}
+		}
+
+		for (int i = 0; i < n; i++) {
+			hitArm[i] = new Vector3f();
+			hitNormal[i] = new Vector3f();
 		}
 
 		for (int i = 0; i < n; i++) {
@@ -188,7 +307,7 @@ public final class Rig {
 			half[i] = h;
 			thick[i] = 2.0F * Math.min(h.x, Math.min(h.y, h.z));
 			frameOffset[i] = bone.centre().mul(scale).negate();
-			float mass = Math.max(0.05F, kilograms * bone.volume / Math.max(1.0F, volume));
+			float mass = Math.max(0.05F, kilograms * shares[i]);
 			invMass[i] = 1.0F / mass;
 			float a = 2.0F * h.x;
 			float b = 2.0F * h.y;
@@ -217,9 +336,12 @@ public final class Rig {
 		}
 	}
 
-	/** A rig with its segments where {@code pose} has them, at rest (the caller sets their velocity). */
-	public static Rig of(RigPose pose, float kilograms) {
-		Rig rig = new Rig(pose.skeleton, pose.scale, kilograms);
+	/**
+	 * A rig with its segments where {@code pose} has them, at rest (the caller sets their velocity). {@code shares} is
+	 * each segment's share of the {@code kilograms} (see {@link Weights}).
+	 */
+	public static Rig of(RigPose pose, float kilograms, float[] shares) {
+		Rig rig = new Rig(pose.skeleton, pose.scale, kilograms, shares);
 		Vector3f c = new Vector3f();
 		for (int i = 0; i < rig.n; i++) {
 			Quaternionf turn = pose.turn(i);
@@ -334,22 +456,31 @@ public final class Rig {
 		blocksStale = true;
 
 		// At rest by how far it got this tick, not how fast it is going: contacts and joints trading tiny corrections
-		// show as speed but go nowhere.
+		// show as speed but go nowhere. Weighed by mass: the whole body at rest, not a light hoof or a chicken's foot
+		// trading corrections between a heavy trunk and the ground.
 		float fastest = 0.0F;
 		float spin = 0.0F;
+		double moving = 0.0;
+		double turning = 0.0;
+		double total = 0.0;
 		for (int i = 0; i < n; i++) {
-			fastest = (float) Math.max(fastest, Math.sqrt(Math.pow(x[i] - tx[i], 2) + Math.pow(y[i] - ty[i], 2) + Math.pow(z[i] - tz[i], 2)) / TICK);
+			float speed = (float) Math.sqrt(Math.pow(x[i] - tx[i], 2) + Math.pow(y[i] - ty[i], 2) + Math.pow(z[i] - tz[i], 2)) / TICK;
 			float turned = 2.0F * (float) Math.acos(Math.min(1.0F, Math.abs(q[i].dot(tq[i])))) / TICK;
-			if (turned > spin) {
-				spin = turned;
-			}
+			fastest = Math.max(fastest, speed);
+			spin = Math.max(spin, turned);
+			double mass = 1.0 / invMass[i];
+			moving += mass * speed * speed;
+			turning += mass * turned * turned;
+			total += mass;
 		}
 
 		lastSpeed = fastest;
 		lastSpin = spin;
+		float body = (float) Math.sqrt(moving / total);
+		float bodySpin = (float) Math.sqrt(turning / total);
 		// Nearly still: a body lying on the ground settles. What is left is the solver trading corrections between
 		// the ground and the joints; it is damped away harder the longer the body has lain there, then it sleeps.
-		calm = fastest < CALM_SPEED && spin < CALM_SPIN && grounded ? calm + 1 : 0;
+		calm = body < CALM_SPEED && bodySpin < CALM_SPIN && grounded ? calm + 1 : 0;
 		if (calm > 0) {
 			float keep = 1.0F - Math.min(0.6F, calm / (float) CALM_TICKS * 0.6F);
 			for (int i = 0; i < n; i++) {
@@ -360,7 +491,7 @@ public final class Rig {
 			}
 		}
 
-		if (fastest < SLEEP_SPEED && spin < SLEEP_SPIN || calm >= CALM_TICKS) {
+		if (body < SLEEP_SPEED && bodySpin < SLEEP_SPIN || calm >= CALM_TICKS) {
 			if (++still >= SLEEP_TICKS || calm >= CALM_TICKS) {
 				asleep = true;
 				sleepTicks = 0;
@@ -380,6 +511,11 @@ public final class Rig {
 			ly[i] = y[i];
 			lz[i] = z[i];
 			lq[i].set(q[i]);
+			hitSpeed[i] = 0.0F;
+			if (pinned[i] > 0) {
+				pinned[i]--;
+			}
+
 			float under = wet[i];
 			vy[i] -= GRAVITY * H * (1.0F - lift * under);
 			if (under > 0.0F) {
@@ -597,30 +733,39 @@ public final class Rig {
 		}
 
 		Vector3f n = new Vector3f(error).div(angle);
-		float wa = inverseInertia(a, n);
-		float wb = inverseInertia(b, n);
+		float ga = give(a);
+		float gb = give(b);
+		float wa = inverseInertia(a, n) * ga;
+		float wb = inverseInertia(b, n) * gb;
 		float sum = wa + wb;
 		if (sum <= 0.0F) {
 			return;
 		}
 
 		float lambda = angle / sum;
-		applyRotation(a, n, lambda);
-		applyRotation(b, n, -lambda);
+		applyRotation(a, n, lambda * ga);
+		applyRotation(b, n, -lambda * gb);
 	}
 
 	/** Moves a's point at {@code ra} along {@code normal} and b's at {@code rb} against it until they meet: {@code c} apart now. */
 	private void positional(int a, Vector3f ra, int b, Vector3f rb, Vector3f normal, float c) {
-		float wa = generalized(a, ra, normal);
-		float wb = generalized(b, rb, normal);
+		float ga = give(a);
+		float gb = give(b);
+		float wa = generalized(a, ra, normal) * ga;
+		float wb = generalized(b, rb, normal) * gb;
 		float sum = wa + wb;
 		if (sum <= 0.0F) {
 			return;
 		}
 
 		float lambda = c / sum;
-		applyImpulse(a, ra, normal, lambda);
-		applyImpulse(b, rb, normal, -lambda);
+		applyImpulse(a, ra, normal, lambda * ga);
+		applyImpulse(b, rb, normal, -lambda * gb);
+	}
+
+	/** How readily segment {@code i} moves in a joint: less while a block holds it down (see {@link #PINNED_GIVE}). */
+	private float give(int i) {
+		return pinned[i] > 0 ? PINNED_GIVE : 1.0F;
 	}
 
 	/** {@code n . I^-1 n} for body {@code i}, in world axes. */
@@ -727,7 +872,8 @@ public final class Rig {
 							continue;
 						}
 
-						VoxelShape shape = state.getCollisionShape(level, pos, CollisionContext.empty());
+						// What is drawn: a fence's collision box stands half a block over its rails.
+						VoxelShape shape = dev.fluidgore.blood.SurfaceProbe.shape(level, pos, state);
 						if (!shape.isEmpty()) {
 							for (AABB box : shape.toAabbs()) {
 								boxes.add(box.move(bx, by, bz));
@@ -805,6 +951,51 @@ public final class Rig {
 					return true;
 				}
 			}
+
+			// Lying across something narrower than its sample spacing (a fence, a step's edge).
+			for (AABB box : near.get(i)) {
+				if (crossing(i, box, -0.05, 0.0)) {
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * True if segment {@code i}, moved {@code dy} up, and {@code box} cut into each other by more than {@code margin}: an
+	 * edge of either runs through the other.
+	 */
+	private boolean crossing(int i, AABB box, double dy, double margin) {
+		float[] local = edgeLocal;
+		double[] world = edgeWorld;
+		double[] span = edgeSpan;
+		corners(i, local, world);
+		for (int c = 0; c < 8; c++) {
+			world[3 * c + 1] += dy;
+		}
+
+		if (!overlaps(world, box, margin)) {
+			return false;
+		}
+
+		Vector3f h = half[i];
+		for (int[] e : EDGES) {
+			int a = 3 * e[0];
+			int b = 3 * e[1];
+			if (chord(world[a], world[a + 1], world[a + 2], world[b], world[b + 1], world[b + 2], box.minX, box.minY, box.minZ, box.maxX, box.maxY,
+					box.maxZ, margin, span)) {
+				return true;
+			}
+
+			Vector3f from = q[i].transformInverse(new Vector3f((float) (((e[0] & 1) == 0 ? box.minX : box.maxX) - x[i]),
+					(float) (((e[0] & 2) == 0 ? box.minY : box.maxY) - y[i] - dy), (float) (((e[0] & 4) == 0 ? box.minZ : box.maxZ) - z[i])));
+			Vector3f to = q[i].transformInverse(new Vector3f((float) (((e[1] & 1) == 0 ? box.minX : box.maxX) - x[i]),
+					(float) (((e[1] & 2) == 0 ? box.minY : box.maxY) - y[i] - dy), (float) (((e[1] & 4) == 0 ? box.minZ : box.maxZ) - z[i])));
+			if (chord(from.x, from.y, from.z, to.x, to.y, to.z, -h.x, -h.y, -h.z, h.x, h.y, h.z, margin, span)) {
+				return true;
+			}
 		}
 
 		return false;
@@ -833,57 +1024,366 @@ public final class Rig {
 					}
 				}
 
-				if (box == null) {
+				if (box != null) {
+					pointContact(i, boxes, box, s[p], s[p + 1], s[p + 2]);
+				}
+			}
+
+			// Between those points: a fence's thin wall or a step's edge can cut into a segment and hold none of them.
+			edges(i, boxes);
+		}
+	}
+
+	/**
+	 * A point of segment {@code i} ({@code (sx, sy, sz)} in its frame) is inside {@code box}: it goes back out through
+	 * the face it came in by, and does not slide along it unless pushed harder than its weight holds it. Returns true if
+	 * it moved the segment.
+	 */
+	private boolean pointContact(int i, List<AABB> boxes, AABB box, float sx, float sy, float sz) {
+		q[i].transform(r.set(sx, sy, sz));
+		double px = x[i] + r.x;
+		double py = y[i] + r.y;
+		double pz = z[i] + r.z;
+		// Where the point was a step ago: it came in through the face it was outside of.
+		lq[i].transform(t.set(sx, sy, sz));
+		double ox = lx[i] + t.x;
+		double oy = ly[i] + t.y;
+		double oz = lz[i] + t.z;
+		Vector3f normal = new Vector3f();
+		float depth = exit(box, boxes, px, py, pz, ox, oy, oz, normal);
+		if (depth <= 0.0F) {
+			return false;
+		}
+
+		return resolve(i, new Vector3f(r), normal, depth, px - ox, py - oy, pz - oz, sx, sy, sz);
+	}
+
+	/**
+	 * Moves segment {@code i}'s point at {@code arm} out along {@code normal} by {@code depth}, then takes out its slip
+	 * along the surface as friction does. ({@code mx, my, mz}) is how far that point moved this substep, and
+	 * ({@code sx, sy, sz}) where it is in the segment's frame.
+	 */
+	private boolean resolve(int i, Vector3f arm, Vector3f normal, float depth, double mx, double my, double mz, float sx, float sy, float sz) {
+		float speed = -(float) (mx * normal.x + my * normal.y + mz * normal.z) / H;
+		float wn = generalized(i, arm, normal);
+		if (wn <= 0.0F) {
+			return false;
+		}
+
+		// How fast that point was going into the block before any of this substep's corrections (velocities change only
+		// after them): what it bounces back with.
+		float into = -(t.set(w[i]).cross(arm).add((float) vx[i], (float) vy[i], (float) vz[i]).dot(normal));
+		if (into > hitSpeed[i]) {
+			hitSpeed[i] = into;
+			hitArm[i].set(arm);
+			hitNormal[i].set(normal);
+		}
+
+		applyImpulse(i, arm, normal, depth / wn);
+		record(i, arm, normal, depth);
+		if (normal.y > 0.5F) {
+			grounded = true;
+		} else if (normal.y < -0.5F) {
+			// A block over it pushed it down.
+			pinned[i] = PIN_HOLD;
+		}
+
+		if (speed > impact) {
+			impact = speed;
+			impactBone = i;
+		}
+
+		double along = mx * normal.x + my * normal.y + mz * normal.z;
+		Vector3f slip = new Vector3f((float) (mx - normal.x * along), (float) (my - normal.y * along), (float) (mz - normal.z * along));
+		float slide = slip.length();
+		if (slide > 1.0E-7F) {
+			float hold = slide < STATIC_FRICTION * depth ? slide : Math.min(slide, FRICTION * depth);
+			Vector3f back = slip.div(-slide);
+			Vector3f at = q[i].transform(new Vector3f(sx, sy, sz));
+			float wt = generalized(i, at, back);
+			if (wt > 0.0F) {
+				applyImpulse(i, at, back, hold / wt);
+			}
+		}
+
+		return true;
+	}
+
+	/** A box's twelve edges, as pairs of its corners; corner {@code c} has -/+ x, y, z by bits 1, 2 and 4. */
+	private static final int[][] EDGES = {{0, 1}, {2, 3}, {4, 5}, {6, 7}, {0, 2}, {1, 3}, {4, 6}, {5, 7}, {0, 4}, {1, 5}, {2, 6}, {3, 7}};
+
+	/** Segment {@code i}'s corners: in its frame into {@code local}, in the world into {@code world}. */
+	private void corners(int i, float[] local, double[] world) {
+		Vector3f h = half[i];
+		for (int c = 0; c < 8; c++) {
+			local[3 * c] = (c & 1) == 0 ? -h.x : h.x;
+			local[3 * c + 1] = (c & 2) == 0 ? -h.y : h.y;
+			local[3 * c + 2] = (c & 4) == 0 ? -h.z : h.z;
+			q[i].transform(r.set(local[3 * c], local[3 * c + 1], local[3 * c + 2]));
+			world[3 * c] = x[i] + r.x;
+			world[3 * c + 1] = y[i] + r.y;
+			world[3 * c + 2] = z[i] + r.z;
+		}
+	}
+
+	/** True if the world box round {@code world}'s eight corners overlaps {@code box} by more than {@code margin}. */
+	private static boolean overlaps(double[] world, AABB box, double margin) {
+		double minX = Double.MAX_VALUE;
+		double minY = Double.MAX_VALUE;
+		double minZ = Double.MAX_VALUE;
+		double maxX = -Double.MAX_VALUE;
+		double maxY = -Double.MAX_VALUE;
+		double maxZ = -Double.MAX_VALUE;
+		for (int c = 0; c < 8; c++) {
+			minX = Math.min(minX, world[3 * c]);
+			maxX = Math.max(maxX, world[3 * c]);
+			minY = Math.min(minY, world[3 * c + 1]);
+			maxY = Math.max(maxY, world[3 * c + 1]);
+			minZ = Math.min(minZ, world[3 * c + 2]);
+			maxZ = Math.max(maxZ, world[3 * c + 2]);
+		}
+
+		return maxX > box.minX + margin && minX < box.maxX - margin && maxY > box.minY + margin && minY < box.maxY - margin
+				&& maxZ > box.minZ + margin && minZ < box.maxZ - margin;
+	}
+
+	/**
+	 * The part of the line from a to b inside the box (minX..maxX and so on, each pulled in by {@code margin}), as
+	 * fractions of the way along it into {@code out[0]..out[1]}. False if none of it is inside.
+	 */
+	private static boolean chord(double ax, double ay, double az, double bx, double by, double bz, double minX, double minY, double minZ,
+			double maxX, double maxY, double maxZ, double margin, double[] out) {
+		double t0 = 0.0;
+		double t1 = 1.0;
+		for (int axis = 0; axis < 3; axis++) {
+			double a = axis == 0 ? ax : axis == 1 ? ay : az;
+			double d = (axis == 0 ? bx : axis == 1 ? by : bz) - a;
+			double lo = (axis == 0 ? minX : axis == 1 ? minY : minZ) + margin;
+			double hi = (axis == 0 ? maxX : axis == 1 ? maxY : maxZ) - margin;
+			if (Math.abs(d) < 1.0E-9) {
+				if (a <= lo || a >= hi) {
+					return false;
+				}
+
+				continue;
+			}
+
+			double ta = (lo - a) / d;
+			double tb = (hi - a) / d;
+			t0 = Math.max(t0, Math.min(ta, tb));
+			t1 = Math.min(t1, Math.max(ta, tb));
+			if (t0 >= t1) {
+				return false;
+			}
+		}
+
+		out[0] = t0;
+		out[1] = t1;
+		return true;
+	}
+
+	/**
+	 * Between the sample points. An edge of segment {@code i} that runs through a block box while both its ends and its
+	 * middle are outside it (the segment lies across a fence or a wall thinner than the spacing of its sample points): the
+	 * middle of the stretch inside goes back out the way it came in, as a sample point would. An edge of a block box that
+	 * runs through the segment (a step's edge under a body rolling down stairs, a fence rail under one lying across it):
+	 * the segment is moved off the middle of the stretch inside it, out through its own face the edge came in by.
+	 */
+	private void edges(int i, List<AABB> boxes) {
+		float[] local = edgeLocal;
+		double[] world = edgeWorld;
+		double[] inside = edgeBox;
+		double[] span = edgeSpan;
+		Vector3f h = half[i];
+		corners(i, local, world);
+		for (AABB box : boxes) {
+			// Each box only once its corners show it cuts into the segment along the segment's own axes too: a turned
+			// segment's world box reaches well past it.
+			if (!overlaps(world, box, MARGIN) || !boxCorners(i, box, inside)) {
+				continue;
+			}
+
+			boolean apart = false;
+			for (int e = 0; e < EDGES.length && !apart; e++) {
+				int a = 3 * EDGES[e][0];
+				int b = 3 * EDGES[e][1];
+				if (!chord(world[a], world[a + 1], world[a + 2], world[b], world[b + 1], world[b + 2], box.minX, box.minY, box.minZ, box.maxX, box.maxY,
+						box.maxZ, MARGIN, span)) {
 					continue;
 				}
 
-				// Where the point was a step ago: it came in through the face it was outside of.
-				lq[i].transform(t.set(s[p], s[p + 1], s[p + 2]));
-				double ox = lx[i] + t.x;
-				double oy = ly[i] + t.y;
-				double oz = lz[i] + t.z;
-				Vector3f normal = new Vector3f();
-				float depth = exit(box, boxes, px, py, pz, ox, oy, oz, normal);
-				if (depth <= 0.0F) {
+				float f = (float) ((span[0] + span[1]) * 0.5);
+				if (pointContact(i, boxes, box, Mth.lerp(f, local[a], local[b]), Mth.lerp(f, local[a + 1], local[b + 1]),
+						Mth.lerp(f, local[a + 2], local[b + 2]))) {
+					corners(i, local, world);
+					apart = !boxCorners(i, box, inside);
+				}
+			}
+
+			for (int e = 0; e < EDGES.length && !apart; e++) {
+				int a = 3 * EDGES[e][0];
+				int b = 3 * EDGES[e][1];
+				if (!chord(inside[a], inside[a + 1], inside[a + 2], inside[b], inside[b + 1], inside[b + 2], -h.x, -h.y, -h.z, h.x, h.y, h.z, MARGIN, span)) {
 					continue;
 				}
 
-				float speed = -(float) ((px - ox) * normal.x + (py - oy) * normal.y + (pz - oz) * normal.z) / H;
-				Vector3f arm = new Vector3f(r);
-				float wn = generalized(i, arm, normal);
-				if (wn <= 0.0F) {
-					continue;
-				}
-
-				applyImpulse(i, arm, normal, depth / wn);
-				record(i, arm, normal, depth);
-				if (normal.y > 0.5F) {
-					grounded = true;
-				}
-
-				if (speed > impact) {
-					impact = speed;
-					impactBone = i;
-				}
-
-				// Friction: the point does not slide along the surface unless pushed harder than its weight holds it.
-				double sx = px - ox;
-				double sy = py - oy;
-				double sz = pz - oz;
-				double along = sx * normal.x + sy * normal.y + sz * normal.z;
-				Vector3f slip = new Vector3f((float) (sx - normal.x * along), (float) (sy - normal.y * along), (float) (sz - normal.z * along));
-				float slide = slip.length();
-				if (slide > 1.0E-7F) {
-					float hold = slide < STATIC_FRICTION * depth ? slide : Math.min(slide, FRICTION * depth);
-					Vector3f back = slip.div(-slide);
-					q[i].transform(r.set(s[p], s[p + 1], s[p + 2]));
-					float wt = generalized(i, r, back);
-					if (wt > 0.0F) {
-						applyImpulse(i, new Vector3f(r), back, hold / wt);
-					}
+				double f = (span[0] + span[1]) * 0.5;
+				int ca = EDGES[e][0];
+				int cb = EDGES[e][1];
+				double px = Mth.lerp(f, (ca & 1) == 0 ? box.minX : box.maxX, (cb & 1) == 0 ? box.minX : box.maxX);
+				double py = Mth.lerp(f, (ca & 2) == 0 ? box.minY : box.maxY, (cb & 2) == 0 ? box.minY : box.maxY);
+				double pz = Mth.lerp(f, (ca & 4) == 0 ? box.minZ : box.maxZ, (cb & 4) == 0 ? box.minZ : box.maxZ);
+				int face = open(box, boxes, ca, cb, px, py, pz);
+				if (face != COVERED && (face == CORNER ? blockPoint(i, px, py, pz) : seamPoint(i, px, py, pz, face))) {
+					corners(i, local, world);
+					apart = !boxCorners(i, box, inside);
 				}
 			}
 		}
+	}
+
+	/** {@link #open}: both faces at the edge are open (a corner that sticks out), or both are covered. */
+	private static final int CORNER = -1;
+	private static final int COVERED = -2;
+
+	/**
+	 * Which faces meet open at the edge of {@code box} from corner {@code ca} to {@code cb}, at the point
+	 * ({@code px, py, pz}) on it: {@link #CORNER} if both are, {@link #COVERED} if neither is, else the open one (axis
+	 * times two, plus one for its far side) when the other lies against another of {@code boxes}. The seam between two
+	 * blocks of a floor, a fence post's foot on the ground: no corner sticks out there. A segment caught on it goes off it
+	 * the way the open face looks, as off that face itself (up off a floor); pushed off through its own nearest face, a
+	 * tilted leg lying on the floor would go sideways into the post beside it.
+	 */
+	private static int open(AABB box, List<AABB> boxes, int ca, int cb, double px, double py, double pz) {
+		int along = Integer.numberOfTrailingZeros(ca ^ cb);
+		int open = COVERED;
+		int count = 0;
+		for (int k = 0; k < 3; k++) {
+			if (k == along) {
+				continue;
+			}
+
+			// Just past face k, a hair back from the edge across the other face.
+			int j = 3 - along - k;
+			boolean far = (ca & (1 << k)) != 0;
+			double out = far ? 1.0E-3 : -1.0E-3;
+			double in = (ca & (1 << j)) != 0 ? -1.0E-3 : 1.0E-3;
+			double sx = px + (k == 0 ? out : j == 0 ? in : 0.0);
+			double sy = py + (k == 1 ? out : j == 1 ? in : 0.0);
+			double sz = pz + (k == 2 ? out : j == 2 ? in : 0.0);
+			boolean covered = false;
+			for (AABB other : boxes) {
+				if (other != box && other.contains(sx, sy, sz)) {
+					covered = true;
+					break;
+				}
+			}
+
+			if (!covered) {
+				open = 2 * k + (far ? 1 : 0);
+				count++;
+			}
+		}
+
+		return count == 2 ? CORNER : open;
+	}
+
+	/**
+	 * A point of a block on a seam ({@link #open}) is inside segment {@code i}: the segment is moved off it along the
+	 * open face's way out, {@code face}, as far as it takes for the point to be outside it.
+	 */
+	private boolean seamPoint(int i, double px, double py, double pz, int face) {
+		Vector3f h = half[i];
+		Vector3f now = q[i].transformInverse(new Vector3f((float) (px - x[i]), (float) (py - y[i]), (float) (pz - z[i])));
+		for (int k = 0; k < 3; k++) {
+			if (h.get(k) - Math.abs(now.get(k)) <= 0.0F) {
+				return false;
+			}
+		}
+
+		Vector3f normal = new Vector3f().setComponent(face >> 1, (face & 1) != 0 ? 1.0F : -1.0F);
+		// The segment goes along the normal, so in its own frame the point goes the other way, until it leaves.
+		Vector3f away = q[i].transformInverse(new Vector3f(normal)).negate();
+		float depth = Float.MAX_VALUE;
+		for (int k = 0; k < 3; k++) {
+			float d = away.get(k);
+			if (Math.abs(d) > 1.0E-6F) {
+				depth = Math.min(depth, ((d > 0.0F ? h.get(k) : -h.get(k)) - now.get(k)) / d);
+			}
+		}
+
+		if (depth == Float.MAX_VALUE) {
+			return false;
+		}
+
+		Vector3f arm = new Vector3f((float) (px - x[i]), (float) (py - y[i]), (float) (pz - z[i]));
+		Vector3f was = lq[i].transform(new Vector3f(now));
+		return resolve(i, arm, normal, depth + MARGIN, px - lx[i] - was.x, py - ly[i] - was.y, pz - lz[i] - was.z, now.x, now.y, now.z);
+	}
+
+	/**
+	 * {@code box}'s eight corners in segment {@code i}'s frame, into {@code out}. False if they all lie beyond one of the
+	 * segment's faces: the two do not cut into each other.
+	 */
+	private boolean boxCorners(int i, AABB box, double[] out) {
+		for (int c = 0; c < 8; c++) {
+			q[i].transformInverse(r.set((float) (((c & 1) == 0 ? box.minX : box.maxX) - x[i]), (float) (((c & 2) == 0 ? box.minY : box.maxY) - y[i]),
+					(float) (((c & 4) == 0 ? box.minZ : box.maxZ) - z[i])));
+			out[3 * c] = r.x;
+			out[3 * c + 1] = r.y;
+			out[3 * c + 2] = r.z;
+		}
+
+		Vector3f h = half[i];
+		for (int k = 0; k < 3; k++) {
+			double low = Double.MAX_VALUE;
+			double high = -Double.MAX_VALUE;
+			for (int c = 0; c < 8; c++) {
+				low = Math.min(low, out[3 * c + k]);
+				high = Math.max(high, out[3 * c + k]);
+			}
+
+			if (low >= h.get(k) - MARGIN || high <= -h.get(k) + MARGIN) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * A point of a block (fixed in the world) is inside segment {@code i}: the segment is moved off it through its own
+	 * face the point came in by a substep ago, or the nearest face if it was already inside.
+	 */
+	private boolean blockPoint(int i, double px, double py, double pz) {
+		Vector3f h = half[i];
+		Vector3f now = q[i].transformInverse(new Vector3f((float) (px - x[i]), (float) (py - y[i]), (float) (pz - z[i])));
+		Vector3f before = lq[i].transformInverse(new Vector3f((float) (px - lx[i]), (float) (py - ly[i]), (float) (pz - lz[i])));
+		float best = Float.MAX_VALUE;
+		int axis = -1;
+		float depth = 0.0F;
+		for (int k = 0; k < 3; k++) {
+			float d = h.get(k) - Math.abs(now.get(k));
+			if (d <= 0.0F) {
+				return false;
+			}
+
+			boolean entered = Math.abs(before.get(k)) >= h.get(k);
+			float score = d + (entered ? 0.0F : 0.5F);
+			if (score < best) {
+				best = score;
+				axis = k;
+				depth = d;
+			}
+		}
+
+		float side = now.get(axis) != 0.0F ? Math.signum(now.get(axis)) : before.get(axis) < 0.0F ? -1.0F : 1.0F;
+		// The segment goes the other way from the face, so the face passes the point.
+		Vector3f normal = q[i].transform(new Vector3f().setComponent(axis, -side));
+		Vector3f arm = new Vector3f((float) (px - x[i]), (float) (py - y[i]), (float) (pz - z[i]));
+		// How the segment's own point there moved this substep: it was at lx + lq * now.
+		Vector3f was = lq[i].transform(new Vector3f(now));
+		return resolve(i, arm, normal, depth + MARGIN, px - lx[i] - was.x, py - ly[i] - was.y, pz - lz[i] - was.z, now.x, now.y, now.z);
 	}
 
 	/**
@@ -1045,8 +1545,26 @@ public final class Rig {
 				velocityImpulse(i, arm, tangent.div(-slide), stop);
 			}
 
-			// Flesh on the ground does not roll freely: each contact takes some of the segment's spin.
-			w[i].mul(ROLL_KEEP);
+			touched[i] = true;
+		}
+
+		for (int i = 0; i < n; i++) {
+			if (touched[i]) {
+				// Flesh on the ground does not roll freely.
+				w[i].mul(ROLL_KEEP);
+				touched[i] = false;
+			}
+
+			// A hard landing comes back off the block a little, at the point that hit hardest.
+			if (hitSpeed[i] > BOUNCE_SPEED) {
+				arm.set(hitArm[i]);
+				normal.set(hitNormal[i]);
+				float vn = vel.set(w[i]).cross(arm).add((float) vx[i], (float) vy[i], (float) vz[i]).dot(normal);
+				float back = bounce[i] * hitSpeed[i];
+				if (vn < back) {
+					velocityImpulse(i, arm, normal, back - vn);
+				}
+			}
 		}
 	}
 
@@ -1363,10 +1881,16 @@ public final class Rig {
 		return best;
 	}
 
-	/** True if any sample of any segment is inside a block now: for tests. */
+	/** True if any segment cuts into a block by more than {@code tolerance} now: for tests. */
 	public boolean inBlock(BlockGetter level, double tolerance) {
 		gatherBlocks(level);
 		for (int i = 0; i < n; i++) {
+			for (AABB box : near.get(i)) {
+				if (crossing(i, box, 0.0, tolerance)) {
+					return true;
+				}
+			}
+
 			float[] s = samples[i];
 			for (int p = 0; p < s.length; p += 3) {
 				q[i].transform(r.set(s[p], s[p + 1], s[p + 2]));

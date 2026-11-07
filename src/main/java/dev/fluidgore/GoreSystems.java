@@ -160,6 +160,13 @@ public final class GoreSystems {
 		}
 	}
 
+	/** An area was cleared on the server ({@code /fluidgore clear}): its bodies, blood and pieces go from this game too. */
+	public static void removeIn(net.minecraft.world.phys.AABB box) {
+		SUFFERING.removeIn(box);
+		BLOOD.removeIn(box);
+		DISMEMBERMENT.removeIn(box);
+	}
+
 	public static void clearAll() {
 		dev.fluidgore.fragment.FragmentEffects.clear();
 		dev.fluidgore.event.Events.clear();

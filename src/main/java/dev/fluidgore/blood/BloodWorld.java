@@ -98,6 +98,12 @@ public final class BloodWorld {
 	 * analyst reads where blood came from.
 	 */
 	public void landOnFloor(Level level, double x, double y, double z, double vx, double vy, double vz, float volume, int rgb, int lifetime) {
+		net.minecraft.world.phys.AABB top = SurfaceProbe.topFace(level, x - 0.01, x + 0.01, y, z - 0.01, z + 0.01);
+		if (top != null && SurfaceProbe.narrow(top)) {
+			onRail(level, x, y, z, top, volume, rgb, lifetime);
+			return;
+		}
+
 		double across = Math.sqrt(vx * vx + vz * vz);
 		double sine = Math.abs(vy) / Math.max(1.0E-6, Math.sqrt(across * across + vy * vy));
 		if (sine < SLANT && across > 1.0E-4 && volume < MIN_POOL_VOLUME && GoreConfig.get().directionalSpatter) {
@@ -141,6 +147,40 @@ public final class BloodWorld {
 				}
 			}
 		}
+	}
+
+	/** Share of the blood landing on a rail that stays on it; the rest runs off. */
+	private static final float RAIL_HOLDS = 0.25F;
+
+	/**
+	 * Blood landing on something too narrow to hold a pool (a fence rail, a wall's arm, a pane): a little stays on top as
+	 * a mark along it, and the rest runs off the nearer edge and drips to whatever is below.
+	 */
+	private void onRail(Level level, double x, double y, double z, net.minecraft.world.phys.AABB top, float volume, int rgb, int lifetime) {
+		float half = Math.min(0.3F, Math.max(0.05F, (0.06F + (float) Math.sqrt(volume * RAIL_HOLDS)) * lognormal(0.3F)));
+		decals.addFloor(level, x, y, z, half, BloodTextures.smallSplat(random), random.nextInt(8), vary(rgb, 0.18F), true, lifetime);
+		float rest = volume * (1.0F - RAIL_HOLDS);
+		if (rest < 0.002F) {
+			return;
+		}
+
+		// Off across its narrow way, on the side the drop landed nearer.
+		boolean acrossX = top.getXsize() < top.getZsize();
+		double edgeX = x;
+		double edgeZ = z;
+		double vx = 0.0;
+		double vz = 0.0;
+		if (acrossX) {
+			boolean high = x > (top.minX + top.maxX) * 0.5;
+			edgeX = (high ? top.maxX : top.minX) + (high ? 0.02 : -0.02);
+			vx = high ? 0.01 : -0.01;
+		} else {
+			boolean high = z > (top.minZ + top.maxZ) * 0.5;
+			edgeZ = (high ? top.maxZ : top.minZ) + (high ? 0.02 : -0.02);
+			vz = high ? 0.01 : -0.01;
+		}
+
+		droplets.runoff(edgeX, y - 0.02, edgeZ, vx, vz, rest, rgb);
 	}
 
 	/** Log-normal random factor with median 1: most values near 1, occasional large ones. */
@@ -328,6 +368,15 @@ public final class BloodWorld {
 		decals.removeChunk(chunkX, chunkZ);
 		fluid.removeChunk(chunkX, chunkZ);
 		clouds.removeChunk(chunkX, chunkZ);
+	}
+
+	/** Takes away all blood inside {@code box}: marks, pools, drops in flight, clouds in water and the jets feeding them. */
+	public void removeIn(net.minecraft.world.phys.AABB box) {
+		decals.removeIn(box);
+		fluid.removeIn(box);
+		droplets.removeIn(box);
+		clouds.removeIn(box);
+		spurts.removeIn(box);
 	}
 
 	public void clear() {

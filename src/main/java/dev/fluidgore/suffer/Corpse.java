@@ -84,6 +84,15 @@ public final class Corpse {
 	public float fallSide = 1.0F;
 	/** Age it started going over at (articulated bodies). */
 	int toppledAt;
+	/** Age it was last tumbling or sliding (articulated bodies): it settles over onto its side from then. */
+	int movedAt;
+	/**
+	 * Rolling off its back (articulated four-legged bodies): the side it is being rolled to (0 until it starts), the
+	 * furthest it has got off its back, radians, and the ticks since it last got further.
+	 */
+	float rightSide;
+	float rightBest;
+	int rightStall;
 	/** Vanilla death: ticks it stays on buckling legs before it goes over (an axe hacked into it). */
 	int fallDelay;
 	/** Vanilla death: degrees it turns as it goes over, along the swing (a sword). */

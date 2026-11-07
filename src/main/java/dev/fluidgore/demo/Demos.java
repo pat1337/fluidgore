@@ -32,6 +32,8 @@ import org.jspecify.annotations.Nullable;
 public final class Demos {
 	/** Fluid Gore's own demos. */
 	private static final List<Demo> OWN = List.of(
+			new Demo("tumble", "4.1.0", "Bodies down a brick pyramid: a pig and then a sheep killed on the edge of its top step. With Ragdoll Physics on, each carries its weight as the animal does, most of it in the trunk: it goes over the edge trunk first, legs swinging loose, and tumbles on down the steps until it lies on its side. With the mod on the server, everyone finds it where it came to rest", true, Demos::tumble),
+			new Demo("sheepblast", "4.1.0", "A sheep blown apart: a block of TNT under a sheep. It comes apart as the body it is: its hide torn in patches with the white fat under it, its muscles (the eye of the loin in chunks, the chump, the leg muscles, the cheek), its legs down to the cannon bones and hooves, besides its organs and bones. Look at any piece to see what it is", true, Demos::sheepBlast),
 			new Demo("underwater", "4.0.0", "TNT under water: a block of TNT goes off at the bottom of a deep pool between two pigs. No flame and no scorch: its gas swells into a bubble, collapses and rebounds, the water rushing out and back with it, then bursts out of the surface in a plume of spray that rains back down. The pig beside it is torn apart inside the bubble and its blood clouds out in the water; the one further along only coughs blood from its lungs", true, Demos::underwater),
 			new Demo("deadblast", "4.0.0", "A blast on bodies already dead: two cows killed, then a block of TNT beside them. The body next to it comes apart, and the one further off is thrown limp by the wave", true, Demos::deadBlast),
 			new Demo("wetpieces", "4.0.0", "Pieces in water: a sheep blown apart at the bottom of a deep pool. Its blood clouds in the water; the lungs and the fat come up and float, the bones lie on the bottom, and meat and organs sink after them", true, Demos::piecesInWater),
@@ -507,6 +509,26 @@ public final class Demos {
 		}).pause(40);
 	}
 
+	/** 4.1: bodies tumbling down a stepped pyramid. From the game test {@code pyramid}. */
+	private static void tumble(Script s, Stage st) {
+		s.say("A pyramid of bricks ahead, five steps high");
+		s.cmd("fill " + st.block(-6, 0, 3) + " " + st.block(6, 7, 16) + " minecraft:air");
+		for (int k = 0; k < 5; k++) {
+			s.cmd("fill " + st.block(-5 + k, k, 4 + k) + " " + st.block(5 - k, k, 14 - k) + " minecraft:bricks");
+		}
+
+		// On the near edge of the top step, its flank to the drop: it goes over towards the player.
+		s.summon(st, "pig", "fgd_tumble_pig", -0.5, 5.0, 8.15, 90.0F, "");
+		s.pause(30).say("A pig on the edge of the top step, killed where it stands");
+		s.cmd("damage @e[tag=fgd_tumble_pig,limit=1] 30 minecraft:generic").pause(30);
+		s.say("Most of its weight is its trunk: over the edge it goes, legs swinging loose").pause(50);
+		s.say("and on down the steps, landing heavily on each, until it lies on its side").pause(80);
+		s.summon(st, "sheep", "fgd_tumble_sheep", 0.5, 5.0, 8.15, 90.0F, "");
+		s.pause(20).say("A sheep after it");
+		s.cmd("damage @e[tag=fgd_tumble_sheep,limit=1] 30 minecraft:generic").pause(140);
+		s.say("They lie where the fall left them, and with the mod on the server, so does everyone else's").pause(60);
+	}
+
 	/**
 	 * Three bodies of three sizes rot side by side, a day skipped every second and a half (/time add, so this world's
 	 * day count moves on six weeks). Needs the Extreme gore level and Fluid Gore on the server (singleplayer).
@@ -692,6 +714,15 @@ public final class Demos {
 		s.say("With Fluid Gore on the server, a body that died burning burns on, on its own fat, and lights what it lies against").pause(300);
 		s.say("Put out");
 		s.cmd("fill " + st.block(-4, 0, 4) + " " + st.block(4, 4, 12) + " minecraft:air replace minecraft:fire").pause(60);
+	}
+
+	/** 4.1: a sheep over TNT, coming apart into its hide, fat, muscles, legs, organs and bones. */
+	private static void sheepBlast(Script s, Stage st) {
+		s.summon(st, "sheep", "fgd_sheepblast", 0, 0, 10, 90.0F, "");
+		s.pause(20).say("A sheep over a block of TNT");
+		s.cmd("summon minecraft:tnt " + st.pos(0, 0, 10) + " {fuse:80}").pause(90);
+		s.say("It comes apart as it is built: hide in patches, the fat under it, the loin, the chump, the legs to the hooves").pause(120);
+		s.say("Walk among the pieces and look at them: each reads out what it is over your hotbar").pause(200);
 	}
 
 	/** 3.3: a block of TNT and cows at real distances from it, read like a scene afterwards. */

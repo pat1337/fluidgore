@@ -6,6 +6,44 @@ All notable changes to Fluid Gore are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+- A sheep's anatomy now reaches its skin. Its trunk holds the hide, the fat under it and its named muscles (the
+  longissimus, psoas, gluteus medius, the shoulder and thigh muscles, the flank in its layers), and its legs are its
+  own, from the elbow and the stifle to the hooves. A sheep blown apart throws these as pieces of their own: the hide
+  in patches, the fat, the loin in chunks, the chump, the leg bones and hooves, the cheek muscles. Demo: `sheepblast`.
+- Identify Remains names the new pieces.
+- `/fluidgore clear` takes away the bodies and gore in an area so a scene can be played again: within 16 blocks, a
+  radius you give, the blocks between two corners (as `/fill` takes them), or `all`. The server removes the bodies it
+  keeps there, and every player with the mod loses the blood, loose pieces and bodies shown there. Living animals are
+  left alone. It needs operator rights, so a command block can run it.
+
+### Fixed
+- Blood no longer hangs in the air over fences, fence gates and walls. It used to land on their collision box, which
+  stands half a block above the rails, and lay there as a square sheet. Blood that lands on a rail, a wall top or a pane
+  now leaves a thin line along it, and the rest runs off the edge and drips to the ground below. No pool forms on top
+  of a fence. Loose scraps rest on the rails too, not above them.
+- Ragdoll Physics: bodies no longer pass through fences or end up lying across them. A thin wall or a step's edge
+  could slip between the points a body was tested at; now every edge of a body and of the block is tested as well.
+- Ragdoll Physics: a body the server keeps no longer jumps about while it goes down stairs or steps. The body on
+  screen used to be moved to the server's position directly, through the steps; it now slumps and falls after it.
+- Ragdoll Physics: a four-legged body that tumbles down a long flight of steps no longer comes to rest on its back. It
+  settles onto its side as one that falls on the flat does.
+
+### Changed
+- Ragdoll Physics: a body carries its weight as the animal does, not as its blocks are sized. Most of it is in the
+  trunk, and the head and legs are light (a sheep's legs used to hold two fifths of its weight). A body that goes over
+  an edge falls trunk first with its legs swinging loose, keeps its momentum, and tumbles on down a slope or a flight
+  of steps instead of stopping on the first step below. Demo: `tumble`.
+- Ragdoll Physics with the mod on the server: the nearest player with the mod leads each kept body's fall. Their
+  game's ragdoll tumbles it, and the server moves the body to where it came to rest, so everyone finds it there. A
+  kept body no longer slides down a slope at a slow, even pace behind the server's box.
+- The Cobble Tank moved to a project of its own and is now `CobbleTank-<version>.jar` (1.1.0, mod id `cobbletank` as
+  before). It no longer needs Fluid Gore; with both installed, its jets and bursts play Fluid Gore's gore as before.
+  Fluid Gore's build no longer makes the tank's jar. Remove an old `cobbletank-1.0.0.jar` when installing it.
+- A sheep's organs are fitted to its whole body rather than to the inside of its ribs, so they keep truer
+  proportions. Its heart is cut at half pixels, small enough to be carried.
+- A sheep blown apart makes fewer made-up flesh scraps, since it throws its own hide and muscle.
+
 ## 4.0.0 - 2026-11-05
 
 ### Added

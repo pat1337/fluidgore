@@ -105,6 +105,12 @@ public final class BloodFluidSim {
 			return null;
 		}
 
+		net.minecraft.world.phys.AABB top = SurfaceProbe.topFace(level, cx - 0.01, cx + 0.01, center, cz - 0.01, cz + 0.01);
+		if (top != null && SurfaceProbe.narrow(top)) {
+			// A fence post or a wall top: no puddle stands on it.
+			return null;
+		}
+
 		BloodCell cell = new BloodCell(key, bx, by, bz, world.nextSerial());
 		cell.surfaceY = center;
 		cell.rgb = rgb;
@@ -348,6 +354,11 @@ public final class BloodFluidSim {
 
 	void removeChunk(int chunkX, int chunkZ) {
 		cells.values().removeIf(c -> (c.bx >> 4) == chunkX && (c.bz >> 4) == chunkZ);
+	}
+
+	/** Takes away every puddle inside {@code box}. */
+	void removeIn(net.minecraft.world.phys.AABB box) {
+		cells.values().removeIf(c -> box.contains(c.bx + 0.5, c.surfaceY, c.bz + 0.5));
 	}
 
 	void clear() {

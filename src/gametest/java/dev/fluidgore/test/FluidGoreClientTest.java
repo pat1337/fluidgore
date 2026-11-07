@@ -110,6 +110,9 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			hardening(context, singleplayer.getServer());
 			cleanupAuth(context, singleplayer.getServer());
 			stairs(context, singleplayer.getServer());
+			pens(context, singleplayer.getServer());
+			pyramid(context, singleplayer.getServer());
+			clearArea(context, singleplayer.getServer());
 			drops(context, singleplayer.getServer());
 			respawn(context, singleplayer.getServer());
 			chickens(context, singleplayer.getServer());
@@ -119,6 +122,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			melting(context, singleplayer.getServer());
 			beasts(context, singleplayer.getServer());
 			explosions(context, singleplayer.getServer());
+			sheepBlast(context, singleplayer.getServer());
 			organs(context, singleplayer.getServer());
 			cowAnatomy(context, singleplayer.getServer());
 			anatomyDetail(context, singleplayer.getServer());
@@ -205,6 +209,9 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			case "underwaterBlast" -> underwaterBlast(context, server);
 			case "reportedBugs" -> reportedBugs(context, server);
 			case "stairs" -> stairs(context, server);
+			case "pens" -> pens(context, server);
+			case "pyramid" -> pyramid(context, server);
+			case "clearArea" -> clearArea(context, server);
 			case "drops" -> drops(context, server);
 			case "respawn" -> respawn(context, server);
 			case "keptBodies" -> keptBodies(context, server);
@@ -226,6 +233,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			case "tankOverhaul" -> tankOverhaul(context, server);
 			case "fragmentContacts" -> fragmentContacts(context, server);
 			case "explosions" -> explosions(context, server);
+			case "sheepBlast" -> sheepBlast(context, server);
 			case "organs" -> organs(context, server);
 			case "cowAnatomy" -> cowAnatomy(context, server);
 			case "anatomyDetail" -> anatomyDetail(context, server);
@@ -4115,8 +4123,11 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 					halfHearts += p.name().equals("heart") ? 1 : 0;
 				}
 
-				check(hearts > halfHearts, "the mixed heart is not cut finer than the half-pixel one: " + hearts + " vs " + halfHearts);
-				// The fine heart must still be one organ you can carry and cut.
+				// The trunk table holds the whole body under the skin, so its heart spans more of the cube than when it held only the
+				// inside of the ribs: cut at quarter pixels it would be more cubes than a carried organ may be, and the generator keeps
+				// it at half pixels. Never coarser than the half-pixel table's.
+				check(hearts >= halfHearts, "the mixed heart is cut coarser than the half-pixel one: " + hearts + " vs " + halfHearts);
+				// The heart must still be one organ you can carry and cut.
 				var objects = dev.fluidgore.anatomy.Anatomy.objects(mixed);
 				var shapes = dev.fluidgore.anatomy.Anatomy.shapes(mixed);
 				int heartObjects = 0;
@@ -4567,11 +4578,12 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		});
 		System.out.println("[FluidGoreTest] organs tables: " + tables);
 		// The accessory lobe: the generated trunk's one lung cube on the midline behind the heart (its own canonical pixels),
-		// in a grown sheep's turned table and a lamb's. It is the right lung's, once, and the lungs stay two.
+		// in a grown sheep's turned table and a lamb's. The trunk holds the whole body under the skin, so the right lung reaches the
+		// midline and the lobe lies against it. It is the right lung's, once, and the lungs stay two.
 		String accessory = context.computeOnClient(mc -> {
 			StringBuilder out = new StringBuilder();
 			for (boolean turned : new boolean[] {true, false}) {
-				float[] cube = turned ? new float[] {-0.625F, -3.5F, -2.0F, 0.0F, -3.0F, -1.3333F} : new float[] {-0.625F, 1.3333F, -3.5F, 0.0F, 2.0F, -3.0F};
+				float[] cube = turned ? new float[] {-0.625F, -3.5F, -2.6667F, 0.0F, -3.0F, -1.3333F} : new float[] {-0.625F, 1.3333F, -3.5F, 0.0F, 2.6667F, -3.0F};
 				var table = dev.fluidgore.anatomy.Anatomy.pieces(dev.fluidgore.anatomy.Anatomy.Region.BEAST_TRUNK, false, dev.fluidgore.anatomy.Anatomy.Beast.SHEEP, turned);
 				var objects = dev.fluidgore.anatomy.Anatomy.objects(table);
 				var shapes = dev.fluidgore.anatomy.Anatomy.shapes(table);
@@ -4610,9 +4622,9 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			return out.toString();
 		});
 		System.out.println("[FluidGoreTest] organs accessory lobe: " + accessory);
-		check(accessory.equals("grown: right=36/acc1 left=25/acc0; lamb: right=36/acc1 left=25/acc0; "),
+		check(accessory.equals("grown: right=49/acc1 left=27/acc0; lamb: right=49/acc1 left=27/acc0; "),
 				"the accessory lobe is not the right lung's alone, or the lungs are not two: " + accessory);
-		check(tables.contains("liver:15+gall") && tables.contains("right lung:36") && tables.contains("left lung:25") && tables.contains("lone=0"),
+		check(tables.contains("liver:16+gall") && tables.contains("right lung:49") && tables.contains("left lung:27") && tables.contains("lone=0"),
 				"the liver and lungs are not their cubes, or the accessory lobe is not the right lung's: " + tables);
 		check(tables.contains("pairedLung=true") && tables.contains("pairedLiver=false"), "the lungs are not a pair, or the liver is: " + tables);
 
@@ -4664,7 +4676,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			return report;
 		});
 		System.out.println("[FluidGoreTest] organs standing: " + standing);
-		check(standing.contains("Sheep · liver=15") && standing.contains("Sheep · right lung=36") && standing.contains("Sheep · left lung=25"),
+		check(standing.contains("Sheep · liver=16") && standing.contains("Sheep · right lung=49") && standing.contains("Sheep · left lung=27"),
 				"the liver and lungs did not come out whole and named: " + standing);
 		check(standing.contains("off=0.00"), "the organs did not come out where and as they lay: " + standing);
 		check(!standing.contains("right liver"), "the liver was given a side: " + standing);
@@ -4980,7 +4992,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		check(rolledLiver[0] != 0L, "no liver came out of the rolled body: " + side);
 		closeUp(context, server, at(context, rolledLiver[0]), 1.2, "organs_09_rolled_liver");
 		check(Math.abs(roll) >= 1.2F, "the dead sheep did not roll onto its side: " + roll);
-		check(side.contains("Sheep · liver=15") && side.contains("off=0.00"), "the liver did not come out of the rolled body where and as it lay: " + side);
+		check(side.contains("Sheep · liver=16") && side.contains("off=0.00"), "the liver did not come out of the rolled body where and as it lay: " + side);
 
 		// 10. Cleared away: nothing left of them, here or in what is shown.
 		context.runOnClient(mc -> GoreSystems.dismemberment().clear());
@@ -5768,6 +5780,75 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		System.out.println("[FluidGoreTest] pieceReactions passed");
 	}
 
+	/**
+	 * A sheep blown apart by TNT under it comes apart as the body it is: its hide in patches and the fat under it, its
+	 * named muscles (the loin eye, the chump), its legs down to the hooves and the cheek muscle of its head, besides its
+	 * organs and bones, each a piece of its own.
+	 */
+	private static void sheepBlast(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("time set noon");
+		server.runCommand("fill 740 -60 80 770 -50 110 minecraft:air");
+		server.runCommand("tp @a 755.5 -57 88.5 0 25");
+		context.waitTicks(20);
+		context.waitFor(mc -> mc.levelRenderer.hasRenderedAllSections());
+		context.runOnClient(mc -> {
+			GoreConfig.get().deathThroes = false;
+			GoreConfig.get().keepBodies = false;
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+			if (!mc.gui.hud.isHidden()) {
+				mc.gui.hud.toggle();
+			}
+		});
+		server.runCommand("summon minecraft:sheep 755.5 -60 95.5 {NoAI:1b,Rotation:[90f,0f],UUID:[I;91,92,93,94]}");
+		context.waitTicks(10);
+		int id = context.computeOnClient(mc -> idOf(mc, new java.util.UUID(91L << 32 | 92L, 93L << 32 | 94L)));
+		context.takeScreenshot("sheep_blast_01_before");
+		server.runCommand("summon minecraft:tnt 755.5 -60 95.5 {fuse:1}");
+		boolean[] blown = new boolean[1];
+		for (int tick = 0; tick < 40; tick++) {
+			context.waitTicks(1);
+			if (tick == 3 || tick == 8 || tick == 20) {
+				context.takeScreenshot("sheep_blast_02_t" + tick);
+			}
+
+			context.runOnClient(mc -> blown[0] |= GoreSystems.dismemberment().vaporized(id));
+		}
+
+		var sheep = net.minecraft.world.entity.EntityTypes.SHEEP;
+		String[] names = {"longissimus", "gluteus_medius", "skin", "subcutaneous_fat", "hoof", "cannon_bone", "masseter", "heart", "rumen"};
+		StringBuilder thrown = new StringBuilder();
+		int[] counts = new int[names.length];
+		for (int i = 0; i < names.length; i++) {
+			String name = names[i];
+			counts[i] = context.computeOnClient(mc -> GoreSystems.dismemberment().organs(sheep, name));
+			thrown.append(name).append('=').append(counts[i]).append(' ');
+		}
+
+		int all = context.computeOnClient(mc -> GoreSystems.dismemberment().organs(sheep, null));
+		System.out.println("[FluidGoreTest] sheepBlast: blown=" + blown[0] + " pieces " + all + " " + thrown);
+		check(blown[0], "the sheep over the TNT was not blown apart");
+		for (int i = 0; i < names.length; i++) {
+			check(counts[i] >= 1, "the blown sheep threw no " + names[i] + ": " + thrown);
+		}
+
+		check(all >= 60, "the blown sheep threw too few pieces of its own body: " + all);
+		server.runCommand("tp @a 755.5 -58.5 90.5 0 35");
+		context.waitTicks(10);
+		context.takeScreenshot("sheep_blast_03_scene");
+		server.runCommand("tp @a 755.5 -48 95.5 0 90");
+		context.waitTicks(10);
+		context.takeScreenshot("sheep_blast_04_from_above");
+		context.runOnClient(mc -> {
+			GoreConfig.get().deathThroes = true;
+			if (mc.gui.hud.isHidden()) {
+				mc.gui.hud.toggle();
+			}
+		});
+	}
+
 	private static void explosions(ClientGameTestContext context, TestServerContext server) {
 		server.runCommand("kill @e[type=!minecraft:player]");
 		server.runCommand("time set noon");
@@ -6499,6 +6580,459 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		context.runOnClient(mc -> {
 			GoreConfig.get().deathThroes = true;
 			GoreConfig.get().keepBodies = false;
+		});
+	}
+
+	/**
+	 * A sheep pen of oak fences. Blood rained onto a fence line lies along the rails or runs off them to the grass: never
+	 * on the fence's collision box, which stands half a block above the rails, and never as a sheet wider than the rail.
+	 * Then a pen packed with sheep is killed at once, with Ragdoll Physics on and the bodies kept: no body passes through
+	 * the fence or ends up lying across it, on any tick.
+	 */
+	private static void pens(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("tp @a 404.5 -60 -88.5 180 50");
+		context.waitTicks(20);
+		server.runCommand("fill 396 -60 -104 412 -50 -86 minecraft:air");
+		server.runCommand("fill 396 -61 -104 412 -61 -86 minecraft:grass_block");
+		server.runCommand("fill 400 -60 -100 408 -60 -92 minecraft:oak_fence");
+		server.runCommand("fill 401 -60 -99 407 -60 -93 minecraft:air");
+		// On a post outside the south fence, looking over the pen.
+		server.runCommand("fill 404 -60 -87 404 -57 -87 minecraft:stone");
+		server.runCommand("tp @a 404.5 -56 -86.5 180 35");
+		context.waitTicks(10);
+		boolean ragdoll = context.computeOnClient(mc -> GoreConfig.get().articulatedRagdoll);
+		context.runOnClient(mc -> {
+			GoreConfig.get().articulatedRagdoll = true;
+			GoreConfig.get().keepBodies = true;
+			GoreConfig.get().deathThroes = false;
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+
+		// Blood rained onto the west fence (x 400, running north-south), some on its rails, some beside them.
+		context.runOnClient(mc -> {
+			var drops = GoreSystems.blood().droplets();
+			for (int i = 0; i < 48; i++) {
+				double x = 400.2 + (i % 6) * 0.12;
+				// Off the corner posts, where the fence turns and its top is wider.
+				double z = -98.5 + (i / 6) * 0.7;
+				drops.spawn(x, -57.5, z, 0.0, -0.3, 0.0, 0.01F + (i % 3) * 0.02F, 0x8A0303, 0.05F);
+			}
+
+			// And onto the south-west corner post, where the fence turns: blood keeps to the rails, not the gap between them.
+			for (int i = 0; i < 16; i++) {
+				drops.spawn(400.3 + (i % 4) * 0.13, -57.5, -91.7 + (i / 4) * 0.13, 0.0, -0.3, 0.0, 0.02F + (i % 2) * 0.03F, 0x8A0303, 0.05F);
+			}
+		});
+		context.waitTicks(40);
+		String fence = context.computeOnClient(mc -> {
+			int onRail = 0;
+			int hovering = 0;
+			int wide = 0;
+			int ground = 0;
+			for (var d : GoreSystems.blood().decals().decals()) {
+				if (d.face != net.minecraft.core.Direction.UP) {
+					continue;
+				}
+
+				for (int o = 0; o < d.pieces.length; o += dev.fluidgore.blood.Decal.PIECE_STRIDE) {
+					double y = d.plane + d.pieces[o + 4];
+					double x0 = d.centerA + d.pieces[o];
+					double x1 = d.centerA + d.pieces[o + 2];
+					if (y > -59.0 + 0.01) {
+						hovering++;
+					} else if (y > -59.5) {
+						onRail++;
+						// Every corner of it lies on the fence's top: none of it hangs over air beside a rail or between two.
+						double z0 = d.centerB + d.pieces[o + 1];
+						double z1 = d.centerB + d.pieces[o + 3];
+						for (double[] c : new double[][] {{x0 + 0.01, z0 + 0.01}, {x1 - 0.01, z0 + 0.01}, {x0 + 0.01, z1 - 0.01}, {x1 - 0.01, z1 - 0.01}}) {
+							if (Double.isNaN(dev.fluidgore.blood.SurfaceProbe.surfaceBelow(mc.level, c[0], y + 0.05, y - 0.05, c[1]))) {
+								wide++;
+								break;
+							}
+						}
+					} else {
+						ground++;
+					}
+				}
+			}
+
+			int highCells = 0;
+			for (var cell : GoreSystems.blood().fluid().cells()) {
+				if (cell.surfaceY > -59.5) {
+					highCells++;
+				}
+			}
+
+			return onRail + " " + hovering + " " + wide + " " + ground + " " + highCells;
+		});
+		int[] counts = java.util.Arrays.stream(fence.split(" ")).mapToInt(Integer::parseInt).toArray();
+		System.out.println("[FluidGoreTest] blood on a fence: on the rails " + counts[0] + ", above them " + counts[1] + ", over air beside a rail "
+				+ counts[2] + ", on the grass " + counts[3] + ", pools up on the fence " + counts[4]);
+		context.takeScreenshot("pens_01_blood_on_fence");
+		check(counts[1] == 0, "blood is hanging over the fence on its collision box: " + fence);
+		check(counts[2] == 0, "blood on a fence hangs over air beside or between its rails: " + fence);
+		check(counts[4] == 0, "a pool stands on top of a fence: " + fence);
+		check(counts[0] > 0, "no blood stayed on the fence rails: " + fence);
+		check(counts[3] > 0, "no blood ran off the fence onto the grass: " + fence);
+
+		// Sheep packed against the fence, as a pen full of them stands, killed all at once.
+		double[][] at = {{401.1, -98.5, 0}, {401.1, -95.0, 180}, {407.9, -97.0, 0}, {404.0, -98.9, 90}, {404.5, -93.1, 270}, {404.2, -96.0, 30},
+				{405.6, -95.5, 120}, {407.9, -93.9, 200}};
+		for (double[] s : at) {
+			server.runCommand("summon minecraft:sheep " + s[0] + " -60 " + s[1] + " {NoAI:1b,Tags:[\"fluidgore_pen\"],Rotation:[" + (float) s[2] + "f,0f]}");
+		}
+
+		context.waitTicks(20);
+		server.runCommand("kill @e[tag=fluidgore_pen]");
+		int[] worst = {0, 0};
+		StringBuilder draped = new StringBuilder();
+		for (int t = 0; t < 240; t++) {
+			context.waitTick();
+			if (t == 10) {
+				context.takeScreenshot("pens_02_falling");
+			}
+
+			int[] now = context.computeOnClient(mc -> {
+				int inBlock = 0;
+				int out = 0;
+				for (var corpse : GoreSystems.suffering().corpses()) {
+					var rig = corpse.rig;
+					if (rig == null) {
+						continue;
+					}
+
+					if (rig.inBlock(mc.level, 0.03)) {
+						inBlock++;
+					}
+
+					// The trunk stays in the pen. A leg or the head may lie over a rail (no segment is ever inside the fence, above),
+					// which is a body draped on it, not through it.
+					for (int i = 0; i < rig.n; i++) {
+						net.minecraft.world.phys.Vec3 c = rig.segment(i);
+						if (c.x < 400.625 || c.x > 408.375 || c.z < -99.375 || c.z > -91.625) {
+							boolean trunk = i == rig.skeleton.chest || i == rig.skeleton.hips;
+							out += trunk ? 1 : 0;
+							if (draped.length() < 400) {
+								draped.append(String.format(java.util.Locale.ROOT, " %s %.2f %.2f %.2f;", trunk ? "TRUNK" : "segment " + i, c.x, c.y, c.z));
+							}
+						}
+					}
+				}
+
+				return new int[] {inBlock, out};
+			});
+			worst[0] = Math.max(worst[0], now[0]);
+			worst[1] = Math.max(worst[1], now[1]);
+		}
+
+		context.takeScreenshot("pens_03_at_rest");
+		String rest = context.computeOnClient(mc -> {
+			int rigs = 0;
+			int asleep = 0;
+			StringBuilder none = new StringBuilder();
+			for (var corpse : GoreSystems.suffering().corpses()) {
+				if (corpse.rig != null) {
+					rigs++;
+					asleep += corpse.rig.asleep() ? 1 : 0;
+				} else {
+					none.append(String.format(java.util.Locale.ROOT, " no rig at %.1f %.1f", corpse.entity.getX(), corpse.entity.getZ()));
+				}
+			}
+
+			int dead = 0;
+			for (Entity e : mc.level.entitiesForRendering()) {
+				dead += e instanceof net.minecraft.world.entity.animal.sheep.Sheep && Math.abs(e.getX() - 404.5) < 6 && Math.abs(e.getZ() + 96) < 6 ? 1 : 0;
+			}
+
+			return rigs + " " + asleep + " of " + GoreSystems.suffering().corpses().size() + " corpses," + none + "; sheep on the client " + dead;
+		});
+		int outside = server.computeOnServer(s -> {
+			int n = 0;
+			for (Entity e : s.overworld().getAllEntities()) {
+				if (e.entityTags().contains("fluidgore_pen") && (e.getX() < 400.625 || e.getX() > 408.375 || e.getZ() < -99.375 || e.getZ() > -91.625)) {
+					n++;
+				}
+			}
+
+			return n;
+		});
+		System.out.println("[FluidGoreTest] sheep killed in a pen: worst tick " + worst[0] + " in a fence, " + worst[1] + " out of the pen; rigs and asleep "
+				+ rest + "; out of the pen on the server " + outside + "; outside the pen at some tick:" + draped);
+		check(rest.startsWith(at.length + " "), "not every sheep in the pen got a ragdoll body: " + rest);
+		check(worst[0] == 0, "a body in the pen was inside a fence on some tick: " + worst[0]);
+		check(worst[1] == 0, "a body's trunk went through the fence out of the pen: " + worst[1] + draped);
+		check(outside == 0, "the server has a body outside the pen: " + outside);
+
+		cleanAway(context);
+		server.runCommand("kill @e[type=!minecraft:player]");
+		context.runOnClient(mc -> {
+			GoreConfig.get().articulatedRagdoll = ragdoll;
+			GoreConfig.get().keepBodies = false;
+			GoreConfig.get().deathThroes = true;
+		});
+	}
+
+	/**
+	 * A pig killed on top of a stepped brick pyramid, with Ragdoll Physics on, kept by the server and kept by this game
+	 * alone: it slumps and tumbles down the steps as one body, never inside a step and never jumping from place to place,
+	 * and comes to rest at least three steps down (its weight is in its trunk, which carries it over each edge). Kept, this
+	 * game leads its fall and the server's body ends where the ragdoll did.
+	 */
+	private static void pyramid(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("tp @a 452.5 -60 -85.5 180 30");
+		context.waitTicks(20);
+		server.runCommand("fill 436 -60 -106 466 -45 -82 minecraft:air");
+		server.runCommand("fill 451 -60 -84 451 -55 -84 minecraft:stone");
+		for (int k = 0; k < 5; k++) {
+			server.runCommand("fill " + (446 + k) + " " + (-60 + k) + " " + (-100 + k) + " " + (456 - k) + " " + (-60 + k) + " " + (-90 - k)
+					+ " minecraft:bricks");
+		}
+
+		boolean ragdoll = context.computeOnClient(mc -> GoreConfig.get().articulatedRagdoll);
+		for (boolean kept : new boolean[] {true, false}) {
+			context.runOnClient(mc -> {
+				GoreConfig.get().articulatedRagdoll = true;
+				GoreConfig.get().keepBodies = kept;
+				GoreConfig.get().deathThroes = false;
+				GoreSystems.blood().clear();
+				GoreSystems.dismemberment().clear();
+				GoreSystems.suffering().clear();
+			});
+			server.runCommand("tp @a 451.5 -54 -83.5 180 25");
+			// On the south edge of the top step, facing along it: it goes over onto its side and down the steps.
+			server.runCommand("summon minecraft:pig 451.5 -55 -93.4 {NoAI:1b,Tags:[\"fluidgore_pyramid\"],Rotation:[90f,0f]}");
+			context.waitTicks(15);
+			server.runCommand("kill @e[tag=fluidgore_pyramid]");
+			double[] worst = {0.0, 0.0, 0.0};
+			for (int t = 0; t < 320; t++) {
+				context.waitTick();
+				if (t == 12 || t == 30 || t == 60) {
+					context.takeScreenshot("pyramid_" + (kept ? "kept" : "local") + "_0" + (t == 12 ? 1 : t == 30 ? 2 : 3) + "_tumbling");
+				}
+
+				double[] now = context.computeOnClient(mc -> {
+					double inBlock = 0.0;
+					double jump = 0.0;
+					double speed = 0.0;
+					for (var corpse : GoreSystems.suffering().corpses()) {
+						var rig = corpse.rig;
+						if (rig == null) {
+							continue;
+						}
+
+						if (rig.inBlock(mc.level, 0.05)) {
+							inBlock++;
+						}
+
+						// From where it was drawn last tick to where it is now: a fall is fast, a jump sideways is a teleport.
+						var was = rig.pose(0.0F, 0.0, 0.0, 0.0);
+						var is = rig.pose(1.0F, 0.0, 0.0, 0.0);
+						for (int i = 0; i < rig.n; i++) {
+							double dx = is.pos[3 * i] - was.pos[3 * i];
+							double dz = is.pos[3 * i + 2] - was.pos[3 * i + 2];
+							jump = Math.max(jump, Math.sqrt(dx * dx + dz * dz));
+						}
+
+						speed = Math.max(speed, rig.lastSpeed);
+					}
+
+					return new double[] {inBlock, jump, speed};
+				});
+				worst[0] = Math.max(worst[0], now[0]);
+				worst[1] = Math.max(worst[1], now[1]);
+				worst[2] = Math.max(worst[2], now[2]);
+			}
+
+			context.takeScreenshot("pyramid_" + (kept ? "kept" : "local") + "_04_at_rest");
+			String rest = context.computeOnClient(mc -> {
+				for (var corpse : GoreSystems.suffering().corpses()) {
+					if (corpse.rig != null) {
+						net.minecraft.world.phys.Vec3 c = corpse.rig.centre();
+						return String.format(java.util.Locale.ROOT, "%.2f %.2f %.2f %s roll %.0f", c.x, corpse.rig.bottom(), c.z, corpse.rig.asleep(),
+								corpse.body.roll * net.minecraft.util.Mth.RAD_TO_DEG);
+					}
+				}
+
+				return "none";
+			});
+			System.out.println("[FluidGoreTest] pig down a pyramid, kept " + kept + ": worst tick " + worst[0] + " in a step, sideways jump "
+					+ String.format(java.util.Locale.ROOT, "%.3f", worst[1]) + " a tick, fastest " + String.format(java.util.Locale.ROOT, "%.2f", worst[2])
+					+ " b/s; at rest " + rest);
+			check(!rest.equals("none"), "the pig on the pyramid has no ragdoll body (kept " + kept + ")");
+			check(worst[0] == 0.0, "a segment of the pig was inside a step on " + worst[0] + " ticks (kept " + kept + ")");
+			check(worst[1] < 0.75, "the pig jumped sideways " + worst[1] + " blocks in a tick (kept " + kept + ")");
+			check(rest.contains("true"), "the pig on the pyramid never came to rest (kept " + kept + "): " + rest);
+			float roll = context.computeOnClient(mc -> {
+				for (var corpse : GoreSystems.suffering().corpses()) {
+					if (corpse.rig != null) {
+						return Math.abs(corpse.body.roll);
+					}
+				}
+
+				return 0.0F;
+			});
+			// A four-legged carcass does not stay on its back: the round of its ribs tips it onto a side.
+			check(roll < 2.6F, "the pig came to rest on its back on the pyramid (kept " + kept + "): " + rest);
+			// Most of its weight is its trunk, hanging over the edge of each step it lands on: it goes on over them, not
+			// down one step and no further. Its lowest point ends at least three steps below the top one (top at -55).
+			double low = context.computeOnClient(mc -> {
+				for (var corpse : GoreSystems.suffering().corpses()) {
+					if (corpse.rig != null) {
+						return corpse.rig.bottom();
+					}
+				}
+
+				return 0.0;
+			});
+			check(low <= -57.9, "the pig stopped high on the pyramid, its lowest point at " + low + " (kept " + kept + ")");
+			if (kept) {
+				// The server's body went where this game's ragdoll took it (this game leads its fall).
+				double[] apart = context.computeOnClient(mc -> {
+					for (var corpse : GoreSystems.suffering().corpses()) {
+						if (corpse.rig != null) {
+							net.minecraft.world.phys.Vec3 c = corpse.rig.centre();
+							return new double[] {Math.hypot(corpse.entity.getX() - c.x, corpse.entity.getZ() - c.z), corpse.entity.getY()};
+						}
+					}
+
+					return new double[] {99.0, 0.0};
+				});
+				System.out.println("[FluidGoreTest] pyramid kept body: server's body " + String.format(java.util.Locale.ROOT, "%.2f", apart[0])
+						+ " from the ragdoll across the ground, at y " + String.format(java.util.Locale.ROOT, "%.2f", apart[1]));
+				check(apart[0] < 0.6, "the server's body is " + apart[0] + " blocks from where the ragdoll came to rest");
+			}
+			cleanAway(context);
+			server.runCommand("kill @e[type=!minecraft:player]");
+		}
+
+		context.runOnClient(mc -> {
+			GoreConfig.get().articulatedRagdoll = ragdoll;
+			GoreConfig.get().keepBodies = false;
+			GoreConfig.get().deathThroes = true;
+		});
+	}
+
+	/**
+	 * {@code /fluidgore clear}, as a command block runs it: the bodies the server keeps in the box are gone from the
+	 * server and from the screen, and the blood there with them; a body and blood outside the box stay. Then
+	 * {@code /fluidgore clear all} takes the rest.
+	 */
+	private static void clearArea(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("tp @a 500.5 -60 -80.5 180 30");
+		context.waitTicks(20);
+		server.runCommand("fill 490 -60 -100 512 -50 -78 minecraft:air");
+		server.runCommand("fill 490 -61 -100 512 -61 -78 minecraft:stone");
+		context.runOnClient(mc -> {
+			GoreConfig.get().keepBodies = true;
+			GoreConfig.get().deathThroes = false;
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+		server.runCommand("summon minecraft:cow 495.5 -60 -90.5 {NoAI:1b,Tags:[\"fluidgore_clear\",\"inside\"]}");
+		server.runCommand("summon minecraft:pig 497.5 -60 -92.5 {NoAI:1b,Tags:[\"fluidgore_clear\",\"inside\"]}");
+		server.runCommand("summon minecraft:cow 508.5 -60 -90.5 {NoAI:1b,Tags:[\"fluidgore_clear\",\"outside\"]}");
+		context.waitTicks(15);
+		server.runCommand("execute as @e[tag=fluidgore_clear] run damage @s 12 minecraft:generic");
+		context.waitTicks(60);
+		context.runOnClient(mc -> {
+			var blood = GoreSystems.blood();
+			blood.landOnFloor(mc.level, 496.0, -60.0, -89.0, 0.2F, 0x8A0303, 2000);
+			blood.landOnFloor(mc.level, 509.0, -60.0, -89.0, 0.2F, 0x8A0303, 2000);
+		});
+		context.waitTicks(5);
+		java.util.function.Function<net.minecraft.world.phys.AABB, int[]> count = box -> context.computeOnClient(mc -> {
+			int corpses = 0;
+			for (var corpse : GoreSystems.suffering().corpses()) {
+				corpses += box.contains(dev.fluidgore.suffer.Suffering.centre(corpse)) ? 1 : 0;
+			}
+
+			int marks = 0;
+			for (var d : GoreSystems.blood().decals().decals()) {
+				marks += box.contains(d.anchor.getX() + 0.5, d.anchor.getY() + 0.5, d.anchor.getZ() + 0.5) ? 1 : 0;
+			}
+
+			int pools = 0;
+			for (var cell : GoreSystems.blood().fluid().cells()) {
+				pools += box.contains(cell.bx + 0.5, cell.surfaceY, cell.bz + 0.5) ? 1 : 0;
+			}
+
+			return new int[] {corpses, marks, pools};
+		});
+		net.minecraft.world.phys.AABB inside = new net.minecraft.world.phys.AABB(490, -64, -100, 503, -40, -80);
+		net.minecraft.world.phys.AABB outside = new net.minecraft.world.phys.AABB(503, -64, -100, 513, -40, -80);
+		int[] before = count.apply(inside);
+		int[] beforeOut = count.apply(outside);
+		String seen = context.computeOnClient(mc -> {
+			StringBuilder out = new StringBuilder();
+			for (var corpse : GoreSystems.suffering().corpses()) {
+				out.append(String.format(java.util.Locale.ROOT, " corpse %.1f %.1f %.1f", corpse.body.x, corpse.body.y, corpse.body.z));
+			}
+
+			return out.toString();
+		});
+		String held = server.computeOnServer(s -> {
+			StringBuilder out = new StringBuilder();
+			for (Entity e : s.overworld().getAllEntities()) {
+				if (e.entityTags().contains("fluidgore_clear")) {
+					out.append(String.format(java.util.Locale.ROOT, " %s %.1f %.1f alive %s kept %s", e.getType().toShortString(), e.getX(), e.getZ(),
+							e.isAlive(), dev.fluidgore.server.KeptBodies.isKept(e)));
+				}
+			}
+
+			return out.toString();
+		});
+		check(before[0] == 2 && before[1] + before[2] > 0, "the clear test has nothing to clear: " + java.util.Arrays.toString(before) + ";" + seen
+				+ "; server" + held);
+		check(beforeOut[0] == 1, "the body outside the cleared box is missing: " + java.util.Arrays.toString(beforeOut));
+
+		server.runCommand("fluidgore clear 490 -64 -100 502 -40 -80");
+		context.waitTicks(5);
+		int[] after = count.apply(inside);
+		int[] afterOut = count.apply(outside);
+		int[] kept = server.computeOnServer(s -> {
+			int in = 0;
+			int out = 0;
+			for (Entity e : s.overworld().getAllEntities()) {
+				if (e.entityTags().contains("fluidgore_clear")) {
+					in += e.entityTags().contains("inside") ? 1 : 0;
+					out += e.entityTags().contains("outside") ? 1 : 0;
+				}
+			}
+
+			return new int[] {in, out};
+		});
+		context.takeScreenshot("clear_01_cleared_box");
+		System.out.println("[FluidGoreTest] fluidgore clear: inside " + java.util.Arrays.toString(before) + " -> " + java.util.Arrays.toString(after)
+				+ ", outside " + java.util.Arrays.toString(beforeOut) + " -> " + java.util.Arrays.toString(afterOut) + ", server bodies in/out "
+				+ java.util.Arrays.toString(kept));
+		check(after[0] == 0 && after[1] == 0 && after[2] == 0, "gore is left in the cleared box: " + java.util.Arrays.toString(after));
+		check(kept[0] == 0, "the server still keeps a body in the cleared box: " + kept[0]);
+		check(afterOut[0] == 1 && afterOut[1] + afterOut[2] > 0 && kept[1] == 1, "clearing the box took gore outside it: "
+				+ java.util.Arrays.toString(afterOut) + " " + kept[1]);
+
+		server.runCommand("fluidgore clear all");
+		context.waitTicks(5);
+		int[] all = count.apply(new net.minecraft.world.phys.AABB(-1000, -64, -1000, 1000, 320, 1000));
+		int left = server.computeOnServer(s -> {
+			int n = 0;
+			for (Entity e : s.overworld().getAllEntities()) {
+				n += e.entityTags().contains("fluidgore_clear") ? 1 : 0;
+			}
+
+			return n;
+		});
+		System.out.println("[FluidGoreTest] fluidgore clear all: " + java.util.Arrays.toString(all) + ", bodies left " + left);
+		check(all[0] == 0 && all[1] == 0 && all[2] == 0 && left == 0, "clear all left gore: " + java.util.Arrays.toString(all) + ", bodies " + left);
+		context.runOnClient(mc -> {
+			GoreConfig.get().keepBodies = false;
+			GoreConfig.get().deathThroes = true;
 		});
 	}
 
@@ -7724,7 +8258,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		context.waitTicks(20);
 		server.runCommand("setblock " + bx + " -59 0 minecraft:redstone_block");
 		context.waitTicks(3);
-		context.waitTicks((tank ? dev.fluidgore.cobbletank.TankBlock.FUSE : 80) + 2 + 60);
+		context.waitTicks((tank ? dev.cobbletank.TankBlock.FUSE : 80) + 2 + 60);
 		context.takeScreenshot("sourceAttribution_" + (tank ? "tank" : "charge"));
 		return context.computeOnClient(mc -> {
 			var events = dev.fluidgore.event.Events.trace();
@@ -7956,16 +8490,16 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			var cow = level.getEntitiesOfClass(net.minecraft.world.entity.animal.cow.Cow.class, new net.minecraft.world.phys.AABB(origin,origin).inflate(30),
 					e -> e.isAlive() && e.getUUID().getLeastSignificantBits() == ((93L << 32) | 4)).getFirst();
 			cow.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH).setBaseValue(500); cow.setHealth(500);
-			var tank = new dev.fluidgore.cobbletank.TankState(); tank.litres=600; tank.psi=10000; tank.wavePercent=1;
+			var tank = new dev.cobbletank.TankState(); tank.litres=600; tank.psi=10000; tank.wavePercent=1;
 			long seed = net.minecraft.core.BlockPos.containing(origin).asLong() ^ (long) Float.floatToIntBits(600) << 32 ^ Float.floatToIntBits(tank.psiNow());
-			var shots = dev.fluidgore.fragment.FragmentTrace.scatter(seed, dev.fluidgore.cobbletank.TankConfig.get().fragmentRayBudget, dev.fluidgore.cobbletank.TankConfig.get().tankFragmentRange, 8);
+			var shots = dev.fluidgore.fragment.FragmentTrace.scatter(seed, dev.cobbletank.TankConfig.get().fragmentRayBudget, dev.cobbletank.TankConfig.get().tankFragmentRange, 8);
 			var direction = shots.stream().map(dev.fluidgore.fragment.FragmentTrace.Launch::direction).filter(d -> d.y > 0.2 && d.y < 0.6 && d.z < -0.2 && d.x < 0).findFirst().orElseThrow();
 			var target = origin.add(direction.scale(9)); cow.setPos(target.x, target.y - cow.getBbHeight()/2, target.z);
 			var contacts = dev.fluidgore.fragment.FragmentTrace.trace(level,origin,shots);
 			float expected = (float) contacts.stream().filter(p -> p.contact()!=null && p.contact().entityId()==cow.getId()).mapToDouble(p -> p.contact().damage()).sum();
 			check(expected>0, "tank damage fixture missed all contacts");
 			check(dev.fluidgore.physics.Blast.overpressure(cow.getBoundingBox().getCenter().distanceTo(origin),tank.waveKg(),tank.psiNow()) < dev.fluidgore.physics.Blast.EARDRUM_KPA, "damage fixture includes primary pressure damage");
-			dev.fluidgore.cobbletank.TankBurst.burst(level,origin,tank,null);
+			dev.cobbletank.TankBurst.burst(level,origin,tank,null);
 			float lost = 500-cow.getHealth();
 			check(Math.abs(lost-expected)<0.001, "fragment damage was lost or duplicated: "+lost+" vs "+expected);
 			return lost;
@@ -7981,7 +8515,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 
 	private static void tankOverhaul(ClientGameTestContext context, TestServerContext server) {
 		var dice = net.minecraft.util.RandomSource.create(7L);
-		var cold = new dev.fluidgore.cobbletank.TankState();
+		var cold = new dev.cobbletank.TankState();
 		cold.litres = 600; cold.psi = 10000; cold.wavePercent = 35;
 		var vent = cold.copy(); vent.vent();
 		double startEnergy = vent.waveKg();
@@ -8007,9 +8541,9 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		var weak = cold.copy(); weak.shock(30, dice);
 		check(!weak.leaking() && !weak.fails(), "a weak external shock forced a chain rupture");
 		var hard = cold.copy();
-		check(hard.shock(650, dice) == dev.fluidgore.cobbletank.TankState.Blow.BURST, "a severe casing shock did not rupture the tank");
+		check(hard.shock(650, dice) == dev.cobbletank.TankState.Blow.BURST, "a severe casing shock did not rupture the tank");
 		var empty = cold.copy(); empty.fraction = 0;
-		check(empty.blow(1, dice) != dev.fluidgore.cobbletank.TankState.Blow.BURST && !empty.advance(true), "an empty shell produced a pressure rupture");
+		check(empty.blow(1, dice) != dev.cobbletank.TankState.Blow.BURST && !empty.advance(true), "an empty shell produced a pressure rupture");
 		var wire = new dev.fluidgore.net.VesselBurstPayload(0, 0, 0, 600, 10000, (float) cold.waveKg(), 6, 7L, 9L, java.util.List.of());
 		var wireBytes = io.netty.buffer.Unpooled.buffer();
 		try {
@@ -8039,7 +8573,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		server.computeOnServer(s -> { for (var p : s.getPlayerList().getPlayers()) p.setShiftKeyDown(false); return true; });
 		context.runOnClient(mc -> mc.player.setShiftKeyDown(false));
 		check(server.computeOnServer(s -> s.overworld().getBlockEntity(new net.minecraft.core.BlockPos(1500, -60, 3))
-				instanceof dev.fluidgore.cobbletank.TankBlockEntity t && t.state().area == 1.0F && t.state().damage == 0.0F), "the player's stick did not open an undamaged valve");
+				instanceof dev.cobbletank.TankBlockEntity t && t.state().area == 1.0F && t.state().damage == 0.0F), "the player's stick did not open an undamaged valve");
 		server.runCommand("tp @a 1502.5 -60 0.5 34 15");
 		context.waitTicks(3);
 		boolean hidden = context.computeOnClient(mc -> mc.gui.hud.isHidden());
@@ -8051,7 +8585,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		server.runCommand("setblock 1521 -60 3 minecraft:campfire");
 		context.waitTicks(25);
 		check(server.computeOnServer(s -> s.overworld().getBlockEntity(new net.minecraft.core.BlockPos(1520, -60, 3))
-				instanceof dev.fluidgore.cobbletank.TankBlockEntity t && t.state().shellC > 100 && t.state().triggerTicks == -1), "adjacent fire started a fuse or did not heat the shell");
+				instanceof dev.cobbletank.TankBlockEntity t && t.state().shellC > 100 && t.state().triggerTicks == -1), "adjacent fire started a fuse or did not heat the shell");
 		server.runCommand("setblock 1521 -60 3 minecraft:air");
 		context.waitTicks(160);
 		check("cobble_tank".equals(blockAt(server, 1520, -60, 3)), "removing brief heat still forced a timed explosion");
@@ -8088,7 +8622,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		context.waitTicks(2);
 		server.runCommand("data merge block 1500 -60 3 {HeatDamage:0.4f}");
 		check(server.computeOnServer(s -> s.overworld().getBlockEntity(new net.minecraft.core.BlockPos(1500, -60, 3))
-				instanceof dev.fluidgore.cobbletank.TankBlockEntity t && t.state().gasC < -30 && t.state().shellC < -10 && t.state().heatDamage >= 0.4F), "save/load lost the thermal state");
+				instanceof dev.cobbletank.TankBlockEntity t && t.state().gasC < -30 && t.state().shellC < -10 && t.state().heatDamage >= 0.4F), "save/load lost the thermal state");
 		server.runCommand("setblock 1500 -60 3 minecraft:air");
 		server.runCommand("setblock 1520 -60 3 minecraft:air");
 		server.runCommand("kill @e[type=!minecraft:player]");
@@ -8101,11 +8635,11 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 
 	private static void tankBlock(ClientGameTestContext context, TestServerContext server) {
 		net.minecraft.util.RandomSource dice = net.minecraft.util.RandomSource.create(7L);
-		check(dev.fluidgore.cobbletank.TankState.force(net.minecraft.world.item.ItemStack.EMPTY) == 0.0F, "a fist cut the tank");
-		check(dev.fluidgore.cobbletank.TankState.force(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WOODEN_PICKAXE)) < 0.01F,
+		check(dev.cobbletank.TankState.force(net.minecraft.world.item.ItemStack.EMPTY) == 0.0F, "a fist cut the tank");
+		check(dev.cobbletank.TankState.force(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.WOODEN_PICKAXE)) < 0.01F,
 				"a wooden pick did more than scuff the tank");
-		dev.fluidgore.cobbletank.TankState casing = new dev.fluidgore.cobbletank.TankState();
-		float diamond = dev.fluidgore.cobbletank.TankState.force(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND_PICKAXE));
+		dev.cobbletank.TankState casing = new dev.cobbletank.TankState();
+		float diamond = dev.cobbletank.TankState.force(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND_PICKAXE));
 		int blows = 0;
 		while (!casing.leaking() && blows < 20) {
 			casing.blow(diamond, dice);
@@ -8145,9 +8679,9 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		check(nearCow >= 0, "the cow by the tank did not appear");
 		server.runCommand("setblock 600 -59 0 minecraft:redstone_block");
 		context.waitTicks(3);
-		check(server.computeOnServer(s -> s.overworld().getBlockState(new net.minecraft.core.BlockPos(600, -60, 0)).getValue(dev.fluidgore.cobbletank.TankBlock.LIT)),
+		check(server.computeOnServer(s -> s.overworld().getBlockState(new net.minecraft.core.BlockPos(600, -60, 0)).getValue(dev.cobbletank.TankBlock.LIT)),
 				"redstone did not light the tank");
-		context.waitTicks(dev.fluidgore.cobbletank.TankBlock.FUSE + 4);
+		context.waitTicks(dev.cobbletank.TankBlock.FUSE + 4);
 		context.takeScreenshot("tank_01_burst");
 		boolean shredded = context.computeOnClient(mc -> GoreSystems.dismemberment().vaporized(nearCow));
 		float hearing = context.computeOnClient(mc -> GoreSystems.injuries().hearing(net.minecraft.sounds.SoundSource.BLOCKS));
@@ -8189,7 +8723,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			context.waitTicks(1);
 			flown = Math.max(flown, server.computeOnServer(s -> {
 				double most = -1.0;
-				for (Entity e : s.overworld().getEntities(dev.fluidgore.cobbletank.CobbleTank.ENTITY,
+				for (Entity e : s.overworld().getEntities(dev.cobbletank.CobbleTank.ENTITY,
 						x -> x.position().distanceTo(new net.minecraft.world.phys.Vec3(620.5, -60, -19.5)) > 2.0)) {
 					most = Math.max(most, e.position().distanceTo(new net.minecraft.world.phys.Vec3(610.5, -60, -19.5)));
 				}
@@ -8200,10 +8734,10 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 
 		context.takeScreenshot("tank_03_leaks");
 		float pinhole = server.computeOnServer(s -> s.overworld().getBlockEntity(new net.minecraft.core.BlockPos(600, -60, -20))
-				instanceof dev.fluidgore.cobbletank.TankBlockEntity t ? t.state().fraction : -1.0F);
+				instanceof dev.cobbletank.TankBlockEntity t ? t.state().fraction : -1.0F);
 		String cracked = blockAt(server, 610, -60, -20);
 		String pressed = blockAt(server, 620, -60, -20);
-		boolean pressedFlew = server.computeOnServer(s -> !s.overworld().getEntities(dev.fluidgore.cobbletank.CobbleTank.ENTITY,
+		boolean pressedFlew = server.computeOnServer(s -> !s.overworld().getEntities(dev.cobbletank.CobbleTank.ENTITY,
 				e -> e.position().distanceTo(new net.minecraft.world.phys.Vec3(620.5, -60, -19.5)) < 6.0).isEmpty());
 		System.out.println("[FluidGoreTest] tank: pinhole pressure after 2 s " + pinhole + "; cracked tank block now " + cracked + ", flown " + flown
 				+ " m; struck from above: block " + pressed + ", flew " + pressedFlew);

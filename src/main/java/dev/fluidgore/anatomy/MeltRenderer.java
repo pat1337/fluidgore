@@ -844,9 +844,22 @@ public final class MeltRenderer {
 		float hz = region.hingeZ * SCALE[2] + OFFSET[2];
 		float cos = Mth.cos(jaw);
 		float sin = Mth.sin(jaw);
+		// A beast's table carries its own skin, fat and muscle out to the cube's faces. The shell above draws those layers as
+		// they burn, so here the skin and the fat under it are left out and the lean is cut back to below the shell's meat.
+		float[] cubeLo = region.min(left, turned);
+		float[] cubeHi = region.max(left, turned);
+		float inset = muscleDepth(region) + MEAT_DEPTH;
 		for (int n = 0; n < pieces.length; n++) {
 			Piece piece = pieces[n];
 			Kind kind = lean(piece.kind());
+			if (beast != null && (kind == Kind.DERMIS || piece.name().equals("subcutaneous_fat"))) {
+				continue;
+			}
+
+			boolean underShell = beast != null && kind == beast.lean;
+			if (underShell && !clipsInside(piece, cubeLo, cubeHi, inset)) {
+				continue;
+			}
 			int tile = kind.tile;
 			int tint = 0xFFFFFF;
 			float size = 1.0F;
@@ -903,8 +916,10 @@ public final class MeltRenderer {
 
 			for (int i = 0; i < 3; i++) {
 				float pushed = i == outAxis && (kind == Kind.INTESTINE || kind == Kind.COLON) ? outSign * bulge : 0.0F;
-				float lo = (piece.min(i) + pushed) * SCALE[i] + OFFSET[i];
-				float hi = (piece.max(i) + pushed) * SCALE[i] + OFFSET[i];
+				float c0 = underShell ? Math.max(piece.min(i), cubeLo[i] + inset) : piece.min(i);
+				float c1 = underShell ? Math.min(piece.max(i), cubeHi[i] - inset) : piece.max(i);
+				float lo = (c0 + pushed) * SCALE[i] + OFFSET[i];
+				float hi = (c1 + pushed) * SCALE[i] + OFFSET[i];
 				if (lo > hi) {
 					float swap = lo;
 					lo = hi;
@@ -925,6 +940,17 @@ public final class MeltRenderer {
 
 			box(flesh, pose, part, BOX[OUT], tile, tint, piece.texels(), n, piece.jaw() && jaw > 0.0F, hy, hz, cos, sin, light, overlay);
 		}
+	}
+
+	/** Whether any of {@code piece} lies deeper than {@code inset} inside the cube from {@code lo} to {@code hi}. */
+	private static boolean clipsInside(Piece piece, float[] lo, float[] hi, float inset) {
+		for (int i = 0; i < 3; i++) {
+			if (Math.min(piece.max(i), hi[i] - inset) <= Math.max(piece.min(i), lo[i] + inset)) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	/** A solid block: six faces, each a window onto its tile at {@code texels} per pixel, turned on the jaw if it hangs on it. */

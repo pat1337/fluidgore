@@ -70,19 +70,6 @@ public final class GenerateTextures {
 		}
 
 		ImageIO.write(icon(), "png", new File(root, "icon.png"));
-
-		// The Cobble Tank add-on's textures, in its own assets (by default beside Fluid Gore's source set, in src/tank).
-		File tankRoot = new File(args.length > 1 ? args[1] : new File(root, "../../../../tank/resources/assets/cobbletank").getPath());
-		File tankBlock = new File(tankRoot, "textures/block");
-		if (!tankBlock.isDirectory() && !tankBlock.mkdirs()) {
-			throw new IOException("Cannot create " + tankBlock);
-		}
-
-		for (int stage = 1; stage <= 3; stage++) {
-			ImageIO.write(scars(stage), "png", new File(tankBlock, "cobble_tank_scars_" + stage + ".png"));
-		}
-
-		ImageIO.write(tankIcon(), "png", new File(tankRoot, "icon.png"));
 		System.out.println("Wrote textures to " + root.getAbsolutePath());
 	}
 
@@ -1263,114 +1250,6 @@ public final class GenerateTextures {
 	 * little. Top row, four dry feathers: full, soft vanes and down at the foot. Bottom row, the same four wet (with blood
 	 * or water): the vanes clumped into a few thin strands. All white/grey; the game tints them.
 	 */
-	/**
-	 * The Cobble Tank's scars, laid over each face (16x16, clear where untouched). Stage 1: bright scratches through the
-	 * stone to the metal, each with a dark lip. Stage 2 adds more and chips knocked out. Stage 3 adds a gouge across the
-	 * face down to the black weave of the carbon overwrap. Same seed for every stage, so each keeps the last one's marks.
-	 */
-	/**
-	 * The Cobble Tank's mod icon: the tank as it sits in the world, 16 pixels upscaled to 128 so the pixels match a
-	 * block's. A black carbon-fibre body in a two-tone weave, two iron bands, a copper fitting on top and a scratch.
-	 */
-	private static BufferedImage tankIcon() {
-		int[][] px = new int[16][16];
-		for (int y = 3; y < 15; y++) {
-			for (int x = 3; x < 13; x++) {
-				// The weave: alternating 2x2 cells, the left side lit, the right side in shade.
-				boolean weave = ((x / 2) + (y / 2)) % 2 == 0;
-				int base = weave ? 34 : 24;
-				int light = x < 6 ? 12 : x > 10 ? -8 : 0;
-				int v = base + light;
-				px[y][x] = argb(255, v, v, v + 3);
-			}
-		}
-
-		for (int band : new int[] {5, 12}) {
-			for (int x = 3; x < 13; x++) {
-				int v = x < 6 ? 214 : x > 10 ? 150 : 186;
-				px[band][x] = argb(255, v, v, v);
-			}
-		}
-
-		// The copper fitting and its valve stem.
-		for (int y = 1; y < 3; y++) {
-			for (int x = 6; x < 10; x++) {
-				px[y][x] = x < 8 ? argb(255, 226, 124, 84) : argb(255, 176, 88, 58);
-			}
-		}
-
-		px[0][7] = argb(255, 238, 150, 104);
-		px[0][8] = argb(255, 190, 100, 66);
-		// A bright scratch through the fibre.
-		px[8][5] = px[9][6] = px[9][7] = argb(255, 200, 200, 206);
-		BufferedImage image = new BufferedImage(128, 128, BufferedImage.TYPE_INT_ARGB);
-		for (int y = 0; y < 128; y++) {
-			for (int x = 0; x < 128; x++) {
-				image.setRGB(x, y, px[y / 8][x / 8]);
-			}
-		}
-
-		return image;
-	}
-
-	private static BufferedImage scars(int stage) {
-		BufferedImage image = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
-		Random random = new Random(12_000);
-		int scratches = stage == 1 ? 3 : stage == 2 ? 7 : 10;
-		for (int i = 0; i < 10; i++) {
-			int x = 1 + random.nextInt(13);
-			int y = 1 + random.nextInt(13);
-			int dx = random.nextBoolean() ? 1 : -1;
-			int length = 3 + random.nextInt(5);
-			if (i >= scratches) {
-				continue;
-			}
-
-			for (int s = 0; s < length; s++) {
-				int px = x + s * dx;
-				int py = y + s / 2;
-				if (px < 0 || px > 15 || py < 0 || py > 14) {
-					break;
-				}
-
-				int shine = 190 + random.nextInt(50);
-				image.setRGB(px, py, argb(255, shine, shine, shine + 6));
-				if ((image.getRGB(px, py + 1) >>> 24) == 0) {
-					image.setRGB(px, py + 1, argb(255, 52, 52, 54));
-				}
-			}
-		}
-
-		if (stage >= 2) {
-			Random chips = new Random(12_100);
-			for (int i = 0; i < 3; i++) {
-				int x = 2 + chips.nextInt(11);
-				int y = 2 + chips.nextInt(11);
-				for (int cx = 0; cx < 2; cx++) {
-					for (int cy = 0; cy < 2; cy++) {
-						image.setRGB(x + cx, y + cy, argb(255, 34 + chips.nextInt(12), 34, 36));
-					}
-				}
-
-				image.setRGB(x - 1, y, argb(255, 150, 150, 152));
-				image.setRGB(x, y - 1, argb(255, 170, 170, 172));
-			}
-		}
-
-		if (stage >= 3) {
-			// A gouge from one edge across: grey metal lips, the carbon weave showing between them.
-			for (int x = 0; x < 16; x++) {
-				int y = 7 + (int) Math.round(Math.sin(x * 0.6) * 1.5);
-				image.setRGB(x, y - 1, argb(255, 205, 205, 210));
-				image.setRGB(x, y, ((x + y) & 1) == 0 ? argb(255, 18, 18, 20) : argb(255, 46, 46, 52));
-				image.setRGB(x, y + 1, ((x + y) & 1) == 0 ? argb(255, 46, 46, 52) : argb(255, 18, 18, 20));
-				image.setRGB(x, y + 2, argb(255, 70, 70, 72));
-			}
-		}
-
-		return image;
-	}
-
 	private static int argb(int a, int r, int g, int b) {
 		return a << 24 | r << 16 | g << 8 | b;
 	}

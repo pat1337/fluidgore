@@ -14,7 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.UUID;
+import java.util.Set;
 import java.util.function.Predicate;
 import javax.imageio.ImageIO;
 
@@ -44,18 +44,180 @@ import javax.imageio.ImageIO;
  * <p>The anatomy follows Cornell's bovine website and standard veterinary sources (see the generated README);
  * proportions are modelled, not measured, and the file records which features are sourced and which are simplified.
  */
-public final class CowAnatomyModels {
-	/** The voxel edge being cut, in cm. Thin parts are thickened to at least about one voxel so they never vanish. */
-	private static double VOX = 1.0;
-	/** The least radius of a thin part, in voxels: enough to light one voxel centre, more at the mod's coarse grain. */
-	private static double THIN = 0.55;
-	/** How far past a shape its box reaches: past the thickening of thin parts at the coarsest grain. */
-	private static final double PAD = 4.0;
+public final class CowAnatomyModels extends Quadruped {
 	/** The height of the middle of the trunk, in cm: between the breastbone and the back. */
 	private static final double YC = 38.0;
-	private static final List<Part> PARTS = new ArrayList<>();
+
+	// What the shared kit leaves to each generator: the cow's body plan, fine parts, output frame and anatomy.png tiles.
+	static {
+		BODY = cow();
+		FINE = Set.of("disc", "median_sacral_crest", "spine_of_scapula", "renal_vein", "renal_artery",
+				"ureter", "right_ureter", "left_ureter", "urethra", "brachiocephalic_trunk", "left_pulmonary_artery", "right_pulmonary_artery",
+				"cranial_vena_cava", "caudal_vena_cava", "thoracic_caudal_vena_cava", "abdominal_caudal_vena_cava", "portal_vein",
+				"hepatic_caudal_vena_cava", "tracheal_bronchus", "left_principal_bronchus", "right_principal_bronchus", "scapular_cartilage",
+				"flexor_tendon", "achilles_tendon", "sesamoid", "dewclaws", "bile_duct", "hepatic_vessel", "chordae_tendineae", "papillary_muscle",
+				"bronchus_branch", "teat", "median_suspensory_ligament");
+		FRAME = (g, i, j, k) -> cmAt(g.wx(i), g.wy(j), g.wz(k));
+		TILE_OF = CowAnatomyModels::tile;
+	}
 
 	private CowAnatomyModels() {
+	}
+
+	/**
+	 * The frame every organ is sculpted in: centimetres, +x the cow's right, +y up from the floor of the belly, -z towards
+	 * the head, so in Blockbench the cow faces north. The animal is an adult, non-pregnant dairy-type cow of about 550 kg:
+	 * the trunk is about 160 cm from the chest's entrance to the pelvis, 72 cm deep from the breastbone to the back, and
+	 * 50 cm wide at the barrel (veterinary proportions; nothing here is measured from a particular animal). The legs are
+	 * sculpted below the belly floor (y &lt; 0) and the neck and skull in front of the chest (z &lt; -80).
+	 *
+	 * <p>Where a feature is uncertain at this resolution it is simplified deliberately and said so in the generated
+	 * README; the shapes are meant to read correctly at a glance, not to be measured.
+	 *
+	 * <p>These are its measurements for the shared {@link Quadruped} body plan (vertebral formula C7 T13 L6, the first eight tail vertebrae).
+	 */
+	static Body cow() {
+		Body b = new Body();
+		b.yc = YC;
+		// The trunk: narrow at the chest's entrance, a deep barrel behind narrowing again at the pelvis; the breastbone rising
+		// steeply to the entrance of the chest; the withers high over the forelegs, the loin level, the sacrum falling to the tail.
+		b.halfWidth = new double[] {-80, 7.0, -74, 11.5, -66, 16.5, -56, 21.0, -44, 23.8, -30, 25.2, -12, 25.8, 6, 25.9, 24, 25.4, 42, 24.0, 56, 21.5, 68, 16.5,
+				78, 10.0};
+		b.sternum = new double[] {-80, 26.0, -74, 19.5, -66, 12.0, -56, 7.5, -44, 4.6, -30, 3.0, -12, 2.3, 8, 2.0, 30, 2.2, 52, 3.0, 68, 5.0};
+		b.spine = new double[] {-80, 66.5, -72, 71.0, -60, 73.5, -44, 75.0, -24, 74.2, -4, 74.8, 18, 75.8, 38, 75.6, 52, 73.8, 66, 70.5, 80, 65.0, 90, 57.0};
+		// The neck carried forward, level with the withers at its root and a little lower at the skull.
+		b.neck = new double[] {-140, 58.0, -128, 62.0, -114, 66.5, -100, 70.0, -88, 73.0, -80, 74.5};
+		b.bone = bone();
+		b.neckBone = bone();
+		b.joint = organic(0xEEEAE0, 0xDAD3C4, 0xF8F6F0, 0.7, 143);
+		b.cartilage = organic(0xC9D3CF, 0xAAB8B4, 0xE1E8E4, 0.65, 144);
+		b.disc = organic(0xD8D0C0, 0xC4B9A4, 0xE6E0D2, 0.65, 145);
+
+		b.thoracicZ = -78;
+		b.thoracicStep = 6.0;
+		b.thoracicHalf = 2.6;
+		b.thoracicRx = 3.0;
+		b.thoracicRy = 2.8;
+		b.thoracicDiscEnd = 3.6;
+		b.thoracicDiscR = 2.8;
+		b.withers = new double[] {13.5, 18.5, 21.0, 20.5, 18.5, 16.0, 13.5, 11.5, 10.0, 9.0, 8.2, 7.6, 7.2};
+		b.thoracicSpinous = new double[] {2.2, 1.7, 0.65, 2.6, 0.3, 1.4, 0.6, 1.3, 0.85};
+
+		b.lumbarZ = 6.0;
+		b.lumbarStep = 8.5;
+		b.lumbarHalf = 3.6;
+		b.lumbarRx = 3.4;
+		b.lumbarRy = 3.0;
+		b.lumbarDiscEnd = 4.8;
+		b.lumbarDiscR = 3.1;
+		b.lumbarSpinous = new double[][] {{0, 2.6, 0, 2.6, 0.65}, {0, 10.5, -0.9, 2.2, 0.75}};
+		b.transverse = new double[] {13.0, 15.5, 17.5, 18.0, 16.5, 14.5};
+		b.transverseShape = new double[] {3.0, -0.5, 2.0, 0.65, -0.9, -0.5, 1.6, 0.55, -2.2, -1.8, 1.5, 0.65};
+
+		// The five fused sacral vertebrae. A cow's tail has eighteen to twenty; the first eight are drawn.
+		b.sacrum = new double[][] {{0, 74.4, 48.0, 3.8, 2.7}, {0, 72.5, 60, 3.1, 2.3}, {0, 69.5, 72, 2.4, 1.8}};
+		b.sacralCrest = new double[][] {{0, 77.2, 50.0, 0.8}, {0, 79.0, 58, 0.8}, {0, 75.5, 68, 0.8}};
+		b.sacralWing = new double[] {1.2, 75.0, 47.5, 9.6, 75.5, 49.5, 2.8, 73.5, 57.5};
+		b.sacralWingHalf = 1.3;
+		b.tail = new double[] {74.0, 78.6, 82.8, 86.6, 90.0, 93.0, 95.6, 97.8};
+		b.tailHalf = 1.8;
+		b.tailR = 2.1;
+		b.tailTaper = 0.18;
+
+		b.sternalRibs = new double[] {-75.5, -69.5, -63.5, -57.5, -51.5, -45.5, -39.5, -33.5};
+		b.manubriumZ = -78.0;
+		b.sternebraGap = 0.9;
+		b.sternebraLift = 1.8;
+		b.sternebraR = new double[] {2.9, 1.8, 3.0, 1.9};
+		b.xiphoidRoot = new double[] {-33.2, 1.3, 2.5, 0.7};
+		b.xiphoid = new double[][] {{0, 5.2, -26, 3.2, 0.6}, {0, 4.8, -17, 3.6, 0.6}};
+
+		b.ribHead = new double[] {3.2, -0.7, 1.15, 1.0};
+		b.firstRibSlope = 3.2;
+		b.ribSlope = 6.6;
+		b.ribSlopePerRib = 0.9;
+		b.ribJunctionFirst = 21.0;
+		b.ribJunctionSternal = 11.5;
+		b.ribJunctionAsternal = 13.5;
+		b.ribJunctionPerRib = 3.2;
+		b.ribJunctionFloating = 34.0;
+		b.ribArcInset = 0.7;
+		b.ribArcTop = 28.5;
+		b.ribMinX = 4.8;
+		b.ribInset = 1.3;
+		b.ribWidth = new double[] {1.25, 0.55, 0.01};
+		b.ribThickness = 0.95;
+		b.ribLod = 4;
+		b.sternalCartilage = new double[] {2.2, 1.5};
+		b.asternalBend = new double[] {1.3, 1.1};
+		b.floatingTip = new double[] {3.1, 0.7, 5.7, 0.9};
+		b.cartilageR = new double[] {1.15, 0.85, 1.05, 0.8, 0.95, 0.75};
+
+		b.glenoid = new double[] {22.5, 36.0, -68.5, 2.8, 3.2, 3.4};
+		b.blade = new double[] {22.5, 39.0, -67.0, 20.0, 70.5, -59.5, 20.5, 68.0, -41.5};
+		b.bladeHalf = 0.85;
+		b.scapularSpine = new double[][] {{24.2, 42.5, -65.0, 1.1}, {24.6, 58.0, -56.0, 0.95}, {23.5, 69.5, -50.5, 0.7}};
+		b.scapularCartilage = new double[][] {{19.6, 72.5, -61.0, 2.5, 0.7}, {19.8, 73.0, -51.5, 3.0, 0.7}, {20.0, 70.5, -41.0, 2.3, 0.7}};
+
+		b.iliumWing = new double[] {25.5, 65.5, 50.5, 6.5, 70.0, 57.0, 13.5, 58.5, 65.5};
+		b.iliumHalf = 1.1;
+		b.iliumShaft = new double[][] {{13.5, 58.5, 65.5, 2.4}, {14.5, 45.5, 73.5, 2.0}};
+		b.acetabulum = new double[] {16.5, 43.5, 76.5, 3.5, 3.8, 3.8};
+		b.acetabularFossa = new double[] {20.5, 43.5, 76.5, 2.8};
+		b.pubis = new double[] {14.5, 41.5, 74.5, 0, 38.5, 75.0, 0, 38.5, 81.5};
+		b.ischium = new double[] {15.0, 42.5, 80.0, 13.0, 51.5, 101.0, 0, 39.0, 96.5, 0, 38.5, 88.0};
+		b.pelvisHalf = 1.1;
+		b.ischiumBlend = 0.5;
+		b.obturator = new double[] {7.5, 44.5, 88.5, 4.2, 2.6, 6.5};
+
+		b.cervical = new double[] {-134.0, -126.5, -118.5, -110.5, -102.5, -94.5, -86.5};
+		b.cervicalHalf = 3.4;
+		b.cervicalRx = 3.1;
+		b.cervicalRy = 2.9;
+		b.cervicalSpinous = new double[] {2.3, 1.0, 1.4, 0.6, 7.2, 3.6, 4.4, 2.1, 1.1, 0.6};
+		b.cervicalWings = new double[] {9.0, 5.6, 3.5};
+		b.cervicalThick = new double[] {2.1, 0.85};
+		b.cervicalWingShape = new double[] {2.5, -0.2, 1.6, -0.4, -0.6, 1.1, 2.4};
+
+		double[] down = {0, 0, 1};
+		b.horn = organic(0x3A3229, 0x2A241D, 0x55493C, 0.9, 146);
+		b.coffinBone = cutBone();
+		// The ulna lies behind the radius and is laid down first: a ruminant's two forearm bones fuse but the ulna's
+		// point of the elbow still has to survive the coarse game grain beside its bigger neighbour.
+		b.fore = new Limb("forelimb", new Bone[] {
+				tubeBone("humerus", BONE, null, v(21.5, 35.0, -67.5, 2.5, 2.2), v(19.5, 22.0, -58.5, 2.6, 2.3), v(18.5, 12.5, -52.5, 2.3, 2.0)),
+				tubeBone("point_of_elbow", BONE, down, v(18.5, 12.5, -52.5, 2.2, 1.5), v(18.0, 5.0, -50.5, 2.0, 1.4)),
+				tubeBone("ulna", BONE, null, v(18.2, 6.0, -49.2, 1.6, 1.3), v(17.2, -18.0, -48.9, 1.35, 1.1), v(16.8, -34.0, -48.9, 1.15, 0.95)),
+				tubeBone("radius", BONE, null, v(18.0, 8.0, -51.5, 2.4, 2.0), v(16.5, -22.0, -51.0, 2.2, 1.8), v(16.0, -38.5, -51.0, 2.0, 1.6)),
+				ellBone("knee_carpus", JOINT, 16.0, -42.5, -51.0, 2.6, 2.9, 2.4),
+				tubeBone("cannon_bone", BONE, down, v(15.6, -45.0, -51.2, 1.75, 1.45), v(15.2, -58.0, -51.4, 1.6, 1.35), v(15.0, -62.5, -51.5, 1.7, 1.4)),
+				tubeBone("flexor_tendon", CARTILAGE, null, v(15.0, -46.5, -49.4, 0.85), v(14.8, -59.5, -49.2, 0.8)),
+				ellBone("fetlock", JOINT, 15.0, -64.5, -51.5, 2.2, 1.9, 2.0)},
+				15.0, new Bone[] {
+				tubeBone("proximal_phalanx", BONE, null, v(1.35, -66.5, -51.5, -0.5, 1.15, 1.0), v(1.5, -70.5, -52.5, -0.7, 1.05, 0.95)),
+				tubeBone("middle_phalanx", BONE, null, v(1.5, -70.5, -52.5, -0.7, 1.05, 0.95), v(1.6, -73.5, -53.5, -0.8, 1.0, 0.9)),
+				new Bone("distal_phalanx", COFFIN, null, false, true, new double[][] {{1.65, -75.0, -54.0, -0.9, 1.0, 0.95, 1.25}}),
+				new Bone("hoof", HORN, down, true, false, new double[][] {{1.7, -74.5, -53.8, -0.9, 1.6, 1.5}, {1.8, -78.5, -54.6, -1.0, 1.85, 1.7}}),
+				new Bone("sesamoid", BONE, null, false, true, new double[][] {{1.15, -63.5, -49.6, 0, 0.75, 0.75, 0.75}})},
+				new Bone[] {ellBone("dewclaws", BONE, 15.1, -61.0, -48.6, 0.85, 1.35, 0.85)});
+		b.hind = new Limb("hindlimb", new Bone[] {
+				tubeBone("femur", BONE, null, v(16.5, 43.5, 76.5, 2.7, 2.4), v(15.0, 27.0, 66.5, 2.7, 2.4), v(13.5, 14.5, 58.5, 2.5, 2.2)),
+				ellBone("kneecap", BONE, 12.5, 12.5, 54.5, 1.7, 2.3, 1.3),
+				tubeBone("tibia", BONE, null, v(13.5, 10.5, 57.5, 2.5, 2.1), v(13.5, -18.0, 55.5, 2.3, 1.9), v(13.2, -34.5, 54.5, 2.1, 1.7)),
+				tubeBone("achilles_tendon", CARTILAGE, null, v(13.2, -12.0, 57.5, 1.0), v(13.0, -38.0, 58.0, 0.9)),
+				tubeBone("point_of_hock", BONE, null, v(13.0, -38.0, 58.5, 1.9, 1.5), v(13.0, -46.5, 60.5, 1.7, 1.35)),
+				ellBone("hock_tarsus", JOINT, 13.0, -44.0, 55.0, 2.6, 2.9, 2.4),
+				tubeBone("cannon_bone", BONE, down, v(12.8, -46.5, 55.2, 1.75, 1.45), v(12.5, -58.0, 55.0, 1.6, 1.35), v(12.4, -62.5, 55.0, 1.7, 1.4)),
+				tubeBone("flexor_tendon", CARTILAGE, null, v(12.4, -48.0, 57.0, 0.85), v(12.2, -59.5, 57.2, 0.8)),
+				ellBone("fetlock", JOINT, 12.4, -64.5, 55.0, 2.2, 1.9, 2.0)},
+				12.4, new Bone[] {
+				tubeBone("proximal_phalanx", BONE, null, v(1.35, -66.5, 55.0, 0.5, 1.15, 1.0), v(1.5, -70.5, 54.0, 0.7, 1.05, 0.95)),
+				tubeBone("middle_phalanx", BONE, null, v(1.5, -70.5, 54.0, 0.7, 1.05, 0.95), v(1.6, -73.5, 53.0, 0.8, 1.0, 0.9)),
+				new Bone("distal_phalanx", COFFIN, null, false, true, new double[][] {{1.65, -75.0, 52.5, 0.9, 1.0, 0.95, 1.25}}),
+				new Bone("hoof", HORN, down, true, false, new double[][] {{1.7, -74.5, 52.8, 0.9, 1.6, 1.5}, {1.8, -78.5, 52.0, 1.0, 1.85, 1.7}}),
+				new Bone("sesamoid", BONE, null, false, true, new double[][] {{1.15, -63.5, 57.0, 0, 0.75, 0.75, 0.75}})},
+				new Bone[] {ellBone("dewclaws", BONE, 12.5, -61.0, 58.0, 0.85, 1.35, 0.85)});
+		return b;
 	}
 
 	public static void main(String[] args) throws IOException {
@@ -281,7 +443,7 @@ public final class CowAnatomyModels {
 		for (int i = 0; i < g.nx; i++) {
 			for (int j = 0; j < g.ny; j++) {
 				for (int k = 0; k < g.nz; k++) {
-					double[] c = g.cm(i, j, k);
+					double[] c = FRAME.cm(g, i, j, k);
 					if (c == null) {
 						continue;
 					}
@@ -367,38 +529,6 @@ public final class CowAnatomyModels {
 	// ------------------------------------------------------------------------------------------------ the body frame
 
 	/**
-	 * The frame every organ is sculpted in: centimetres, +x the cow's right, +y up from the floor of the belly, -z towards
-	 * the head, so in Blockbench the cow faces north. The animal is an adult, non-pregnant dairy-type cow of about 550 kg:
-	 * the trunk is about 160 cm from the chest's entrance to the pelvis, 72 cm deep from the breastbone to the back, and
-	 * 50 cm wide at the barrel (veterinary proportions; nothing here is measured from a particular animal). The legs are
-	 * sculpted below the belly floor (y &lt; 0) and the neck and skull in front of the chest (z &lt; -80).
-	 *
-	 * <p>Where a feature is uncertain at this resolution it is simplified deliberately and said so in the generated
-	 * README; the shapes are meant to read correctly at a glance, not to be measured.
-	 */
-
-	/** The half width of the trunk: narrow at the chest's entrance between the forelegs, a deep barrel behind, narrowing again at the pelvis. */
-	static double halfWidth(double z) {
-		return curve(z, -80, 7.0, -74, 11.5, -66, 16.5, -56, 21.0, -44, 23.8, -30, 25.2, -12, 25.8, 6, 25.9, 24, 25.4, 42, 24.0, 56, 21.5, 68, 16.5,
-				78, 10.0);
-	}
-
-	/** The height of the breastbone, rising steeply towards the entrance of the chest. */
-	static double sternumY(double z) {
-		return curve(z, -80, 26.0, -74, 19.5, -66, 12.0, -56, 7.5, -44, 4.6, -30, 3.0, -12, 2.3, 8, 2.0, 30, 2.2, 52, 3.0, 68, 5.0);
-	}
-
-	/** The height of the middle of the vertebral bodies: the withers high over the forelegs, the loin level, the sacrum falling away to the tail. */
-	static double spineY(double z) {
-		return curve(z, -80, 66.5, -72, 71.0, -60, 73.5, -44, 75.0, -24, 74.2, -4, 74.8, 18, 75.8, 38, 75.6, 52, 73.8, 66, 70.5, 80, 65.0, 90, 57.0);
-	}
-
-	/** The height of the middle of the cervical vertebral bodies: the neck carried forward, level with the withers at its root and a little lower at the skull. */
-	static double neckY(double z) {
-		return curve(z, -140, 58.0, -128, 62.0, -114, 66.5, -100, 70.0, -88, 73.0, -80, 74.5);
-	}
-
-	/**
 	 * Where the diaphragm crosses (x, y): a dome bulging forward into the chest, its top under the 8th-9th rib, its edge
 	 * sloping back so it meets the spine far behind where it meets the breastbone. The right cupula stands a little
 	 * further forward than the left, which the rumen leans on.
@@ -406,22 +536,6 @@ public final class CowAnatomyModels {
 	static double diaphragmZ(double x, double y) {
 		double ry = y < YC ? sq((y - YC) / 24.0) * 8.0 : sq((y - YC) / 30.0) * 9.0;
 		return -30.0 + 0.45 * (y - YC) + ry + 16.0 * sq(x / 26.0) - 2.5 * (x / 26.0);
-	}
-
-	/** Piecewise linear through (x, y) pairs, flat beyond the ends. */
-	static double curve(double x, double... xy) {
-		if (x <= xy[0]) {
-			return xy[1];
-		}
-
-		for (int i = 2; i < xy.length; i += 2) {
-			if (x <= xy[i]) {
-				double t = (x - xy[i - 2]) / (xy[i] - xy[i - 2]);
-				return xy[i - 1] + (xy[i + 1] - xy[i - 1]) * t;
-			}
-		}
-
-		return xy[xy.length - 1];
 	}
 
 	// --------------------------------------------------------------------------------------------------- the anatomy
@@ -1390,97 +1504,7 @@ public final class CowAnatomyModels {
 		part("thorax/lungs/state_opened/section", "cut_surface", flesh, section);
 	}
 
-	/**
-	 * The trunk's bones: seven cervical vertebrae, thirteen thoracic with the tall spines of the withers, six lumbar
-	 * with their long flat transverse processes, the five fused sacral and the root of the tail (a cow's tail has
-	 * eighteen to twenty caudal vertebrae; the first eight are drawn and the rest simplified away). Thirteen pairs of
-	 * ribs, the first eight joined to the breastbone by costal cartilage, the next four by the cartilage of the costal
-	 * arch, the last floating. Seven sternebrae and the xiphoid; the shoulder blades on the chest wall; the pelvis with
-	 * its obturator foramen. (Cow vertebral formula C7 T13 L6 S5 Cd18-20.)
-	 */
-	private static void skeleton() {
-		Mat bone = bone();
-		Mat joint = organic(0xEEEAE0, 0xDAD3C4, 0xF8F6F0, 0.7, 143);
-		Mat cartilage = organic(0xC9D3CF, 0xAAB8B4, 0xE1E8E4, 0.65, 144);
-		Mat disc = organic(0xD8D0C0, 0xC4B9A4, 0xE6E0D2, 0.65, 145);
-		double[] spine = {13.5, 18.5, 21.0, 20.5, 18.5, 16.0, 13.5, 11.5, 10.0, 9.0, 8.2, 7.6, 7.2};
-		for (int i = 1; i <= 13; i++) {
-			double z = -78 + 6.0 * (i - 1);
-			double y = spineY(z);
-			String g = String.format(Locale.ROOT, "skeleton/spine/thoracic/T%02d", i);
-			part(g, "body", bone, tube().p(0, y, z - 2.6, 3.0, 2.8).p(0, spineY(z + 2.6), z + 2.6, 3.0, 2.8).flat(true, true).build());
-			part(g, "disc", disc, tube().p(0, spineY(z + 2.6), z + 2.6, 2.8).p(0, spineY(z + 3.6), z + 3.6, 2.8).flat(true, true).build());
-			double h = spine[i - 1];
-			part(g, "spinous_process", bone, tube().up((a, b, c) -> new double[] {1, 0, 0})
-					.p(0, y + 2.2, z, 1.7, 0.65).p(0, y + 2.6 + h * 0.6, z + 0.3 * h * 0.6, 1.4, 0.6).p(0, y + 2.6 + h, z + 0.3 * h, 1.3, 0.85).build());
-		}
-
-		double[] transverse = {13.0, 15.5, 17.5, 18.0, 16.5, 14.5};
-		for (int i = 1; i <= 6; i++) {
-			double z = 6.0 + 8.5 * (i - 1);
-			double y = spineY(z);
-			String g = String.format(Locale.ROOT, "skeleton/spine/lumbar/L%02d", i);
-			part(g, "body", bone, tube().p(0, spineY(z - 3.6), z - 3.6, 3.4, 3.0).p(0, spineY(z + 3.6), z + 3.6, 3.4, 3.0).flat(true, true).build());
-			if (i < 6) {
-				part(g, "disc", disc, tube().p(0, spineY(z + 3.6), z + 3.6, 3.1).p(0, spineY(z + 4.8), z + 4.8, 3.1).flat(true, true).build());
-			}
-
-			part(g, "spinous_process", bone, tube().up((a, b, c) -> new double[] {1, 0, 0})
-					.p(0, y + 2.6, z, 2.6, 0.65).p(0, y + 10.5, z - 0.9, 2.2, 0.75).build());
-			double reach = transverse[i - 1];
-			for (int s = -1; s <= 1; s += 2) {
-				part(g, s > 0 ? "right_transverse_process" : "left_transverse_process", bone, tube().up((a, b, c) -> new double[] {0, 1, 0})
-						.p(s * 3.0, y - 0.5, z, 2.0, 0.65).p(s * reach * 0.55, y - 0.9, z - 0.5, 1.6, 0.55).p(s * reach, y - 2.2, z - 1.8, 1.5, 0.65).build());
-			}
-		}
-
-		part("skeleton/spine/sacrum", "sacrum", bone, tube().p(0, 74.4, 48.0, 3.8, 2.7).p(0, 72.5, 60, 3.1, 2.3).p(0, 69.5, 72, 2.4, 1.8)
-				.up((a, b, c) -> new double[] {0, 1, 0}).build());
-		part("skeleton/spine/sacrum", "median_sacral_crest", bone, tube().p(0, 77.2, 50.0, 0.8).p(0, 79.0, 58, 0.8).p(0, 75.5, 68, 0.8).build());
-		for (int s = -1; s <= 1; s += 2) {
-			part("skeleton/spine/sacrum", s > 0 ? "right_wing" : "left_wing", bone, tri(v(s * 1.2, 75.0, 47.5), v(s * 9.6, 75.5, 49.5), v(s * 2.8, 73.5, 57.5), 1.3));
-		}
-
-		double[] tailZ = {74.0, 78.6, 82.8, 86.6, 90.0, 93.0, 95.6, 97.8};
-		for (int i = 0; i < tailZ.length; i++) {
-			double r = 2.1 - 0.18 * i;
-			part(String.format(Locale.ROOT, "skeleton/spine/tail/Cd%02d", i + 1), "body", bone, tube()
-					.p(0, spineY(tailZ[i] - 1.8), tailZ[i] - 1.8, r).p(0, spineY(tailZ[i] + 1.8), tailZ[i] + 1.8, r).build());
-		}
-
-		ribs(bone, cartilage);
-		double[] zs = {-75.5, -69.5, -63.5, -57.5, -51.5, -45.5, -39.5, -33.5};
-		for (int k = 0; k < 7; k++) {
-			double a = (k == 0 ? -78.0 : zs[k]) + 0.9;
-			double b = zs[k + 1] - 0.9;
-			part(String.format(Locale.ROOT, "skeleton/sternum/sternebra_%d", k + 1), "sternebra", bone, tube().up((p, q, r) -> new double[] {0, 1, 0})
-					.p(0, sternumY(a) + 1.8, a, 2.9, 1.8).p(0, sternumY((a + b) / 2) + 1.8, (a + b) / 2, 3.0, 1.9).p(0, sternumY(b) + 1.8, b, 2.9, 1.8)
-					.build());
-		}
-
-		part("skeleton/sternum/xiphoid", "xiphoid_cartilage", cartilage, tube().up((p, q, r) -> new double[] {0, 1, 0})
-				.p(0, sternumY(-33.2) + 1.3, -33.2, 2.5, 0.7).p(0, 5.2, -26, 3.2, 0.6).p(0, 4.8, -17, 3.6, 0.6).build());
-		for (int s = -1; s <= 1; s += 2) {
-			String side = s > 0 ? "right" : "left";
-			String g = "skeleton/shoulder_blades/" + side + "_scapula";
-			part(g, "glenoid", joint, ell(s * 22.5, 36.0, -68.5, 2.8, 3.2, 3.4));
-			part(g, "blade", bone, tri(v(s * 22.5, 39.0, -67.0), v(s * 20.0, 70.5, -59.5), v(s * 20.5, 68.0, -41.5), 0.85));
-			part(g, "spine_of_scapula", bone, tube().p(s * 24.2, 42.5, -65.0, 1.1).p(s * 24.6, 58.0, -56.0, 0.95).p(s * 23.5, 69.5, -50.5, 0.7).build());
-			part(g, "scapular_cartilage", cartilage, tube().up((p, q, r) -> new double[] {1, 0, 0})
-					.p(s * 19.6, 72.5, -61.0, 2.5, 0.7).p(s * 19.8, 73.0, -51.5, 3.0, 0.7).p(s * 20.0, 70.5, -41.0, 2.3, 0.7).build());
-			String pg = "skeleton/pelvis/" + side + "_hip_bone";
-			part(pg, "ilium_wing", bone, tri(v(s * 25.5, 65.5, 50.5), v(s * 6.5, 70.0, 57.0), v(s * 13.5, 58.5, 65.5), 1.1));
-			part(pg, "ilium_shaft", bone, tube().p(s * 13.5, 58.5, 65.5, 2.4).p(s * 14.5, 45.5, 73.5, 2.0).build());
-			part(pg, "acetabulum", joint, cut(ell(s * 16.5, 43.5, 76.5, 3.5, 3.8, 3.8), ell(s * 20.5, 43.5, 76.5, 2.8, 2.8, 2.8)));
-			part(pg, "pubis", bone, tri(v(s * 14.5, 41.5, 74.5), v(0, 38.5, 75.0), v(0, 38.5, 81.5), 1.1));
-			// The ischium's plate with the obturator foramen left open in it.
-			part(pg, "ischium", bone, cut(union(0.5, tri(v(s * 15.0, 42.5, 80.0), v(s * 13.0, 51.5, 101.0), v(0, 39.0, 96.5), 1.1),
-					tri(v(s * 15.0, 42.5, 80.0), v(0, 39.0, 96.5), v(0, 38.5, 88.0), 1.1)),
-					ell(s * 7.5, 44.5, 88.5, 4.2, 2.6, 6.5)));
-		}
-	}
-
-	/** Bone: ivory with a fine grain; a cut face shows the hard cortex round the soft interior (see {@link #cutBone}). */
+	/** Bone: ivory with a fine grain; a cut face shows the hard cortex round the soft interior (see {@link #cutBone()}). */
 	static Mat bone() {
 		return (x, y, z, f, ax, ay, az) -> {
 			int c = mix(0xCFC09F, 0xEDE4CF, noise(x * 0.55, y * 0.55, z * 0.55, 141));
@@ -1488,140 +1512,13 @@ public final class CowAnatomyModels {
 		};
 	}
 
-	/** The ribs, each sweeping out and down from its vertebra and back as it goes, with its costal cartilage. */
-	private static void ribs(Mat bone, Mat cartilage) {
-		double[][] cart = new double[14][];
-		double[] zs = {-75.5, -69.5, -63.5, -57.5, -51.5, -45.5, -39.5, -33.5};
-		for (int s = -1; s <= 1; s += 2) {
-			String side = s > 0 ? "right" : "left";
-			int sign = s;
-			for (int i = 1; i <= 13; i++) {
-				double zh = -78 + 6.0 * (i - 1);
-				double slope = (i == 1 ? 3.2 : 6.6 + 0.9 * i);
-				double yJ = i <= 8 ? (i < 3 ? 21.0 : 11.5) : i < 13 ? 13.5 + (i - 9) * 3.2 : 34.0;
-				double hb = YC - sternumY(zh + slope * 0.75) - 0.7;
-				double phiEnd = Math.asin(clamp((yJ - YC) / hb, -1, 1));
-				Tube rib = tube().up((x, y, z) -> norm(new double[] {x / sq(halfWidth(z)), (y - YC) / sq(y >= YC ? 28.5 : hb), 0}));
-				rib.p(sign * 3.2, spineY(zh) - 0.7, zh, 1.15, 1.0);
-				double[] last = null;
-				int steps = 14;
-				double phi0 = Math.toRadians(78);
-				for (int k = 0; k <= steps; k++) {
-					double phi = phi0 + (phiEnd - phi0) * k / steps;
-					double sp = Math.sin(phi);
-					double zz = zh + slope * (1 - sp) / 2;
-					double y = YC + (sp >= 0 ? 28.5 : hb) * sp;
-					double x = sign * Math.max(4.8, (halfWidth(zz) - 1.3) * Math.cos(phi));
-					double width = 1.25 + 0.55 * Math.sin(Math.PI * k / steps) + 0.01 * i * 10;
-					rib.p(x, y, zz, width, 0.95);
-					last = new double[] {x, y, zz};
-				}
-
-				String g = String.format(Locale.ROOT, "skeleton/ribcage/%s_rib_%02d", side, i);
-				// Coarse grains keep only every second or fourth rib, so a gap still shows between them.
-				boolean kept = (i - 1) % (LOD >= 8 ? 4 : LOD >= 4 ? 2 : 1) == 0;
-				if (kept) {
-					part(g, "rib", bone, rib.build());
-				}
-
-				Tube c = tube().up((x, y, z) -> norm(new double[] {x / sq(halfWidth(z)), (y - YC) / sq(hb), 0}));
-				double[] mid;
-				double[] end;
-				if (i <= 8) {
-					end = new double[] {sign * 2.2, sternumY(zs[i - 1]) + 1.5, zs[i - 1]};
-					mid = new double[] {last[0] * 0.72, last[1] - (last[1] - end[1]) * 0.6, last[2] - (last[2] - end[2]) * 0.3};
-				} else if (i < 13) {
-					double[] pc = cart[i - 1];
-					end = new double[] {pc[0] + (pc[3] - pc[0]) * 0.45, pc[1] + (pc[4] - pc[1]) * 0.45, pc[2] + (pc[5] - pc[2]) * 0.45};
-					mid = new double[] {(last[0] + end[0]) / 2 + sign * 1.3, (last[1] + end[1]) / 2 - 1.1, (last[2] + end[2]) / 2};
-				} else {
-					mid = new double[] {last[0] * 0.95, last[1] - 3.1, last[2] + 0.7};
-					end = new double[] {last[0] * 0.88, last[1] - 5.7, last[2] + 0.9};
-				}
-
-				cart[i] = new double[] {last[0], last[1], last[2], mid[0], mid[1], mid[2]};
-				c.p(last[0], last[1], last[2], 1.15, 0.85).p(mid[0], mid[1], mid[2], 1.05, 0.8).p(end[0], end[1], end[2], 0.95, 0.75);
-				if (kept) {
-					part(g, "costal_cartilage", cartilage, c.build());
-				}
-			}
-		}
-	}
-
-	/**
-	 * The limbs: a forelimb from the shoulder blade's socket down (humerus, the point of the elbow, the radius with the
-	 * ulna fused behind it, the knee = the carpus, the cannon bone = the fused metacarpals of a cloven foot, the
-	 * fetlock, two toes of three phalanges each and a claw of horn per toe), and a hindlimb from the hip (femur, the
-	 * kneecap in front, the tibia, the point of the hock on the Achilles tendon, the hock = the tarsus, the cannon =
-	 * the fused metatarsals, the same two toes). The dewclaws stand behind the fetlock.
-	 */
-	private static void limbs() {
-		Mat bone = bone();
-		Mat joint = organic(0xEEEAE0, 0xDAD3C4, 0xF8F6F0, 0.7, 143);
-		Mat cartilage = organic(0xC9D3CF, 0xAAB8B4, 0xE1E8E4, 0.65, 144);
-		Mat horn = organic(0x3A3229, 0x2A241D, 0x55493C, 0.9, 146);
-		Mat marrow = organic(0xB98A76, 0x9C6E5E, 0xD2AC9A, 1.2, 147);
-		for (int s = -1; s <= 1; s += 2) {
-			String side = s > 0 ? "right" : "left";
-			// The forelimb: the humerus down and back from the shoulder, the radius and ulna down to the knee.
-			String f = "skeleton/limbs/" + side + "_forelimb";
-			part(f, "humerus", bone, tube().p(s * 21.5, 35.0, -67.5, 2.5, 2.2).p(s * 19.5, 22.0, -58.5, 2.6, 2.3).p(s * 18.5, 12.5, -52.5, 2.3, 2.0).build());
-			part(f, "point_of_elbow", bone, tube().up((a, b, c) -> new double[] {0, 0, 1}).p(s * 18.5, 12.5, -52.5, 2.2, 1.5).p(s * 18.0, 5.0, -50.5, 2.0, 1.4).build());
-			// The ulna lies behind the radius and is laid down first: a ruminant's two forearm bones fuse but the ulna's
-			// point of the elbow still has to survive the coarse game grain beside its bigger neighbour.
-			part(f, "ulna", bone, tube().p(s * 18.2, 6.0, -49.2, 1.6, 1.3).p(s * 17.2, -18.0, -48.9, 1.35, 1.1).p(s * 16.8, -34.0, -48.9, 1.15, 0.95).build());
-			part(f, "radius", bone, tube().p(s * 18.0, 8.0, -51.5, 2.4, 2.0).p(s * 16.5, -22.0, -51.0, 2.2, 1.8).p(s * 16.0, -38.5, -51.0, 2.0, 1.6).build());
-			part(f, "knee_carpus", joint, ell(s * 16.0, -42.5, -51.0, 2.6, 2.9, 2.4));
-			part(f, "cannon_bone", bone, tube().up((a, b, c) -> new double[] {0, 0, 1})
-					.p(s * 15.6, -45.0, -51.2, 1.75, 1.45).p(s * 15.2, -58.0, -51.4, 1.6, 1.35).p(s * 15.0, -62.5, -51.5, 1.7, 1.4).build());
-			part(f, "flexor_tendon", cartilage, tube().p(s * 15.0, -46.5, -49.4, 0.85).p(s * 14.8, -59.5, -49.2, 0.8).build());
-			part(f, "fetlock", joint, ell(s * 15.0, -64.5, -51.5, 2.2, 1.9, 2.0));
-			for (int d = -1; d <= 1; d += 2) {
-				String toe = d > 0 ? "lateral_toe" : "medial_toe";
-				part(f, toe + "/proximal_phalanx", bone, tube().p(s * 15.0 + d * 1.35, -66.5, -51.5 - d * 0.5, 1.15, 1.0)
-						.p(s * 15.0 + d * 1.5, -70.5, -52.5 - d * 0.7, 1.05, 0.95).build());
-				part(f, toe + "/middle_phalanx", bone, tube().p(s * 15.0 + d * 1.5, -70.5, -52.5 - d * 0.7, 1.05, 0.95)
-						.p(s * 15.0 + d * 1.6, -73.5, -53.5 - d * 0.8, 1.0, 0.9).build());
-				part(f, toe + "/distal_phalanx", cutBone, ell(s * 15.0 + d * 1.65, -75.0, -54.0 - d * 0.9, 1.0, 0.95, 1.25));
-				part(f, toe + "/hoof", horn, tube().up((a, b, c) -> new double[] {0, 0, 1})
-						.p(s * 15.0 + d * 1.7, -74.5, -53.8 - d * 0.9, 1.6, 1.5).p(s * 15.0 + d * 1.8, -78.5, -54.6 - d * 1.0, 1.85, 1.7).flat(true, true).build());
-				part(f, toe + "/sesamoid", bone, ell(s * 15.0 + d * 1.15, -63.5, -49.6, 0.75, 0.75, 0.75));
-			}
-
-			part(f, "dewclaws", bone, ell(s * 15.1, -61.0, -48.6, 0.85, 1.35, 0.85));
-			// The hindlimb: the femur down and back from the hip, the kneecap in front of the stifle, the tibia to the hock.
-			String h = "skeleton/limbs/" + side + "_hindlimb";
-			part(h, "femur", bone, tube().p(s * 16.5, 43.5, 76.5, 2.7, 2.4).p(s * 15.0, 27.0, 66.5, 2.7, 2.4).p(s * 13.5, 14.5, 58.5, 2.5, 2.2).build());
-			part(h, "kneecap", bone, ell(s * 12.5, 12.5, 54.5, 1.7, 2.3, 1.3));
-			part(h, "tibia", bone, tube().p(s * 13.5, 10.5, 57.5, 2.5, 2.1).p(s * 13.5, -18.0, 55.5, 2.3, 1.9).p(s * 13.2, -34.5, 54.5, 2.1, 1.7).build());
-			part(h, "achilles_tendon", cartilage, tube().p(s * 13.2, -12.0, 57.5, 1.0).p(s * 13.0, -38.0, 58.0, 0.9).build());
-			part(h, "point_of_hock", bone, tube().p(s * 13.0, -38.0, 58.5, 1.9, 1.5).p(s * 13.0, -46.5, 60.5, 1.7, 1.35).build());
-			part(h, "hock_tarsus", joint, ell(s * 13.0, -44.0, 55.0, 2.6, 2.9, 2.4));
-			part(h, "cannon_bone", bone, tube().up((a, b, c) -> new double[] {0, 0, 1})
-					.p(s * 12.8, -46.5, 55.2, 1.75, 1.45).p(s * 12.5, -58.0, 55.0, 1.6, 1.35).p(s * 12.4, -62.5, 55.0, 1.7, 1.4).build());
-			part(h, "flexor_tendon", cartilage, tube().p(s * 12.4, -48.0, 57.0, 0.85).p(s * 12.2, -59.5, 57.2, 0.8).build());
-			part(h, "fetlock", joint, ell(s * 12.4, -64.5, 55.0, 2.2, 1.9, 2.0));
-			for (int d = -1; d <= 1; d += 2) {
-				String toe = d > 0 ? "lateral_toe" : "medial_toe";
-				part(h, toe + "/proximal_phalanx", bone, tube().p(s * 12.4 + d * 1.35, -66.5, 55.0 + d * 0.5, 1.15, 1.0)
-						.p(s * 12.4 + d * 1.5, -70.5, 54.0 + d * 0.7, 1.05, 0.95).build());
-				part(h, toe + "/middle_phalanx", bone, tube().p(s * 12.4 + d * 1.5, -70.5, 54.0 + d * 0.7, 1.05, 0.95)
-						.p(s * 12.4 + d * 1.6, -73.5, 53.0 + d * 0.8, 1.0, 0.9).build());
-				part(h, toe + "/distal_phalanx", cutBone, ell(s * 12.4 + d * 1.65, -75.0, 52.5 + d * 0.9, 1.0, 0.95, 1.25));
-				part(h, toe + "/hoof", horn, tube().up((a, b, c) -> new double[] {0, 0, 1})
-						.p(s * 12.4 + d * 1.7, -74.5, 52.8 + d * 0.9, 1.6, 1.5).p(s * 12.4 + d * 1.8, -78.5, 52.0 + d * 1.0, 1.85, 1.7).flat(true, true).build());
-				part(h, toe + "/sesamoid", bone, ell(s * 12.4 + d * 1.15, -63.5, 57.0, 0.75, 0.75, 0.75));
-			}
-
-			part(h, "dewclaws", bone, ell(s * 12.5, -61.0, 58.0, 0.85, 1.35, 0.85));
-		}
-	}
-
 	/** A cut bone face: the hard pale cortex round the darker marrow cavity (a sheep's file had no cut faces at all). */
-	static Mat cutBone = (x, y, z, f, ax, ay, az) -> {
-		double d = Math.sqrt(sq(x - Math.rint(x / 12) * 12) + sq(y + 75) + sq(z + 51));
-		return d < 0.9 ? mix(0x8E5A46, 0xB98A76, noise(x, y, z, 148)) : mix(0xE4D8BC, 0xCFC09F, noise(x * 2, y * 2, z * 2, 149));
-	};
+	static Mat cutBone() {
+		return (x, y, z, f, ax, ay, az) -> {
+			double d = Math.sqrt(sq(x - Math.rint(x / 12) * 12) + sq(y + 75) + sq(z + 51));
+			return d < 0.9 ? mix(0x8E5A46, 0xB98A76, noise(x, y, z, 148)) : mix(0xE4D8BC, 0xCFC09F, noise(x * 2, y * 2, z * 2, 149));
+		};
+	}
 
 	/**
 	 * The head: the neck's seven cervical vertebrae (the atlas with its broad wings, the axis with its tall spine, then
@@ -1633,26 +1530,6 @@ public final class CowAnatomyModels {
 		neck();
 		skull();
 		brain();
-	}
-
-	/** The seven cervical vertebrae: C1 the atlas with its broad wings, C2 the axis with its tall spine, then five alike. */
-	private static void neck() {
-		Mat bone = bone();
-		double[] zs = {-134.0, -126.5, -118.5, -110.5, -102.5, -94.5, -86.5};
-		for (int i = 0; i < zs.length; i++) {
-			double z = zs[i];
-			double y = neckY(z);
-			String g = String.format(Locale.ROOT, "skeleton/spine/cervical/C%02d", i + 1);
-			part(g, "body", bone, tube().p(0, y, z - 3.4, 3.1, 2.9).p(0, neckY(z + 3.4), z + 3.4, 3.1, 2.9).flat(true, true).build());
-			part(g, "spinous_process", bone, tube().up((a, b, c) -> new double[] {1, 0, 0})
-					.p(0, y + 2.3, z + 1.0, 1.4, 0.6).p(0, y + (i == 1 ? 7.2 : 4.4), z + (i == 1 ? 3.6 : 2.1), 1.1, 0.6).build());
-			double wing = i == 0 ? 9.0 : i == 1 ? 5.6 : 3.5;
-			double thick = i == 0 ? 2.1 : 0.85;
-			for (int s = -1; s <= 1; s += 2) {
-				part(g, s > 0 ? "right_transverse_process" : "left_transverse_process", bone, tube().up((a, b, c) -> new double[] {0, 1, 0})
-						.p(s * 2.5, y - 0.2, z, 1.6, thick).p(s * wing, y - 0.4, z - 0.6, 1.1, i == 0 ? 2.4 : thick * 0.9).build());
-			}
-		}
 	}
 
 	/**
@@ -1785,465 +1662,8 @@ public final class CowAnatomyModels {
 		part("body_wall/fat_deposits", "omental_fat", suet, region(v(-30, 26, -6), v(16, 62, 44),
 				(x, y, z) -> sq((x + 8) / 18.5) + sq((y - 44) / 15.5) + sq((z - 18) / 21.5) > 1 && sq((x + 8) / 19.5) + sq((y - 44) / 16.5) + sq((z - 18) / 22.5) < 1));
 	}
-	// --------------------------------------------------------------------------------------------------- shapes
-
-	interface Field {
-		/** Below 0 inside; for the simple shapes roughly the distance to the surface in cm. */
-		double at(double x, double y, double z);
-	}
-
-	interface P3 {
-		boolean test(double x, double y, double z);
-	}
-
-	interface Up {
-		double[] at(double x, double y, double z);
-	}
-
-	/** A field with the box outside which it is certainly outside. */
-	static final class Shape {
-		final double[] lo;
-		final double[] hi;
-		final Field f;
-
-		Shape(double[] lo, double[] hi, Field f) {
-			this.lo = lo;
-			this.hi = hi;
-			this.f = f;
-		}
-
-		boolean in(double x, double y, double z) {
-			return x >= lo[0] && x <= hi[0] && y >= lo[1] && y <= hi[1] && z >= lo[2] && z <= hi[2] && f.at(x, y, z) < 0;
-		}
-	}
-
-	static Shape ell(double cx, double cy, double cz, double rx, double ry, double rz) {
-		double p = PAD;
-		return new Shape(v(cx - rx - p, cy - ry - p, cz - rz - p), v(cx + rx + p, cy + ry + p, cz + rz + p), (x, y, z) -> {
-			double ax = Math.max(rx, VOX * THIN);
-			double ay = Math.max(ry, VOX * THIN);
-			double az = Math.max(rz, VOX * THIN);
-			double dx = (x - cx) / ax;
-			double dy = (y - cy) / ay;
-			double dz = (z - cz) / az;
-			return (Math.sqrt(dx * dx + dy * dy + dz * dz) - 1) * Math.min(ax, Math.min(ay, az));
-		});
-	}
-
-	static Shape torus(double[] c, double[] axis, double big, double small) {
-		double e = big + small + PAD;
-		return new Shape(v(c[0] - e, c[1] - e, c[2] - e), v(c[0] + e, c[1] + e, c[2] + e), (x, y, z) -> {
-			double[] q = {x - c[0], y - c[1], z - c[2]};
-			double h = dot(q, axis);
-			double rho = len(sub(q, mul(axis, h)));
-			return Math.hypot(rho - big, h) - Math.max(small, VOX * THIN);
-		});
-	}
-
-	/** A thick triangle with rounded edges: the flat bones. */
-	static Shape tri(double[] a, double[] b, double[] c, double half) {
-		double[] lo = new double[3];
-		double[] hi = new double[3];
-		for (int i = 0; i < 3; i++) {
-			lo[i] = Math.min(a[i], Math.min(b[i], c[i])) - half - PAD;
-			hi[i] = Math.max(a[i], Math.max(b[i], c[i])) + half + PAD;
-		}
-
-		return new Shape(lo, hi, (x, y, z) -> distTriangle(new double[] {x, y, z}, a, b, c) - Math.max(half, VOX * THIN));
-	}
-
-	static Shape region(double[] lo, double[] hi, P3 inside) {
-		return new Shape(lo, hi, (x, y, z) -> x >= lo[0] && x <= hi[0] && y >= lo[1] && y <= hi[1] && z >= lo[2] && z <= hi[2] && inside.test(x, y, z) ? -1 : 1);
-	}
-
-	static Shape union(double k, Shape... s) {
-		double[] lo = s[0].lo.clone();
-		double[] hi = s[0].hi.clone();
-		for (Shape t : s) {
-			for (int i = 0; i < 3; i++) {
-				lo[i] = Math.min(lo[i], t.lo[i] - k * 0.25);
-				hi[i] = Math.max(hi[i], t.hi[i] + k * 0.25);
-			}
-		}
-
-		return new Shape(lo, hi, (x, y, z) -> {
-			double d = s[0].f.at(x, y, z);
-			for (int i = 1; i < s.length; i++) {
-				d = smin(d, s[i].f.at(x, y, z), k);
-			}
-
-			return d;
-		});
-	}
-
-	/** How much the smooth union of {@code s} adds at a point beyond the plain union: above 0 in the grooves between them. */
-	static double crease(Shape[] s, double k, double x, double y, double z) {
-		double plain = Double.MAX_VALUE;
-		double smooth = 0;
-		for (int i = 0; i < s.length; i++) {
-			double d = s[i].f.at(x, y, z);
-			plain = Math.min(plain, d);
-			smooth = i == 0 ? d : smin(smooth, d, k);
-		}
-
-		return plain - smooth;
-	}
-
-	static Shape cut(Shape a, Shape b) {
-		return new Shape(a.lo, a.hi, (x, y, z) -> {
-			double d = a.f.at(x, y, z);
-			return d >= 0 ? d : Math.max(d, -b.f.at(x, y, z));
-		});
-	}
-
-	static Shape both(Shape a, Shape b) {
-		double[] lo = new double[3];
-		double[] hi = new double[3];
-		for (int i = 0; i < 3; i++) {
-			lo[i] = Math.max(a.lo[i], b.lo[i]);
-			hi[i] = Math.min(a.hi[i], b.hi[i]);
-		}
-
-		return new Shape(lo, hi, (x, y, z) -> Math.max(a.f.at(x, y, z), b.f.at(x, y, z)));
-	}
-
-	/** An organic, lumpy surface: the field pushed in and out by noise. */
-	static Shape lumpy(Shape a, double amp, double freq, int seed) {
-		return new Shape(v(a.lo[0] - amp, a.lo[1] - amp, a.lo[2] - amp), v(a.hi[0] + amp, a.hi[1] + amp, a.hi[2] + amp),
-				(x, y, z) -> a.f.at(x, y, z) + amp * (2 * noise(x * freq, y * freq, z * freq, seed) - 1));
-	}
-
-	static Tube tube() {
-		return new Tube();
-	}
-
-	/**
-	 * A tube along a smooth curve through control points, each with its own radii. With {@link #up} its cross-section
-	 * is an ellipse whose second radius lies along the given direction (a rib's thickness along the body's outward
-	 * normal); otherwise round. Ends are rounded unless {@link #flat}: a cut vessel or gut, which with {@link #hollow}
-	 * shows its lumen.
-	 */
-	static final class Tube {
-		private final List<double[]> ctrl = new ArrayList<>();
-		private Up up;
-		private boolean flat0;
-		private boolean flat1;
-		private double hollow;
-		private double beadAmp;
-		private double beadLen = 1;
-
-		Tube p(double x, double y, double z, double r) {
-			return p(x, y, z, r, r);
-		}
-
-		Tube p(double x, double y, double z, double rx, double ry) {
-			ctrl.add(new double[] {x, y, z, rx, ry});
-			return this;
-		}
-
-		Tube up(Up u) {
-			up = u;
-			return this;
-		}
-
-		Tube flat(boolean start, boolean end) {
-			flat0 = start;
-			flat1 = end;
-			return this;
-		}
-
-		Tube hollow(double ratio) {
-			hollow = ratio;
-			return this;
-		}
-
-		/** Pellets forming inside: the radius swells and narrows every {@code len} cm. */
-		Tube beads(double amp, double len) {
-			beadAmp = amp;
-			beadLen = len;
-			return this;
-		}
-
-		Shape build() {
-			List<double[]> s = new ArrayList<>();
-			int n = ctrl.size();
-			for (int i = 0; i < n - 1; i++) {
-				double[] p0 = i > 0 ? ctrl.get(i - 1) : extrapolate(ctrl.get(0), ctrl.get(1));
-				double[] p1 = ctrl.get(i);
-				double[] p2 = ctrl.get(i + 1);
-				double[] p3 = i + 2 < n ? ctrl.get(i + 2) : extrapolate(ctrl.get(n - 1), ctrl.get(n - 2));
-				int steps = Math.max(2, (int) Math.ceil(dist(p1, p2) / 0.3));
-				for (int k = 0; k < steps; k++) {
-					double t = k / (double) steps;
-					double[] q = new double[5];
-					for (int a = 0; a < 3; a++) {
-						q[a] = catmull(p0[a], p1[a], p2[a], p3[a], t);
-					}
-
-					q[3] = p1[3] + (p2[3] - p1[3]) * t;
-					q[4] = p1[4] + (p2[4] - p1[4]) * t;
-					s.add(q);
-				}
-			}
-
-			s.add(ctrl.get(n - 1).clone());
-			int m = s.size();
-			double[][] pt = s.toArray(double[][]::new);
-			double[] cum = new double[m];
-			for (int i = 1; i < m; i++) {
-				cum[i] = cum[i - 1] + dist(pt[i - 1], pt[i]);
-			}
-
-			double[][] tan = new double[m - 1][];
-			double[][] nrm = new double[m - 1][];
-			double[][] bin = new double[m - 1][];
-			double[] lo = {1e9, 1e9, 1e9};
-			double[] hi = {-1e9, -1e9, -1e9};
-			for (int i = 0; i < m - 1; i++) {
-				tan[i] = norm(sub(pt[i + 1], pt[i]));
-				if (up != null) {
-					double[] mid = mul(add(pt[i], pt[i + 1]), 0.5);
-					double[] u = up.at(mid[0], mid[1], mid[2]);
-					double[] nn = sub(u, mul(tan[i], dot(u, tan[i])));
-					if (len(nn) < 1e-6) {
-						nn = Math.abs(tan[i][1]) < 0.9 ? new double[] {0, 1, 0} : new double[] {1, 0, 0};
-						nn = sub(nn, mul(tan[i], dot(nn, tan[i])));
-					}
-
-					nrm[i] = norm(nn);
-					bin[i] = cross(tan[i], nrm[i]);
-				}
-			}
-
-			for (double[] q : pt) {
-				double r = Math.max(q[3], q[4]) * (1 + beadAmp) + PAD;
-				for (int a = 0; a < 3; a++) {
-					lo[a] = Math.min(lo[a], q[a] - r);
-					hi[a] = Math.max(hi[a], q[a] + r);
-				}
-			}
-
-			boolean f0 = flat0;
-			boolean f1 = flat1;
-			double hol = hollow;
-			double ba = beadAmp;
-			double bl = beadLen;
-			Up hasUp = up;
-			return new Shape(lo, hi, (x, y, z) -> {
-				int best = 0;
-				double bestD = Double.MAX_VALUE;
-				double bestT = 0;
-				for (int i = 0; i < m - 1; i++) {
-					double[] a = pt[i];
-					double dx = pt[i + 1][0] - a[0];
-					double dy = pt[i + 1][1] - a[1];
-					double dz = pt[i + 1][2] - a[2];
-					double l2 = dx * dx + dy * dy + dz * dz;
-					double t = l2 == 0 ? 0 : ((x - a[0]) * dx + (y - a[1]) * dy + (z - a[2]) * dz) / l2;
-					t = t < 0 ? 0 : t > 1 ? 1 : t;
-					double ex = x - a[0] - dx * t;
-					double ey = y - a[1] - dy * t;
-					double ez = z - a[2] - dz * t;
-					double d = ex * ex + ey * ey + ez * ez;
-					if (d < bestD) {
-						bestD = d;
-						best = i;
-						bestT = t;
-					}
-				}
-
-				double[] a = pt[best];
-				double[] b = pt[best + 1];
-				double[] q = {a[0] + (b[0] - a[0]) * bestT, a[1] + (b[1] - a[1]) * bestT, a[2] + (b[2] - a[2]) * bestT};
-				double[] o = {x - q[0], y - q[1], z - q[2]};
-				double[] t = tan[best];
-				double along = dot(o, t);
-				double ot = 0;
-				if (best == 0 && bestT <= 0 && along < 0) {
-					if (f0) {
-						return 1;
-					}
-
-					ot = along;
-				} else if (best == m - 2 && bestT >= 1 && along > 0) {
-					if (f1) {
-						return 1;
-					}
-
-					ot = along;
-				}
-
-				double[] op = sub(o, mul(t, along));
-				double scale = 1;
-				if (ba > 0) {
-					double c = cum[best] + (cum[best + 1] - cum[best]) * bestT;
-					scale = 1 + ba * Math.sin(2 * Math.PI * c / bl);
-				}
-
-				double rx = Math.max((a[3] + (b[3] - a[3]) * bestT) * scale, VOX * THIN);
-				double ry = Math.max((a[4] + (b[4] - a[4]) * bestT) * scale, VOX * THIN);
-				double e;
-				if (hasUp != null) {
-					double cb = dot(op, bin[best]);
-					double cn = dot(op, nrm[best]);
-					e = Math.sqrt(sq(cb / rx) + sq(cn / ry) + sq(ot / rx));
-				} else {
-					e = Math.sqrt(dot(op, op) + ot * ot) / rx;
-				}
-
-				double d = (e - 1) * Math.min(rx, ry);
-				if (hol > 0 && d < 0 && e < hol && Math.min(rx, ry) * (1 - hol) >= VOX * 0.5) {
-					return (hol - e) * Math.min(rx, ry);
-				}
-
-				return d;
-			});
-		}
-
-		private static double[] extrapolate(double[] end, double[] next) {
-			return new double[] {2 * end[0] - next[0], 2 * end[1] - next[1], 2 * end[2] - next[2], end[3], end[4]};
-		}
-	}
-
-	static double catmull(double p0, double p1, double p2, double p3, double t) {
-		double t2 = t * t;
-		double t3 = t2 * t;
-		return 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
-	}
-
-	static double distTriangle(double[] p, double[] a, double[] b, double[] c) {
-		double[] ab = sub(b, a);
-		double[] ac = sub(c, a);
-		double[] ap = sub(p, a);
-		double d1 = dot(ab, ap);
-		double d2 = dot(ac, ap);
-		if (d1 <= 0 && d2 <= 0) {
-			return len(ap);
-		}
-
-		double[] bp = sub(p, b);
-		double d3 = dot(ab, bp);
-		double d4 = dot(ac, bp);
-		if (d3 >= 0 && d4 <= d3) {
-			return len(bp);
-		}
-
-		double vc = d1 * d4 - d3 * d2;
-		if (vc <= 0 && d1 >= 0 && d3 <= 0) {
-			return len(sub(p, add(a, mul(ab, d1 / (d1 - d3)))));
-		}
-
-		double[] cp = sub(p, c);
-		double d5 = dot(ab, cp);
-		double d6 = dot(ac, cp);
-		if (d6 >= 0 && d5 <= d6) {
-			return len(cp);
-		}
-
-		double vb = d5 * d2 - d1 * d6;
-		if (vb <= 0 && d2 >= 0 && d6 <= 0) {
-			return len(sub(p, add(a, mul(ac, d2 / (d2 - d6)))));
-		}
-
-		double va = d3 * d6 - d5 * d4;
-		if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) {
-			return len(sub(p, add(b, mul(sub(c, b), (d4 - d3) / ((d4 - d3) + (d5 - d6))))));
-		}
-
-		double den = 1 / (va + vb + vc);
-		return len(sub(p, add(a, add(mul(ab, vb * den), mul(ac, vc * den)))));
-	}
-
-	// ------------------------------------------------------------------------------------------------ tissues
-
-	/** A tissue's colour at a voxel's centre, looking out of {@code face} into the empty voxel centred at (ax, ay, az). */
-	interface Mat {
-		int rgb(double x, double y, double z, int face, double ax, double ay, double az);
-	}
-
-	static Mat organic(int base, int dark, int light, double scale, int seed) {
-		return (x, y, z, f, ax, ay, az) -> {
-			double n = noise(x * scale, y * scale, z * scale, seed) * 0.7 + noise(x * scale * 3, y * scale * 3, z * scale * 3, seed + 1) * 0.3;
-			return n < 0.5 ? mix(dark, base, n * 2) : mix(base, light, (n - 0.5) * 2);
-		};
-	}
-
-	static Mat glossy(int base, int dark, int light, int sheen, double scale, int seed) {
-		Mat m = organic(base, dark, light, scale, seed);
-		return (x, y, z, f, ax, ay, az) -> {
-			int c = m.rgb(x, y, z, f, ax, ay, az);
-			return f == 2 && noise(x * 2.5, y * 2.5, z * 2.5, seed + 7) > 0.8 ? mix(c, sheen, 0.6) : c;
-		};
-	}
-
-	static Mat veined(int base, int dark, int light, int vessel, int seed) {
-		Mat m = organic(base, dark, light, 1.2, seed);
-		return (x, y, z, f, ax, ay, az) -> {
-			int c = m.rgb(x, y, z, f, ax, ay, az);
-			return ridge(x * 0.35, y * 0.35, z * 0.35, seed + 5) > 0.9 ? mix(c, vessel, 0.55) : c;
-		};
-	}
-
-	static Mat streaked(int base, int dark, int light, int seed) {
-		return (x, y, z, f, ax, ay, az) -> mix(mix(dark, light, noise(x * 3, y * 3, z * 0.4, seed)), base, 0.4);
-	}
-
-	static Mat crumbly(int base, int dark, int light, int seed) {
-		return (x, y, z, f, ax, ay, az) -> {
-			double[] c = cells(x * 1.4, y * 1.4, z * 1.4, seed);
-			return c[1] - c[0] < 0.1 ? dark : mix(base, light, c[2]);
-		};
-	}
-
-	static Mat heartMuscle(double[] apex, double[] axis) {
-		return (x, y, z, f, ax, ay, az) -> {
-			double[] p = {x - apex[0], y - apex[1], z - apex[2]};
-			double h = dot(p, axis);
-			double around = Math.atan2(p[2], p[0]);
-			double streak = frac((around * 2.2 + h * 0.35) + 0.3 * noise(x, y, z, 26));
-			int c = mix(0x5A1717, 0x7A2623, noise(x * 1.2, y * 1.2, z * 1.2, 27));
-			c = streak < 0.25 ? mix(c, 0x4C1212, 0.4) : c;
-			return noise(x * 3, y * 3, z * 3, 28) > 0.88 ? mix(c, 0x9A4E4A, 0.5) : c;
-		};
-	}
 
 	// ------------------------------------------------------------------------------------------------ parts
-
-	/** One named piece of an organ, at a path of groups ("abdomen/liver/caudate_lobe"). */
-	static final class Part {
-		final String path;
-		final String name;
-		final Mat mat;
-		final Shape shape;
-		int index;
-
-		Part(String path, String name, Mat mat, Shape shape) {
-			this.path = path;
-			this.name = name;
-			this.mat = mat;
-			this.shape = shape;
-		}
-
-		boolean under(String prefix) {
-			return path.equals(prefix) || path.startsWith(prefix + "/");
-		}
-	}
-
-	/** Vessels, ducts and small processes thinner than a pixel: left out at the mod's coarse grain, where they would fatten to a pixel. */
-	private static final java.util.Set<String> FINE = java.util.Set.of("disc", "median_sacral_crest", "spine_of_scapula", "renal_vein", "renal_artery",
-			"ureter", "right_ureter", "left_ureter", "urethra", "brachiocephalic_trunk", "left_pulmonary_artery", "right_pulmonary_artery",
-			"cranial_vena_cava", "caudal_vena_cava", "thoracic_caudal_vena_cava", "abdominal_caudal_vena_cava", "portal_vein",
-			"hepatic_caudal_vena_cava", "tracheal_bronchus", "left_principal_bronchus", "right_principal_bronchus", "scapular_cartilage",
-			"flexor_tendon", "achilles_tendon", "sesamoid", "dewclaws", "bile_duct", "hepatic_vessel", "chordae_tendineae", "papillary_muscle",
-			"bronchus_branch", "teat", "median_suspensory_ligament");
-
-	static void part(String path, String name, Mat mat, Shape shape) {
-		if (LOD >= 2.5 && FINE.contains(name)) {
-			return;
-		}
-
-		PARTS.add(new Part(path, name, mat, shape));
-	}
 
 	/**
 	 * What the mod calls a part: its {@code Anatomy.Kind} (the tile it is drawn with and how it cooks) and the organ it
@@ -2461,62 +1881,6 @@ public final class CowAnatomyModels {
 
 	// ------------------------------------------------------------------------------------------------ export
 
-	/** Faces: 0 east +x, 1 west -x, 2 up +y, 3 down -y, 4 south +z, 5 north -z. */
-	private static final String[] FACE = {"east", "west", "up", "down", "south", "north"};
-	private static final int[][] NORMAL = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
-
-	static final class Grid {
-		final int nx;
-		final int ny;
-		final int nz;
-		final double vox;
-		final double ox;
-		final double oy;
-		final double oz;
-		final int[] cell;
-
-		Grid(int nx, int ny, int nz, double vox, double ox, double oy, double oz) {
-			this.nx = nx;
-			this.ny = ny;
-			this.nz = nz;
-			this.vox = vox;
-			this.ox = ox;
-			this.oy = oy;
-			this.oz = oz;
-			cell = new int[nx * ny * nz];
-		}
-
-		int at(int x, int y, int z) {
-			return x < 0 || y < 0 || z < 0 || x >= nx || y >= ny || z >= nz ? 0 : cell[(x * ny + y) * nz + z];
-		}
-
-		void set(int x, int y, int z, int v) {
-			cell[(x * ny + y) * nz + z] = v;
-		}
-
-		double wx(int i) {
-			return ox + (i + 0.5) * vox;
-		}
-
-		double wy(int j) {
-			return oy + (j + 0.5) * vox;
-		}
-
-		double wz(int k) {
-			return oz + (k + 0.5) * vox;
-		}
-
-		/** A voxel centre in the body's centimetres, where the shapes and tissues are defined; null outside every fit. */
-		double[] cm(int i, int j, int k) {
-			return cmAt(wx(i), wy(j), wz(k));
-		}
-	}
-
-	/** Centimetres per voxel, for choosing detail: every rib, or only some with a gap between them. */
-	static double LOD = 0.5;
-	/** Mod mode: anatomy.png, each part drawn with its tissue's 16px tile as the mod draws it. */
-	static BufferedImage TILES;
-
 	static Grid voxelize(double vox, Predicate<Part> keep) {
 		for (int i = 0; i < PARTS.size(); i++) {
 			PARTS.get(i).index = i;
@@ -2613,165 +1977,6 @@ public final class CowAnatomyModels {
 		return g;
 	}
 
-	record Box(int x0, int y0, int z0, int x1, int y1, int z1, int key) {
-	}
-
-	/** Greedy merge: each run of one part's voxels grown along x, then z, then y into the biggest box it fills. */
-	static List<Box> boxes(Grid g) {
-		boolean[] used = new boolean[g.cell.length];
-		List<Box> out = new ArrayList<>();
-		for (int j = 0; j < g.ny; j++) {
-			for (int k = 0; k < g.nz; k++) {
-				for (int i = 0; i < g.nx; i++) {
-					int key = g.at(i, j, k);
-					if (key == 0 || used[(i * g.ny + j) * g.nz + k]) {
-						continue;
-					}
-
-					int i1 = i + 1;
-					while (i1 < g.nx && g.at(i1, j, k) == key && !used[(i1 * g.ny + j) * g.nz + k]) {
-						i1++;
-					}
-
-					int k1 = k + 1;
-					grow:
-					while (k1 < g.nz) {
-						for (int a = i; a < i1; a++) {
-							if (g.at(a, j, k1) != key || used[(a * g.ny + j) * g.nz + k1]) {
-								break grow;
-							}
-						}
-
-						k1++;
-					}
-
-					int j1 = j + 1;
-					grow:
-					while (j1 < g.ny) {
-						for (int a = i; a < i1; a++) {
-							for (int c = k; c < k1; c++) {
-								if (g.at(a, j1, c) != key || used[(a * g.ny + j1) * g.nz + c]) {
-									break grow;
-								}
-							}
-						}
-
-						j1++;
-					}
-
-					for (int a = i; a < i1; a++) {
-						for (int b = j; b < j1; b++) {
-							for (int c = k; c < k1; c++) {
-								used[(a * g.ny + b) * g.nz + c] = true;
-							}
-						}
-					}
-
-					out.add(new Box(i, j, k, i1, j1, k1, key));
-				}
-			}
-		}
-
-		return out;
-	}
-
-	/** The voxel at column c, row r of a box's face as Blockbench maps its UV (seen from outside, top row up). */
-	static int[] texel(Box b, int face, int c, int r) {
-		return switch (face) {
-			case 0 -> new int[] {b.x1 - 1, b.y1 - 1 - r, b.z1 - 1 - c};
-			case 1 -> new int[] {b.x0, b.y1 - 1 - r, b.z0 + c};
-			case 2 -> new int[] {b.x0 + c, b.y1 - 1, b.z0 + r};
-			case 3 -> new int[] {b.x0 + c, b.y0, b.z1 - 1 - r};
-			case 4 -> new int[] {b.x0 + c, b.y1 - 1 - r, b.z1 - 1};
-			default -> new int[] {b.x1 - 1 - c, b.y1 - 1 - r, b.z0};
-		};
-	}
-
-	static int faceW(Box b, int face) {
-		return face < 2 ? b.z1 - b.z0 : b.x1 - b.x0;
-	}
-
-	static int faceH(Box b, int face) {
-		return face == 2 || face == 3 ? b.z1 - b.z0 : b.y1 - b.y0;
-	}
-
-	static boolean faceVisible(Grid g, Box b, int face) {
-		int[] nn = NORMAL[face];
-		int w = faceW(b, face);
-		int h = faceH(b, face);
-		for (int c = 0; c < w; c++) {
-			for (int r = 0; r < h; r++) {
-				int[] t = texel(b, face, c, r);
-				if (g.at(t[0] + nn[0], t[1] + nn[1], t[2] + nn[2]) == 0) {
-					return true;
-				}
-			}
-		}
-
-		return false;
-	}
-
-	/** A voxel face's colour: its tissue, darkened where the space in front of it is closed in (crevices, folds). */
-	static int shade(Grid g, int i, int j, int k, int face) {
-		Part p = PARTS.get(g.at(i, j, k) - 1);
-		int[] nn = NORMAL[face];
-		int ai = i + nn[0];
-		int aj = j + nn[1];
-		int ak = k + nn[2];
-		int c;
-		if (TILES != null) {
-			// As the mod draws it: the tissue's tile, one texel per pixel across the face.
-			int tile = tile(p);
-			int u = Math.floorMod(nn[0] != 0 ? k : i, 16);
-			int v = Math.floorMod(nn[1] != 0 ? k : -j, 16);
-			c = TILES.getRGB(tile % 8 * 16 + u, tile / 8 * 16 + v) & 0xFFFFFF;
-		} else {
-			double[] c0 = g.cm(i, j, k);
-			double[] c1 = g.cm(ai, aj, ak);
-			if (c1 == null) {
-				c1 = c0;
-			}
-
-			c = p.mat.rgb(c0[0], c0[1], c0[2], face, c1[0], c1[1], c1[2]);
-		}
-
-		int solid = 0;
-		for (int du = -1; du <= 1; du++) {
-			for (int dv = -1; dv <= 1; dv++) {
-				if (du == 0 && dv == 0) {
-					continue;
-				}
-
-				int x = ai;
-				int y = aj;
-				int z = ak;
-				if (nn[0] != 0) {
-					y += du;
-					z += dv;
-				} else if (nn[1] != 0) {
-					x += du;
-					z += dv;
-				} else {
-					x += du;
-					y += dv;
-				}
-
-				if (g.at(x, y, z) != 0) {
-					solid++;
-				}
-			}
-		}
-
-		if (g.at(ai + nn[0], aj + nn[1], ak + nn[2]) != 0) {
-			solid += 2;
-		}
-
-		return mul(c, Math.max(0.7, 1 - 0.035 * solid));
-	}
-
-	record Rect(Box box, int face, int w, int h, int[] at) {
-	}
-
 	static String export(Path out, String file, String title, double vox, Predicate<Part> keep) throws IOException {
 		long t0 = System.nanoTime();
 		VOX = vox * minScale();
@@ -2847,7 +2052,7 @@ public final class CowAnatomyModels {
 					int[] t = texel(r.box, r.face, c, row);
 					int col = shade(g, t[0], t[1], t[2], r.face);
 					tex.setRGB(r.at[0] + c, r.at[1] + row, 0xFF000000 | col);
-					charredTex.setRGB(r.at[0] + c, r.at[1] + row, 0xFF000000 | charred(kind, col, g.cm(t[0], t[1], t[2])));
+					charredTex.setRGB(r.at[0] + c, r.at[1] + row, 0xFF000000 | charred(kind, col, FRAME.cm(g, t[0], t[1], t[2])));
 				}
 			}
 
@@ -2878,23 +2083,6 @@ public final class CowAnatomyModels {
 				g.ny, g.nz, vox, (System.nanoTime() - t0) / 1e9);
 		return String.format(Locale.ROOT, "| `%s.bbmodel` | %s | %d | %.1f cm | %.0f x %.0f x %.0f cm |", file, title, boxes.size(), vox, g.nx * vox,
 				g.ny * vox, g.nz * vox);
-	}
-
-	/** One group of the outliner, with its subgroups and cubes. */
-	static final class Node {
-		final String name;
-		final String path;
-		final Map<String, Node> kids = new LinkedHashMap<>();
-		final List<Integer> cubes = new ArrayList<>();
-		double sx;
-		double sy;
-		double sz;
-		double sw;
-
-		Node(String name, String path) {
-			this.name = name;
-			this.path = path;
-		}
 	}
 
 	/**
@@ -3076,18 +2264,6 @@ public final class CowAnatomyModels {
 				|| path.contains("honeycomb");
 	}
 
-	static String uuid(String s) {
-		return UUID.nameUUIDFromBytes(s.getBytes(StandardCharsets.UTF_8)).toString();
-	}
-
-	static String num(double d) {
-		if (d == Math.rint(d)) {
-			return Long.toString((long) d);
-		}
-
-		return String.format(Locale.ROOT, "%.3f", d).replaceAll("0+$", "");
-	}
-
 	// ------------------------------------------------------------------------------------------------ previews
 
 	/** Four orthographic views (left, right, from above, three-quarter from the front left), ray cast through the voxels. */
@@ -3116,101 +2292,6 @@ public final class CowAnatomyModels {
 		gr.drawString(title, 8, 19);
 		gr.dispose();
 		ImageIO.write(img, "png", file.toFile());
-	}
-
-	static void render(BufferedImage img, Grid g, double[] d, int ox, int oy, int size, boolean top) {
-		double[] upRef = top ? new double[] {0, 0, -1} : new double[] {0, 1, 0};
-		double[] right = norm(cross(d, upRef));
-		double[] up = cross(right, d);
-		double[] c = {g.nx / 2.0, g.ny / 2.0, g.nz / 2.0};
-		double ext = 0;
-		for (int corner = 0; corner < 8; corner++) {
-			double[] p = {(corner & 1) * g.nx - c[0], ((corner >> 1) & 1) * g.ny - c[1], ((corner >> 2) & 1) * g.nz - c[2]};
-			ext = Math.max(ext, Math.max(Math.abs(dot(p, right)), Math.abs(dot(p, up))));
-		}
-
-		double scale = (size - 24) / (2 * ext);
-		double[] light = norm(new double[] {-0.35, 0.85, -0.4});
-		double far = g.nx + g.ny + g.nz;
-		for (int py = 0; py < size; py++) {
-			for (int px = 0; px < size; px++) {
-				double u = (px - size / 2.0) / scale;
-				double w = -(py - size / 2.0) / scale;
-				double[] o = add(add(c, add(mul(right, u), mul(up, w))), mul(d, -far));
-				int[] hit = cast(g, o, d);
-				if (hit != null) {
-					int col = shade(g, hit[0], hit[1], hit[2], hit[3]);
-					int[] nn = NORMAL[hit[3]];
-					double lam = 0.55 + 0.45 * Math.max(0, nn[0] * light[0] + nn[1] * light[1] + nn[2] * light[2]);
-					img.setRGB(ox + px, oy + py, mul(col, lam));
-				}
-			}
-		}
-	}
-
-	/** Amanatides-Woo through the grid: the first solid voxel and the face the ray came in by, or null. */
-	static int[] cast(Grid g, double[] o, double[] d) {
-		double t0 = 0;
-		double t1 = Double.MAX_VALUE;
-		int[] n = {g.nx, g.ny, g.nz};
-		int enter = 0;
-		for (int a = 0; a < 3; a++) {
-			if (Math.abs(d[a]) < 1e-9) {
-				if (o[a] < 0 || o[a] > n[a]) {
-					return null;
-				}
-
-				continue;
-			}
-
-			double ta = (0 - o[a]) / d[a];
-			double tb = (n[a] - o[a]) / d[a];
-			if (ta > tb) {
-				double s = ta;
-				ta = tb;
-				tb = s;
-			}
-
-			if (ta > t0) {
-				t0 = ta;
-				enter = a;
-			}
-
-			t1 = Math.min(t1, tb);
-		}
-
-		if (t0 > t1) {
-			return null;
-		}
-
-		double[] p = add(o, mul(d, t0 + 1e-7));
-		int[] cell = new int[3];
-		int[] step = new int[3];
-		double[] tMax = new double[3];
-		double[] tDelta = new double[3];
-		for (int a = 0; a < 3; a++) {
-			cell[a] = Math.min(n[a] - 1, Math.max(0, (int) Math.floor(p[a])));
-			step[a] = d[a] > 0 ? 1 : -1;
-			double next = d[a] > 0 ? cell[a] + 1 : cell[a];
-			tMax[a] = Math.abs(d[a]) < 1e-9 ? Double.MAX_VALUE : t0 + (next - p[a]) / d[a];
-			tDelta[a] = Math.abs(d[a]) < 1e-9 ? Double.MAX_VALUE : 1 / Math.abs(d[a]);
-		}
-
-		int axis = enter;
-		while (true) {
-			if (g.at(cell[0], cell[1], cell[2]) != 0) {
-				int face = axis * 2 + (step[axis] > 0 ? 1 : 0);
-				return new int[] {cell[0], cell[1], cell[2], face};
-			}
-
-			axis = tMax[0] < tMax[1] ? (tMax[0] < tMax[2] ? 0 : 2) : (tMax[1] < tMax[2] ? 1 : 2);
-			cell[axis] += step[axis];
-			if (cell[axis] < 0 || cell[axis] >= n[axis]) {
-				return null;
-			}
-
-			tMax[axis] += tDelta[axis];
-		}
 	}
 
 	static String mobReadme(String res, List<String> rows) {
@@ -3645,142 +2726,5 @@ public final class CowAnatomyModels {
 		}
 
 		return sb.append('}').toString();
-	}
-
-	// ------------------------------------------------------------------------------------------------ maths
-
-	static double[] v(double... a) {
-		return a;
-	}
-
-	static double sq(double a) {
-		return a * a;
-	}
-
-	static double clamp(double a, double lo, double hi) {
-		return a < lo ? lo : a > hi ? hi : a;
-	}
-
-	static double frac(double a) {
-		return a - Math.floor(a);
-	}
-
-	static double smin(double a, double b, double k) {
-		double h = Math.max(k - Math.abs(a - b), 0) / k;
-		return Math.min(a, b) - h * h * k * 0.25;
-	}
-
-	static double[] add(double[] a, double[] b) {
-		return new double[] {a[0] + b[0], a[1] + b[1], a[2] + b[2]};
-	}
-
-	static double[] sub(double[] a, double[] b) {
-		return new double[] {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
-	}
-
-	static double[] mul(double[] a, double s) {
-		return new double[] {a[0] * s, a[1] * s, a[2] * s};
-	}
-
-	static double dot(double[] a, double[] b) {
-		return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-	}
-
-	static double[] cross(double[] a, double[] b) {
-		return new double[] {a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]};
-	}
-
-	static double len(double[] a) {
-		return Math.sqrt(dot(a, a));
-	}
-
-	static double dist(double[] a, double[] b) {
-		return Math.sqrt(sq(a[0] - b[0]) + sq(a[1] - b[1]) + sq(a[2] - b[2]));
-	}
-
-	static double[] norm(double[] a) {
-		double l = len(a);
-		return l == 0 ? a : mul(a, 1 / l);
-	}
-
-	static double hash(int x, int y, int z, int seed) {
-		long h = x * 374761393L + y * 668265263L + z * 2147483647L + seed * 144665L;
-		h = (h ^ (h >>> 13)) * 1274126177L;
-		h ^= h >>> 16;
-		return (h & 0xFFFFFF) / (double) 0x1000000;
-	}
-
-	/** Smooth value noise in [0, 1]. */
-	static double noise(double x, double y, double z, int seed) {
-		int xi = (int) Math.floor(x);
-		int yi = (int) Math.floor(y);
-		int zi = (int) Math.floor(z);
-		double fx = x - xi;
-		double fy = y - yi;
-		double fz = z - zi;
-		fx = fx * fx * (3 - 2 * fx);
-		fy = fy * fy * (3 - 2 * fy);
-		fz = fz * fz * (3 - 2 * fz);
-		double r = 0;
-		for (int c = 0; c < 8; c++) {
-			int dx = c & 1;
-			int dy = (c >> 1) & 1;
-			int dz = (c >> 2) & 1;
-			r += hash(xi + dx, yi + dy, zi + dz, seed) * (dx == 1 ? fx : 1 - fx) * (dy == 1 ? fy : 1 - fy) * (dz == 1 ? fz : 1 - fz);
-		}
-
-		return r;
-	}
-
-	/** Thin winding lines: near 1 along the zero set of a noise, for blood vessels and straw. */
-	static double ridge(double x, double y, double z, int seed) {
-		return 1 - Math.abs(2 * noise(x, y, z, seed) - 1);
-	}
-
-	/** Worley cells: the distances to the nearest and second nearest feature point, and the nearest one's random id. */
-	static double[] cells(double x, double y, double z, int seed) {
-		int xi = (int) Math.floor(x);
-		int yi = (int) Math.floor(y);
-		int zi = (int) Math.floor(z);
-		double f1 = 9;
-		double f2 = 9;
-		double id = 0;
-		for (int a = -1; a <= 1; a++) {
-			for (int b = -1; b <= 1; b++) {
-				for (int c = -1; c <= 1; c++) {
-					int cx = xi + a;
-					int cy = yi + b;
-					int cz = zi + c;
-					double px = cx + hash(cx, cy, cz, seed);
-					double py = cy + hash(cx, cy, cz, seed + 1);
-					double pz = cz + hash(cx, cy, cz, seed + 2);
-					double d = Math.sqrt(sq(x - px) + sq(y - py) + sq(z - pz));
-					if (d < f1) {
-						f2 = f1;
-						f1 = d;
-						id = hash(cx, cy, cz, seed + 3);
-					} else if (d < f2) {
-						f2 = d;
-					}
-				}
-			}
-		}
-
-		return new double[] {f1, f2, id};
-	}
-
-	static int mix(int a, int b, double t) {
-		t = clamp(t, 0, 1);
-		int r = (int) Math.round(((a >> 16) & 255) * (1 - t) + ((b >> 16) & 255) * t);
-		int g = (int) Math.round(((a >> 8) & 255) * (1 - t) + ((b >> 8) & 255) * t);
-		int bl = (int) Math.round((a & 255) * (1 - t) + (b & 255) * t);
-		return r << 16 | g << 8 | bl;
-	}
-
-	static int mul(int c, double f) {
-		int r = (int) clamp(((c >> 16) & 255) * f, 0, 255);
-		int g = (int) clamp(((c >> 8) & 255) * f, 0, 255);
-		int b = (int) clamp((c & 255) * f, 0, 255);
-		return r << 16 | g << 8 | b;
 	}
 }

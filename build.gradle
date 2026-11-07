@@ -11,9 +11,13 @@ repositories {
 	maven { url = "https://maven.terraformersmc.com/releases/" }
 }
 
-// The Cobble Tank add-on: its own mod and jar (cobbletank-<version>.jar), built against Fluid Gore's main source set.
+// The Cobble Tank is its own project and jar (../CobbleTank, CobbleTank-<version>.jar). The dev client, the showcase runs
+// and the game test compile its sources from there (-PcobbleTankDir=<dir> to point elsewhere), so they can play it.
+def cobbleTankDir = file(providers.gradleProperty("cobbleTankDir").getOrElse("../CobbleTank"))
 sourceSets {
 	tank {
+		java.srcDirs = [new File(cobbleTankDir, "src/main/java")]
+		resources.srcDirs = [new File(cobbleTankDir, "src/main/resources")]
 		compileClasspath += main.compileClasspath + main.output
 		runtimeClasspath += main.runtimeClasspath + main.output
 	}
@@ -58,7 +62,7 @@ loom {
 		}
 	}
 
-	// The dev client loads the Cobble Tank add-on too (its classpath includes Fluid Gore's).
+	// The dev client loads the Cobble Tank too (its classpath includes Fluid Gore's).
 	runs.named("client") { source sourceSets.tank }
 
 	// Two players on one server, side by side (shared dice, relayed actions):
@@ -110,7 +114,7 @@ fabricApi {
 	}
 }
 
-// The game test plays the tank's scenes too, so it sees the add-on.
+// The game test plays the tank's scenes too, so it sees the Cobble Tank.
 sourceSets.named("gametest") {
 	compileClasspath += sourceSets.tank.output
 	runtimeClasspath += sourceSets.tank.output
@@ -147,24 +151,24 @@ java {
 }
 
 // Puts the built jar in the game's mods folder for testing in the real game: ./gradlew installMod (or -PmodsDir=<folder>).
-// The Cobble Tank add-on is installed with it. Older copies of either are deleted first, since two copies of the same mod crash the game.
+// Older copies are deleted first, since two copies of the same mod crash the game. The Cobble Tank installs from its own
+// project (../CobbleTank: ./gradlew installMod).
 def modsDir = providers.gradleProperty("modsDir").orElse(providers.environmentVariable("APPDATA").map { it + "/.minecraft/mods" })
 tasks.register("installMod") {
 	group = "fluidgore"
-	description = "Builds Fluid Gore and the Cobble Tank add-on and installs both in the game's mods folder, replacing older copies."
+	description = "Builds Fluid Gore and installs it in the game's mods folder, replacing older copies."
 	def jarFile = tasks.named("jar").flatMap { it.archiveFile }
-	def tankFile = tasks.named("tankJar", Jar).flatMap { it.archiveFile }
 	inputs.file(jarFile)
-	inputs.file(tankFile)
 	def target = modsDir
 	doLast {
 		def dir = new File(target.get())
 		dir.mkdirs()
-		dir.listFiles().findAll { it.name ==~ /(fluidgore|cobbletank)-.*\.jar/ }.each { it.delete() }
-		[jarFile.get().asFile, tankFile.get().asFile].each { source ->
-			java.nio.file.Files.copy(source.toPath(), new File(dir, source.name).toPath())
-			println "Installed ${source.name} in ${dir}"
+		dir.listFiles().findAll { it.name ==~ /(?i)fluidgore-.*.jar/ }.each {
+			if (!it.delete()) throw new GradleException("Could not delete ${it.name} in ${dir}: close Minecraft first, it locks the mods it loaded")
 		}
+		def source = jarFile.get().asFile
+		java.nio.file.Files.copy(source.toPath(), new File(dir, source.name).toPath())
+		println "Installed ${source.name} in ${dir}"
 	}
 }
 
@@ -177,8 +181,12 @@ jar {
 	}
 }
 
+// The Cobble Tank's manifest, filled in from its own project's gradle.properties.
 processTankResources {
-	def version = project.tank_version
+	def props = new Properties()
+	def propsFile = new File(cobbleTankDir, "gradle.properties")
+	if (propsFile.isFile()) propsFile.withInputStream { props.load(it) }
+	def version = props.getProperty("version", "dev")
 	def fluidgoreVersion = project.version
 	inputs.property "version", version
 	inputs.property "fluidgoreVersion", fluidgoreVersion
@@ -187,16 +195,3 @@ processTankResources {
 		expand "version": version, "fluidgore_version": fluidgoreVersion
 	}
 }
-
-def tankJar = tasks.register("tankJar", Jar) {
-	group = "build"
-	description = "Builds the Cobble Tank add-on jar."
-	archiveBaseName = "cobbletank"
-	archiveVersion = project.tank_version
-	from sourceSets.tank.output
-	from("LICENSE") {
-		rename { "${it}_cobbletank" }
-	}
-}
-
-tasks.named("assemble") { dependsOn tankJar }

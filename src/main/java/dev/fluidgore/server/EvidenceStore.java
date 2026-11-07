@@ -122,6 +122,21 @@ public final class EvidenceStore {
 		}
 	}
 
+	/**
+	 * Forgets every piece last seen lying inside {@code box} (see {@link ClearCommand}), so nobody arriving later is sent
+	 * it. Returns how many.
+	 */
+	static int removeIn(ServerLevel level, net.minecraft.world.phys.AABB box) {
+		Map<Long, Piece> pieces = PIECES.get(level);
+		if (pieces == null) {
+			return 0;
+		}
+
+		int before = pieces.size();
+		pieces.values().removeIf(piece -> piece.pose != null && box.contains(piece.pose.at()));
+		return before - pieces.size();
+	}
+
 	/** A piece moved on someone's screen (see {@code KeptBodies#relay}): it lies there now, or broke apart. */
 	static void moved(ServerPlayer player, PieceState state) {
 		Map<Long, Piece> pieces = PIECES.get(player.level());

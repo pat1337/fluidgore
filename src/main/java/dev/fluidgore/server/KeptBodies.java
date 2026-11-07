@@ -18,6 +18,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.WeakHashMap;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
@@ -129,6 +130,7 @@ public final class KeptBodies {
 		});
 		ServerPlayNetworking.registerGlobalReceiver(GoreAction.TYPE, (action, context) -> receive(context.player(), action));
 		ServerPlayNetworking.registerGlobalReceiver(PieceState.TYPE, (state, context) -> relay(context.player(), state));
+		FallLeads.register();
 		// A dead body is meat, not an animal: no milking, shearing, feeding, leashing or riding it.
 		UseEntityCallback.EVENT.register((player, level, hand, entity, hit) ->
 				entity instanceof LivingEntity living && !(entity instanceof Player) && living.isDeadOrDying() ? InteractionResult.FAIL : InteractionResult.PASS);
@@ -188,13 +190,16 @@ public final class KeptBodies {
 		body.blocksBuilding = false;
 		unstick(level, body);
 		// Lying over a drop it slumps down it, and players walking into it shove it along. Vanilla's own movement
-		// (gravity, friction) carries it from there, and every client is sent where it goes.
-		Vec3 push = shoved(level, body);
-		if (body.deathTime >= TIPPED && body.onGround()) {
+		// (gravity, friction) carries it from there, and every client is sent where it goes. A body whose fall a player's
+		// game leads (FallLeads) is moved there instead: that game's ragdoll slumps, tumbles and lies against the others,
+		// and its own player's steps shove it.
+		boolean led = FallLeads.led(level, body);
+		Vec3 push = shoved(level, body, led ? FallLeads.leader(body) : null);
+		if (!led && body.deathTime >= TIPPED && body.onGround()) {
 			push = push.add(spread(level, body, bodies));
 		}
 
-		if (config.bodySlide && body.deathTime >= TIPPED && body.onGround()) {
+		if (!led && config.bodySlide && body.deathTime >= TIPPED && body.onGround()) {
 			push = push.add(BodySlide.pull(level, body.getBoundingBox()));
 		}
 
@@ -306,11 +311,11 @@ public final class KeptBodies {
 				BodyFootprint.fourLegged(body));
 	}
 
-	/** Players walking into a body push it along, as they would a box: the push this tick. */
-	private static Vec3 shoved(ServerLevel level, LivingEntity body) {
+	/** Players walking into a body push it along, as they would a box: the push this tick. {@code leader}'s own game does it for them. */
+	private static Vec3 shoved(ServerLevel level, LivingEntity body, @Nullable UUID leader) {
 		AABB box = body.getBoundingBox();
 		Vec3 push = Vec3.ZERO;
-		for (Player player : level.getEntitiesOfClass(Player.class, box.inflate(0.05), p -> !p.isSpectator())) {
+		for (Player player : level.getEntitiesOfClass(Player.class, box.inflate(0.05), p -> !p.isSpectator() && !p.getUUID().equals(leader))) {
 			// Standing on top of it is not walking into it.
 			if (player.getY() > box.maxY - 0.2) {
 				continue;
@@ -401,8 +406,36 @@ public final class KeptBodies {
 		vanish(body);
 	}
 
+	/**
+	 * Every body kept in {@code level} that lies inside {@code box} is taken away at once, without a puff: the area is
+	 * being cleared (see {@link ClearCommand}). Returns how many there were.
+	 */
+	static int removeIn(ServerLevel level, AABB box) {
+		LinkedHashSet<LivingEntity> bodies = BODIES.get(level);
+		if (bodies == null) {
+			return 0;
+		}
+
+		int removed = 0;
+		java.util.Iterator<LivingEntity> it = bodies.iterator();
+		while (it.hasNext()) {
+			LivingEntity body = it.next();
+			if (body.isRemoved()) {
+				it.remove();
+			} else if (box.contains(body.position())) {
+				it.remove();
+				FallLeads.forget(body);
+				body.discard();
+				removed++;
+			}
+		}
+
+		return removed;
+	}
+
 	/** The body goes the vanilla way: a puff of smoke, and it is gone. */
 	private static void vanish(LivingEntity body) {
+		FallLeads.forget(body);
 		if (!body.isRemoved()) {
 			body.level().broadcastEntityEvent(body, (byte) 60);
 			body.remove(Entity.RemovalReason.KILLED);
@@ -489,7 +522,8 @@ public final class KeptBodies {
 			BloodyTools.absorb(player, action.damage(), (int) (action.partKey() & 0xFFFFFF));
 		}
 
-		if (action.kind() == GoreAction.STRIKE && body != null && isKept(body)) {
+		// A body a game leads is knocked there, as the blow is played on every ragdoll; the leader reports where it went.
+		if (action.kind() == GoreAction.STRIKE && body != null && isKept(body) && FallLeads.leader(body) == null) {
 			knock(body, action);
 		}
 
