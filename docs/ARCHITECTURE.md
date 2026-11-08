@@ -181,17 +181,25 @@ when a feature is turned off.
   drives it through `Rigging`. `Weights` shares the body's kilograms out among the segments as the real animal's are
   (head, neck, each limb; the trunk has the rest), not by block volume. Each tick
   `Rigging` hands a rig the segments of the rigged bodies near it (`Rig.Block`, oriented boxes), and its points are
-  pushed out of them a little each substep, so bodies lie against each other; sleeping bodies skip this. `Skeleton`
+  pushed out of them a little each substep, before the block contacts (blocks have the last word, so a body lying on a
+  leg cannot press it into the ground), so bodies lie against each other; sleeping bodies skip this. `Skeleton`
   defines body plans and joints, `CubeSplit` splits cubes with the vanilla constructor (so Sodium draws them exactly),
   and `Poser` swaps split parts in for the draw only. `Bends` maps wounds and hits on a bent stretch. Gore data never
   moves: wounds, rot and char stay on the original part and cube.
   Block contacts test each segment's corners, edge middles and face middles, then every edge of the segment against the
   block box and every edge of the block box against the segment, so a fence or a step's edge cannot slip between the
-  points. Each goes back out through the face it came in by. A block's lower edge where it stands on another box (a fence
-  post's foot, the foot of a riser) is an inside corner and is not tested. A segment a block has just pushed down (a leg
-  under a fence's lower rail) takes a tenth of its share of each joint correction for a tick, so the trunk gives way to
-  it instead of the hip pulling it back up into the block. A kept body's rig goes after the server's body through the
-  world (`Rigging.follow`: a pull across the ground, over an edge and down) and is put there at once only when more than
+  points. Each goes back out through the face it came in by (unless it came from inside the next block), else the
+  shallowest face that opens onto the gathered space and not into another block. Friction is Coulomb's: a contact
+  holds what it was pushed in by (on a wall, not counting the thin skin the solver leaves it clear by) and the share of
+  the body's weight it bears (all of it on a floor, none on a wall), so walls alone never hold a body up. Joint limits
+  are critically damped springs (XPBD compliance) as strong as the animal is heavy: stiff against a limb's own weight,
+  they give under the body's, so a body caught across a gap folds and drops instead of standing its head and legs
+  against both sides. A block's lower edge where it stands on another box (a fence post's foot, the foot of a riser) is
+  an inside corner and is not tested. A segment a block beside it or over it has just pushed (a leg under a fence's
+  lower rail, or against its side) takes a tenth of its share of each joint correction for a tick, so the trunk gives
+  way to it instead of the hip pulling it back into the block, and a stiff leg so held is not driven straight against
+  the block. A kept body's rig goes after the server's body through the world (`Rigging.follow`: a pull across the
+  ground, over an edge and down) and is put there at once only when more than
   three blocks out of step. The game that leads a kept body's fall (`server/FallLeads`) does not: its rig moves on its
   own, slumps down a drop as one of its own bodies does (`Rigging.slide`), and `Rigging.lead` reports where it got to,
   unless the server moved the body elsewhere (a shove).
@@ -242,8 +250,9 @@ humanoid. `GameRendererMixin` adds stagger and the limp hitch to the camera.
   counts rot. `NaturalSpawnerMixin` leaves kept bodies out of the mob cap.
 - `server/FallLeads`: who leads each kept body's fall. The nearest player with the mod is sent `net/BodyLead`; once
   their game reports (`net/BodyFall`, via `net/FallSync`), the server moves its body to each report (only its leader,
-  only a kept body, a few blocks at a time, lifted out of blocks its box would cut into and stood on top of any it
-  only grazes, since vanilla movement lets a box that starts inside a block fall through it) and stops sliding, spreading
+  only a kept body, a few blocks at a time, put beside walls its box would cut into by up to a quarter block, lifted out
+  of the blocks under it and stood on top of any it only grazes, since vanilla movement lets a box that starts inside a
+  block fall through it) and stops sliding, spreading
   and knocking it itself. Until then, and with nobody near, it moves the body as before.
 - `server/BloodyTools`: stains on cleaning tools. `server/BurningBodies`: vanilla fire from burning bodies.
 - `server/ClearCommand`: `/fluidgore clear` (operators and command blocks) removes the kept bodies and the records of

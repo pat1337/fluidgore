@@ -42,6 +42,11 @@ public final class FallLeads {
 	private static final double MOST_LIFT = 1.5;
 	/** How far a reported box may cut into a block and still be taken, blocks; it is then stood on top of it. */
 	private static final double GRAZE = 0.02;
+	/**
+	 * How far a reported box may be moved sideways out of a wall, blocks: less than the leading game allows between where
+	 * it put a body and where the server has it before it takes the body to have been moved (0.3, {@code Rigging.REPORTED}).
+	 */
+	private static final double MOST_ASIDE = 0.25;
 	/** A body reports four or five times a second while it moves; a player leading a dozen falling at once is plenty. */
 	private static final Throttle FALLS = new Throttle(200, 100);
 
@@ -175,6 +180,16 @@ public final class FallLeads {
 			return;
 		}
 
+		// The ragdoll's middle may lie nearer a wall than half the box's width (a body down a corridor one block wide): the
+		// box is put beside any block it cuts into that no lift would clear, by no more than the leading game takes for
+		// where it put the body.
+		double[] aside = aside(level, body, body.getBoundingBox().move(dx, dy, dz));
+		if (aside == null) {
+			return;
+		}
+
+		dx += aside[0];
+		dz += aside[1];
 		// The ragdoll lies in a shape the box is not: where its lowest point is, the box may cut into a step.
 		AABB box = body.getBoundingBox().move(dx, dy, dz).deflate(GRAZE / 2.0);
 		double lift = 0.0;
@@ -200,7 +215,48 @@ public final class FallLeads {
 		}
 
 		lead.confirmed = true;
-		body.setPos(to.x, to.y + lift + rise, to.z);
+		body.setPos(to.x + aside[0], to.y + lift + rise, to.z + aside[1]);
 		body.setDeltaMovement(Vec3.ZERO);
+	}
+
+	/**
+	 * How far ({@code x, z}) to move {@code box} to stand clear of the walls it cuts into (block boxes reaching higher above
+	 * its foot than any lift), or null if walls hold it on both sides of an axis or it would go further than
+	 * {@link #MOST_ASIDE}. Each wall pushes it out along whichever of x and z it cuts in least.
+	 */
+	private static double @Nullable [] aside(ServerLevel level, LivingEntity body, AABB box) {
+		double east = 0.0;
+		double west = 0.0;
+		double south = 0.0;
+		double north = 0.0;
+		for (VoxelShape shape : level.getBlockCollisions(body, box)) {
+			for (AABB part : shape.toAabbs()) {
+				if (!part.intersects(box) || part.maxY - box.minY <= MOST_LIFT) {
+					continue;
+				}
+
+				double inX = Math.min(part.maxX - box.minX, box.maxX - part.minX);
+				double inZ = Math.min(part.maxZ - box.minZ, box.maxZ - part.minZ);
+				if (inX <= inZ) {
+					if (part.getCenter().x < box.getCenter().x) {
+						east = Math.max(east, inX);
+					} else {
+						west = Math.max(west, inX);
+					}
+				} else if (part.getCenter().z < box.getCenter().z) {
+					south = Math.max(south, inZ);
+				} else {
+					north = Math.max(north, inZ);
+				}
+			}
+		}
+
+		double x = east - west;
+		double z = south - north;
+		if (east > 0.0 && west > 0.0 || south > 0.0 && north > 0.0 || Math.abs(x) > MOST_ASIDE || Math.abs(z) > MOST_ASIDE) {
+			return null;
+		}
+
+		return new double[] {x, z};
 	}
 }

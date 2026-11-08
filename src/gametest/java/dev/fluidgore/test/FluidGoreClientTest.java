@@ -6510,17 +6510,38 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			GoreSystems.suffering().clear();
 		});
 
-		for (boolean kept : new boolean[] {true, false}) {
+		// Crosswise (facing south, across the corridor), then, with Ragdoll Physics, facing down the flight as an animal on
+		// stairs one block wide stands, and sent down it by the blow. The box the old body is slides to the bottom. A
+		// ragdoll lying crosswise in a corridor as wide as its trunk is long comes down off the landing onto the steps, but
+		// may come to rest across one, as a carcass can: it must not hang between the walls. One sent down the flight
+		// tumbles to the bottom.
+		boolean rigged = context.computeOnClient(mc -> GoreConfig.get().articulatedRagdoll);
+		int cases = rigged ? 4 : 2;
+		for (int k = 0; k < cases; k++) {
+			boolean kept = k % 2 == 0;
+			boolean along = k >= 2;
 			context.runOnClient(mc -> GoreConfig.get().keepBodies = kept);
-			int n = kept ? 31 : 35;
+			int n = 31 + 4 * k;
 			java.util.UUID sheep = new java.util.UUID((long) n << 32 | n + 1, (long) (n + 2) << 32 | n + 3);
 			server.runCommand("summon minecraft:sheep 150.55 -56 -19.5 {NoAI:1b,UUID:[I;" + n + "," + (n + 1) + "," + (n + 2) + "," + (n + 3)
-					+ "],Tags:[\"fluidgore_stairs\"]}");
+					+ "],Rotation:[" + (along ? -90 : 0) + "f,0f],Tags:[\"fluidgore_stairs\"]}");
 			context.waitTicks(10);
 			int id = context.computeOnClient(mc -> idOf(mc, sheep));
 			server.runCommand("damage @e[type=minecraft:sheep,tag=fluidgore_stairs,limit=1] 100 minecraft:generic");
-			context.waitTicks(30);
-			if (kept) {
+			for (int t = 0; t < 30; t++) {
+				context.waitTicks(1);
+				if (along) {
+					// Sent on down the flight by the blow, as the drops test sends bodies over the cliff.
+					context.runOnClient(mc -> {
+						var corpse = GoreSystems.suffering().corpse(id);
+						if (corpse != null && corpse.rig != null && corpse.age == 1) {
+							corpse.rig.push(1.5, 0.0, 0.0);
+						}
+					});
+				}
+			}
+
+			if (k == 0) {
 				context.takeScreenshot("stairs_01_falling");
 			}
 
@@ -6538,17 +6559,22 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 
 				return null;
 			}) : null;
-			if (kept) {
+			if (k == 0) {
 				context.takeScreenshot("stairs_02_at_the_bottom");
 			}
 
-			System.out.println("[FluidGoreTest] sheep down the stairs, kept " + kept + ": body " + java.util.Arrays.toString(body)
-					+ ", server " + java.util.Arrays.toString(entity));
-			check(body != null, "the sheep that died on the stairs has no body (kept " + kept + ")");
-			check(body[1] < -59.4 && body[0] > 153.0, "the sheep's body did not slide down the stairs (kept " + kept + "): "
-					+ java.util.Arrays.toString(body));
+			String which = "kept " + kept + (along ? ", facing down the flight" : ", crosswise");
+			System.out.println("[FluidGoreTest] sheep down the stairs, " + which + ": body " + java.util.Arrays.toString(body) + ", server "
+					+ java.util.Arrays.toString(entity));
+			check(body != null, "the sheep that died on the stairs has no body (" + which + ")");
+			// To the bottom; or, a ragdoll crosswise, at least two steps down (it used to hang between the walls over the first).
+			boolean bottom = !rigged || along;
+			double belowY = bottom ? -59.4 : -57.4;
+			double pastX = bottom ? 153.0 : 151.5;
+			check(body[1] < belowY && body[0] > pastX, "the sheep's body did not slide down the stairs (" + which + "): " + java.util.Arrays.toString(body));
 			if (kept) {
-				check(entity != null && entity[1] < -59.4 && entity[0] > 153.0, "the server did not move the kept body down the stairs: "
+				// The server's box is lifted out of the step a ragdoll lying across it reaches below.
+				check(entity != null && entity[1] < belowY + (bottom ? 0.0 : 0.5) && entity[0] > pastX, "the server did not move the kept body down the stairs: "
 						+ java.util.Arrays.toString(entity));
 				// Where the server has a kept body is the middle of it as it lies.
 				check(Math.abs(entity[0] - body[2]) < 0.6, "the body is drawn away from where the server has it: " + java.util.Arrays.toString(body)
@@ -6564,7 +6590,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		context.waitTicks(10);
 		server.runCommand("damage @e[type=minecraft:sheep,tag=fluidgore_stairs,limit=1] 100 minecraft:generic");
 		context.waitTicks(120);
-		double flatX = server.computeOnServer(s -> {
+		java.util.function.Supplier<Double> flatAt = () -> server.computeOnServer(s -> {
 			for (Entity e : s.overworld().getAllEntities()) {
 				if (e.entityTags().contains("fluidgore_stairs")) {
 					return e.getX();
@@ -6573,8 +6599,14 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 
 			return Double.NaN;
 		});
-		System.out.println("[FluidGoreTest] sheep on the flat: x " + flatX);
-		check(Math.abs(flatX - 158.5) < 0.05, "a body on the flat slid: x " + flatX);
+		double flatX = flatAt.get();
+		context.waitTicks(40);
+		double flatLater = flatAt.get();
+		// With Ragdoll Physics the server has the body where its ragdoll lies, which moves as the sheep falls onto its
+		// side (in this corridor, along it): by up to its height, and then it lies still. Without, its box never moves.
+		System.out.println("[FluidGoreTest] sheep on the flat: x " + flatX + ", 40 ticks later " + flatLater + " (Ragdoll Physics " + rigged + ")");
+		check(Math.abs(flatX - 158.5) < (rigged ? 0.75 : 0.05), "a body on the flat slid: x " + flatX);
+		check(Math.abs(flatLater - flatX) < 0.05, "a body on the flat kept sliding: x " + flatX + " then " + flatLater);
 		cleanAway(context);
 		server.runCommand("kill @e[type=!minecraft:player]");
 		context.runOnClient(mc -> {

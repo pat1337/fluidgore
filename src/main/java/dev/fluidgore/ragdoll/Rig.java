@@ -75,15 +75,26 @@ public final class Rig {
 	 */
 	private static final int STRAIGHTEN_TICKS = 20;
 	/**
-	 * How much of its share of a joint's correction a segment held down by a block over it takes (a leg pushed out under a
-	 * fence's lower rail). A joint shares each correction by weight, so a sheep's leg, a fortieth of the trunk's weight,
-	 * would take nearly all of it: the hip pulls the leg up into the rail, the rail pushes it back down, and the trunk,
-	 * which would have to roll a little to let the leg lie under the rail, hardly moves. Counted heavier while the block
-	 * holds it, the leg moves the trunk instead. Free legs keep their own weight, so a fall is unchanged.
+	 * How much of its share of a joint's correction a segment held by a block beside it or over it takes (a leg pushed
+	 * out under a fence's lower rail, or against its side). A joint shares each correction by weight, so a sheep's leg, a
+	 * fortieth of the trunk's weight, would take nearly all of it: the hip pulls the leg up into the rail (or, as the
+	 * trunk shifts, through the fence), the block pushes it back, and the trunk, which would have to roll a little to let
+	 * the leg lie where the block holds it, hardly moves. Counted heavier while the block holds it, the leg moves the
+	 * trunk instead. Free legs, and legs only resting on the ground, keep their own weight, so a fall is unchanged.
 	 */
 	private static final float PINNED_GIVE = 0.1F;
-	/** Substeps a segment counts as held down after a block last pushed it down: a tick. */
+	/** Substeps a segment counts as held after a block beside it or over it last pushed it: a tick. */
 	private static final int PIN_HOLD = SUBSTEPS;
+	/**
+	 * How far a joint's limits give, radians, under the turn of the whole body's weight on an arm as long as the body
+	 * (XPBD compliance, critically damped). A dead animal's ligaments hold a limb's own weight at the end of its swing (a
+	 * sheep's leg turns one of them about a hundredth as hard, and sags a degree or so), but the weight of the body braced
+	 * through them stretches them. With rigid limits, a body caught across a gap (a sheep killed crosswise in a corridor
+	 * one block wide) became a strut: its head against one wall and its hind legs against the other, held up between them
+	 * by the friction of the limits forcing them in. Damped, as tissue is: undamped, a hard landing bent a limb past its
+	 * limit and the spring handed the blow back, setting the body rolling.
+	 */
+	private static final float LIMIT_GIVE = 3.0F;
 
 	public final Skeleton skeleton;
 	public final int n;
@@ -116,8 +127,10 @@ public final class Rig {
 	private final Vector3f[] hitNormal;
 	/** The segment touched something this substep. */
 	private final boolean[] touched;
-	/** Substeps left in which the segment counts as held down by a block over it (see {@link #PINNED_GIVE}). */
+	/** Substeps left in which the segment counts as held by a block beside it or over it (see {@link #PINNED_GIVE}). */
 	private final int[] pinned;
+	/** The joint limits' compliance over a substep squared (see {@link #LIMIT_GIVE}): stronger the heavier the animal. */
+	private final float limitSoftness;
 	/** Frame origin relative to the centre of mass, in the frame. */
 	final Vector3f[] frameOffset;
 	final Vector3f[] half;
@@ -140,6 +153,8 @@ public final class Rig {
 	private float stiff;
 
 	private final List<List<AABB>> near = new ArrayList<>();
+	/** Where each segment's blocks were gathered from (see {@link #near}): beyond it, what is there is not known. */
+	private final AABB[] nearBounds;
 	/** Other bodies' segments within reach of each segment of this one, this tick (see {@link #neighbours}). */
 	private final List<List<Block>> others = new ArrayList<>();
 	private boolean hasOthers;
@@ -150,6 +165,8 @@ public final class Rig {
 	/** Contacts of the current substep: body, arm (x, y, z), normal (x, y, z), depth. */
 	private float[] contacts = new float[8 * 64];
 	private int contactCount;
+	/** How many of this substep's contacts are against other bodies (recorded first; see {@link #solveBodies}). */
+	private int bodyContacts;
 	private int still;
 	private int calm;
 	private boolean asleep;
@@ -236,6 +253,8 @@ public final class Rig {
 	private final Vector3f t = new Vector3f();
 	private final Vector3f u = new Vector3f();
 	private final Quaternionf dq = new Quaternionf();
+	private final Quaternionf turnNow = new Quaternionf();
+	private final Quaternionf turnBefore = new Quaternionf();
 	/**
 	 * Scratch for the edge contacts: a segment's corners in its frame and in the world, a block box's corners in the
 	 * segment's frame, and a chord.
@@ -279,6 +298,8 @@ public final class Rig {
 		hitNormal = new Vector3f[n];
 		touched = new boolean[n];
 		pinned = new int[n];
+		nearBounds = new AABB[n];
+		java.util.Arrays.fill(nearBounds, new AABB(-3.0E7, -3.0E7, -3.0E7, 3.0E7, 3.0E7, 3.0E7));
 		java.util.Arrays.fill(bounce, TRUNK_BOUNCE);
 		if (skeleton.head >= 0) {
 			bounce[skeleton.head] = HEAD_BOUNCE;
@@ -317,6 +338,15 @@ public final class Rig {
 			near.add(new ArrayList<>());
 			others.add(new ArrayList<>());
 		}
+
+		float weight = 0.0F;
+		float reach = 0.0F;
+		for (int i = 0; i < n; i++) {
+			weight += 1.0F / invMass[i];
+			reach = Math.max(reach, Math.max(half[i].x, Math.max(half[i].y, half[i].z)));
+		}
+
+		limitSoftness = LIMIT_GIVE / (weight * GRAVITY * 2.0F * reach) / (H * H);
 
 		int joints = skeleton.joints.length;
 		anchorParent = new Vector3f[joints];
@@ -439,14 +469,17 @@ public final class Rig {
 		setLegs();
 		for (int step = 0; step < SUBSTEPS; step++) {
 			integrate();
+			// Once a substep is enough for bodies, which push out gently anyway (see BODY_PUSH). Before the blocks, which
+			// have the last word: a body lying on a leg pressed it into the ground after the ground had pushed it out.
+			contactCount = 0;
+			solveBodies();
+			bodyContacts = contactCount;
 			for (int pass = 0; pass < 2; pass++) {
 				solveJoints();
 				stiffLegs();
 				solveContacts();
 			}
 
-			// Once a substep is enough for bodies, which push out gently anyway (see BODY_PUSH).
-			solveBodies();
 			updateVelocities();
 			contactVelocities();
 			jointFriction();
@@ -605,7 +638,7 @@ public final class Rig {
 				if (angle > joint.swing()) {
 					Vector3f n = new Vector3f(axisA).cross(axisB);
 					if (n.lengthSquared() > 1.0E-10F) {
-						angular(a, b, n.normalize().mul(angle - joint.swing()));
+						angular(a, b, n.normalize().mul(angle - joint.swing()), limitSoftness);
 					}
 				}
 
@@ -688,7 +721,9 @@ public final class Rig {
 
 	/**
 	 * Turns each stiff leg joint part of the way back to straight, the trunk taking the other end of it; once set (see
-	 * {@link #setLegs}), back to where it set.
+	 * {@link #setLegs}), back to where it set. A leg a block beside it or over it holds is left where the block holds it:
+	 * driven straight against a wall (a body lying across a corridor no wider than it is long), it would brace the body
+	 * against the wall and shove it along it.
 	 */
 	private void stiffLegs() {
 		if (stiff <= 0.0F) {
@@ -704,6 +739,10 @@ public final class Rig {
 
 			int a = joints[j].parent();
 			int b = joints[j].child();
+			if (pinned[b] > 0) {
+				continue;
+			}
+
 			// The turn from where the child should be on its parent (straight, then held as it set) to where it is.
 			Quaternionf wanted = new Quaternionf(q[a]).mul(stiffTicks < STRAIGHTEN_TICKS ? restTurn[j] : heldTurn[j]);
 			Quaternionf off = new Quaternionf(q[b]).mul(wanted.conjugate());
@@ -718,7 +757,7 @@ public final class Rig {
 		float angle = (float) Math.atan2(cross.dot(axis), refA.dot(refB));
 		float over = angle < min ? angle - min : angle > max ? angle - max : 0.0F;
 		if (over != 0.0F) {
-			angular(a, b, new Vector3f(axis).mul(over));
+			angular(a, b, new Vector3f(axis).mul(over), limitSoftness);
 		}
 	}
 
@@ -727,6 +766,14 @@ public final class Rig {
 	 * about that axis: what closes a turn of {@code |error|} from a towards b.
 	 */
 	private void angular(int a, int b, Vector3f error) {
+		angular(a, b, error, 0.0F);
+	}
+
+	/**
+	 * As {@link #angular(int, int, Vector3f)} for a limit {@code error} past, giving way as a critically damped spring of
+	 * compliance {@code softness} (over H squared) does.
+	 */
+	private void angular(int a, int b, Vector3f error, float softness) {
 		float angle = error.length();
 		if (angle < 1.0E-7F) {
 			return;
@@ -742,9 +789,26 @@ public final class Rig {
 			return;
 		}
 
-		float lambda = angle / sum;
+		float lambda;
+		if (softness > 0.0F) {
+			// Damped as tissue is, critically (XPBD damping): a hard landing bends a limb past its limit, and the spring
+			// does not hand the blow back as a rebound that sets the body rolling.
+			float damping = 2.0F * (float) Math.sqrt(softness / sum);
+			float closing = turned(a, n) - turned(b, n);
+			lambda = (angle - damping * closing) / ((1.0F + damping) * sum + softness);
+		} else {
+			lambda = angle / sum;
+		}
+
 		applyRotation(a, n, lambda * ga);
 		applyRotation(b, n, -lambda * gb);
+	}
+
+	/** How far segment {@code i} has turned about {@code axis} this substep, radians. */
+	private float turned(int i, Vector3f axis) {
+		Quaternionf d = turnNow.set(q[i]).mul(turnBefore.set(lq[i]).conjugate());
+		float sign = d.w >= 0.0F ? 2.0F : -2.0F;
+		return sign * (d.x * axis.x + d.y * axis.y + d.z * axis.z);
 	}
 
 	/** Moves a's point at {@code ra} along {@code normal} and b's at {@code rb} against it until they meet: {@code c} apart now. */
@@ -763,7 +827,7 @@ public final class Rig {
 		applyImpulse(b, rb, normal, -lambda * gb);
 	}
 
-	/** How readily segment {@code i} moves in a joint: less while a block holds it down (see {@link #PINNED_GIVE}). */
+	/** How readily segment {@code i} moves in a joint: less while a block beside it or over it holds it (see {@link #PINNED_GIVE}). */
 	private float give(int i) {
 		return pinned[i] > 0 ? PINNED_GIVE : 1.0F;
 	}
@@ -888,6 +952,7 @@ public final class Rig {
 			List<AABB> list = near.get(i);
 			list.clear();
 			AABB around = new AABB(x[i] - reach[i], y[i] - reach[i], z[i] - reach[i], x[i] + reach[i], y[i] + reach[i], z[i] + reach[i]);
+			nearBounds[i] = around;
 			for (AABB box : boxes) {
 				if (box.intersects(around)) {
 					list.add(box);
@@ -1002,7 +1067,7 @@ public final class Rig {
 	}
 
 	private void solveContacts() {
-		contactCount = 0;
+		contactCount = bodyContacts;
 		for (int i = 0; i < n; i++) {
 			List<AABB> boxes = near.get(i);
 			if (boxes.isEmpty()) {
@@ -1050,7 +1115,7 @@ public final class Rig {
 		double oy = ly[i] + t.y;
 		double oz = lz[i] + t.z;
 		Vector3f normal = new Vector3f();
-		float depth = exit(box, boxes, px, py, pz, ox, oy, oz, normal);
+		float depth = exit(box, boxes, nearBounds[i], px, py, pz, ox, oy, oz, normal);
 		if (depth <= 0.0F) {
 			return false;
 		}
@@ -1080,11 +1145,16 @@ public final class Rig {
 		}
 
 		applyImpulse(i, arm, normal, depth / wn);
-		record(i, arm, normal, depth);
+		// The point is moved a skin (MARGIN) clear of the surface. A wall bears no weight, so there only what the point was
+		// really in by is load: a box that exactly fills a gap (a sheep's trunk across a corridor one block wide) is pushed
+		// the skin off both walls every substep, and counted as load that squeeze alone held the body up between them. On a
+		// floor the skin stays part of the grip the friction is set for.
+		float load = Math.abs(normal.y) < 0.5F ? Math.max(0.0F, depth - MARGIN) : depth;
+		record(i, arm, normal, load);
 		if (normal.y > 0.5F) {
 			grounded = true;
-		} else if (normal.y < -0.5F) {
-			// A block over it pushed it down.
+		} else {
+			// A block beside it or over it holds it.
 			pinned[i] = PIN_HOLD;
 		}
 
@@ -1097,7 +1167,7 @@ public final class Rig {
 		Vector3f slip = new Vector3f((float) (mx - normal.x * along), (float) (my - normal.y * along), (float) (mz - normal.z * along));
 		float slide = slip.length();
 		if (slide > 1.0E-7F) {
-			float hold = slide < STATIC_FRICTION * depth ? slide : Math.min(slide, FRICTION * depth);
+			float hold = slide < STATIC_FRICTION * load ? slide : Math.min(slide, FRICTION * load);
 			Vector3f back = slip.div(-slide);
 			Vector3f at = q[i].transform(new Vector3f(sx, sy, sz));
 			float wt = generalized(i, at, back);
@@ -1541,7 +1611,11 @@ public final class Rig {
 			Vector3f tangent = new Vector3f(vel).sub(new Vector3f(normal).mul(vn));
 			float slide = tangent.length();
 			if (slide > 1.0E-6F) {
-				float stop = Math.min(slide, FRICTION * depth / H + STATIC_FRICTION * GRAVITY * H);
+				// What the contact was pushed in by, and the weight it bears: all of it on a floor, its slope's share on a
+				// slope, none on a wall. A body touching two walls is not held up by them: one jammed crosswise in a corridor
+				// as wide as it is long slides down between them, not hangs there (each wall used to bear the whole weight).
+				float bears = Math.max(0.0F, normal.y);
+				float stop = Math.min(slide, FRICTION * depth / H + STATIC_FRICTION * GRAVITY * H * bears);
 				velocityImpulse(i, arm, tangent.div(-slide), stop);
 			}
 
@@ -1587,11 +1661,22 @@ public final class Rig {
 	}
 
 	/**
-	 * How deep a point is in {@code box} and the way out
- ({@code normal}): through the face it came in by if it was
-	 * outside last step, else the shallowest face that does not lead straight into a neighbouring block.
+	 * How deep a point is in {@code box} and the way out ({@code normal}): through the face it came in by if it was
+	 * outside last step, else the shallowest face that does not lead straight into a neighbouring block. Only the blocks
+	 * within {@code known} were gathered: a way out beyond it may lead into a block, and counts as one that does. A point
+	 * that was inside a neighbouring block last step did not come in from the open through any face: in the corner where
+	 * a wall meets the floor, a leg's corner handed down from the wall into the floor was otherwise passed on downwards,
+	 * block by block, out of the bottom of each.
 	 */
-	private static float exit(AABB box, List<AABB> boxes, double px, double py, double pz, double ox, double oy, double oz, Vector3f normal) {
+	private static float exit(AABB box, List<AABB> boxes, AABB known, double px, double py, double pz, double ox, double oy, double oz, Vector3f normal) {
+		boolean fromBlock = false;
+		for (AABB other : boxes) {
+			if (other != box && other.contains(ox, oy, oz)) {
+				fromBlock = true;
+				break;
+			}
+		}
+
 		float best = Float.MAX_VALUE;
 		int bestFace = -1;
 		for (int face = 0; face < 6; face++) {
@@ -1603,7 +1688,7 @@ public final class Rig {
 				case 4 -> pz - box.minZ;
 				default -> box.maxZ - pz;
 			};
-			boolean entered = switch (face) {
+			boolean entered = !fromBlock && switch (face) {
 				case 0 -> ox <= box.minX;
 				case 1 -> ox >= box.maxX;
 				case 2 -> oy <= box.minY;
@@ -1614,7 +1699,7 @@ public final class Rig {
 			double ex = px + (face == 0 ? -depth - 1.0E-3 : face == 1 ? depth + 1.0E-3 : 0.0);
 			double ey = py + (face == 2 ? -depth - 1.0E-3 : face == 3 ? depth + 1.0E-3 : 0.0);
 			double ez = pz + (face == 4 ? -depth - 1.0E-3 : face == 5 ? depth + 1.0E-3 : 0.0);
-			boolean blocked = false;
+			boolean blocked = !known.contains(ex, ey, ez);
 			for (AABB other : boxes) {
 				if (other != box && other.contains(ex, ey, ez)) {
 					blocked = true;

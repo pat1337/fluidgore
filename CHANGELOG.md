@@ -28,6 +28,14 @@ All notable changes to Fluid Gore are listed here. The format follows
   screen used to be moved to the server's position directly, through the steps; it now slumps and falls after it.
 - Ragdoll Physics: a four-legged body that tumbles down a long flight of steps no longer comes to rest on its back. It
   settles onto its side as one that falls on the flat does.
+- Ragdoll Physics: a body killed crosswise in a passage one block wide (on stairs, say) no longer hangs in the air
+  between the walls. Walls grip a body only as hard as it is pressed against them, not as if they bore its weight, and
+  its joints give under its weight, so its head and legs no longer brace it against both walls. It drops onto the
+  steps and comes down them.
+- Ragdoll Physics: a leg caught where a wall meets the floor no longer sinks through the floor and flings the body
+  away along the ground.
+- Ragdoll Physics with the mod on the server: a body tumbling down a passage one block wide is no longer left behind
+  on the server partway down. Everyone now finds it where it came to rest.
 
 ### Changed
 - Ragdoll Physics: a body carries its weight as the animal does, not as its blocks are sized. Most of it is in the
