@@ -308,6 +308,10 @@ public final class Suffering {
 		if (forced == null && wounds != null && wounds.throatCut() && kind != Corpse.Kind.DECAPITATION && kind != Corpse.Kind.TRAUMA && kind != Corpse.Kind.BURN) {
 			// Stuck: stunned or not, it bleeds out through the cut throat.
 			kind = Corpse.Kind.EXSANGUINATION;
+		} else if (forced == null && wounds != null && wounds.lungPierced()
+				&& (kind == Corpse.Kind.EXSANGUINATION || kind == Corpse.Kind.CONCUSSION || kind == Corpse.Kind.BEATEN)) {
+			// A wound into a lung: it drowns in its own blood, coughing it from the mouth and nose.
+			kind = Corpse.Kind.CHEST;
 		}
 
 		// On High and Extreme a body that was beaten or burnt to death lies there a good while: the evidence of what was

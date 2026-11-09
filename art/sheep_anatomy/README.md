@@ -11,25 +11,25 @@ of each model from four sides.
 | `sheep_heart.bbmodel` | Sheep heart | 708 | 0.5 cm | 10 x 21 x 14 cm |
 | `sheep_lungs.bbmodel` | Sheep lungs and windpipe | 2654 | 0.5 cm | 25 x 25 x 42 cm |
 | `sheep_pluck.bbmodel` | Sheep pluck (heart, lungs, liver) | 4028 | 0.5 cm | 26 x 26 x 52 cm |
-| `sheep_kidneys.bbmodel` | Sheep kidneys in suet | 261 | 0.5 cm | 10 x 8 x 18 cm |
+| `sheep_kidneys.bbmodel` | Sheep kidneys in suet | 256 | 0.5 cm | 10 x 8 x 18 cm |
 | `sheep_glands.bbmodel` | Sheep glands, ureters and spinal cord (thymus, adrenals, pancreas, thyroid, salivary glands) | 328 | 0.5 cm | 15 x 28 x 112 cm |
-| `sheep_omentum.bbmodel` | Sheep greater omentum over the intestines | 1805 | 0.5 cm | 16 x 23 x 54 cm |
+| `sheep_omentum.bbmodel` | Sheep greater omentum over the intestines | 1799 | 0.5 cm | 16 x 23 x 54 cm |
 | `sheep_spleen.bbmodel` | Sheep spleen | 82 | 0.5 cm | 5 x 8 x 10 cm |
-| `sheep_stomachs.bbmodel` | Sheep stomachs (rumen, reticulum, omasum, abomasum) | 3663 | 0.5 cm | 24 x 24 x 41 cm |
+| `sheep_stomachs.bbmodel` | Sheep stomachs (rumen, reticulum, omasum, abomasum) | 3829 | 0.5 cm | 24 x 26 x 41 cm |
 | `sheep_omasum.bbmodel` | Sheep omasum (the manyplies) | 57 | 0.5 cm | 7 x 8 x 7 cm |
-| `sheep_intestines.bbmodel` | Sheep intestines | 1456 | 0.5 cm | 15 x 22 x 45 cm |
+| `sheep_intestines.bbmodel` | Sheep intestines | 1450 | 0.5 cm | 15 x 22 x 45 cm |
 | `sheep_skeleton.bbmodel` | Sheep trunk skeleton | 4694 | 0.5 cm | 30 x 79 x 144 cm |
 | `sheep_skull.bbmodel` | Sheep skull, jaw and teeth | 633 | 0.5 cm | 12 x 12 x 27 cm |
 | `sheep_brain.bbmodel` | Sheep brain | 76 | 0.5 cm | 4 x 6 x 9 cm |
 | `sheep_head.bbmodel` | Sheep head (skull, jaw, teeth, brain) | 709 | 0.5 cm | 12 x 12 x 27 cm |
-| `sheep_in_situ.bbmodel` | Sheep anatomy in place | 3886 | 1.0 cm | 30 x 77 x 145 cm |
+| `sheep_in_situ.bbmodel` | Sheep anatomy in place | 3955 | 1.0 cm | 30 x 77 x 145 cm |
 | `sheep_muscles.bbmodel` | Sheep muscles on the skeleton (the loin eye, the shoulder, the leg, the belly wall in its layers) | 23890 | 0.5 cm | 35 x 79 x 145 cm |
-| `sheep_whole.bbmodel` | Whole sheep under its skin: skin, fat, muscles, bones and organs in place | 12152 | 1.0 cm | 42 x 80 x 147 cm |
-| `sheep_ewe_reproductive.bbmodel` | Ewe reproductive tract and udder, with the bladder and pelvis | 988 | 0.5 cm | 23 x 35 x 35 cm |
-| `sheep_ram_reproductive.bbmodel` | Ram reproductive organs, with the bladder and pelvis | 1357 | 0.5 cm | 23 x 34 x 35 cm |
-| `sheep_lamb_stomachs.bbmodel` | Lamb stomachs (small rumen, big abomasum) and thymus | 2828 | 0.5 cm | 21 x 25 x 65 cm |
+| `sheep_whole.bbmodel` | Whole sheep under its skin: skin, fat, muscles, bones and organs in place | 12220 | 1.0 cm | 42 x 80 x 147 cm |
+| `sheep_ewe_reproductive.bbmodel` | Ewe reproductive tract and udder, with the bladder and pelvis | 987 | 0.5 cm | 23 x 35 x 35 cm |
+| `sheep_ram_reproductive.bbmodel` | Ram reproductive organs, with the bladder and pelvis | 1356 | 0.5 cm | 23 x 34 x 35 cm |
+| `sheep_lamb_stomachs.bbmodel` | Lamb stomachs (small rumen, big abomasum) and thymus | 2849 | 0.5 cm | 21 x 25 x 65 cm |
 | `sheep_lamb_skull.bbmodel` | Lamb skull and milk teeth | 549 | 0.5 cm | 12 x 12 x 27 cm |
-| `sheep_grown_stomachs.bbmodel` | Grown sheep stomachs and thymus, to compare with the lamb's | 4388 | 0.5 cm | 24 x 24 x 66 cm |
+| `sheep_grown_stomachs.bbmodel` | Grown sheep stomachs and thymus, to compare with the lamb's | 4554 | 0.5 cm | 24 x 26 x 66 cm |
 
 ## Scale and orientation
 

@@ -51,6 +51,12 @@ Open wounds drip, so a wounded animal leaves a trail. How deep a wound can go de
 - **Slashes follow the swing.** Swords, axes and flint leave long, narrow cuts laid along the swing, gaping in the
   middle and tapering at the ends. As they deepen they show the bruised edges, the yellow fat under the skin, the
   muscle, and a line of bone. Fists, clubs, points and teeth leave round, ragged wounds.
+- **Wounds open into the body.** On a sheep, what shows in a wound is what lies under it: each cut or blow is a window
+  onto the animal's own anatomy at the depth it has reached, half-pixel by half-pixel. A cut in the flank shows the
+  belly wall's layers, then the wall of the rumen behind them, and cud comes out; a cut over the ribs behind the
+  shoulder shows muscle, then rib, then lung, and the blood at the wound froths with air. A sheep with a lung wound dies
+  coughing blood from the mouth and nose. Pigs, cows and other animals keep the
+  stock picture of fat, meat and bone until they have anatomy of their own.
 - **Sticking.** A sword or a flint to the head of a pig, cow, sheep or other four-legged animal goes into its throat:
   a short cut along the underside of the neck, just ahead of the breastbone. The animal bleeds out through it.
 - **Blood runs.** Blood from an open wound runs down the skin below it and dries where it ran. A stuck pig pours down
@@ -500,6 +506,9 @@ generators.
   A lamb's skull has the adult shape (a real lamb's face is shorter).
 - A sheep has no neck in the vanilla model, so its neck muscles and the rest of its neck are left out of its anatomy.
   The two claws of each hoof come away together.
+- A sheep's insides keep the real animal's proportions, which are taller and a little longer than the vanilla body:
+  the top of its back, the floor of its belly, its brisket and its rump lie inside the wool. A shorn sheep is a thinner
+  animal than its insides, so those parts are not drawn in place on it; a blast still throws them.
 - Where a large pool of blood meets dry floor, its edge can step along the block edges.
 - A body loaded from a save, or seen by a player who arrived after it died, keeps its normal colour: pallor is
   only seen by players who watched it bleed. The same goes for blood on coats.

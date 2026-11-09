@@ -261,6 +261,7 @@ public final class Wounds {
 		WoundSet set = sets.get(victim.getId());
 		if (set == null || set.model != model) {
 			set = new WoundSet(model, Flesh.of(victim), EntityFilter.bloodType(victim).rgb);
+			WoundAnatomy.bind(set, victim, model);
 			sets.put(victim.getId(), set);
 		}
 
@@ -284,6 +285,17 @@ public final class Wounds {
 		Vec3 offset = hit.point().subtract(victim.position());
 		long now = now();
 		WoundSet.Change change = set.add(hit, weapon, amount, cap, offset, bodyYaw, stick, angle, now, RANDOM);
+		// What the blow has reached under the skin, if the body has an anatomy to reach into: the first time a wound gets to
+		// an organ, the organ answers (cud from the rumen, froth from a lung, a spurt from a vessel).
+		dev.fluidgore.anatomy.Anatomy.Kind reached = WoundAnatomy.reach(set, change.index());
+		if (reached != null) {
+			byte was = set.organ[change.index()];
+			set.organ[change.index()] = (byte) (reached.ordinal() + 1);
+			if (was != set.organ[change.index()]) {
+				WoundAnatomy.answer(victim, set, change.index(), hit.point(), hit.normal(), reached);
+			}
+		}
+
 		// Through a limb already cut as deep as it goes, it may come off; through the carcass, it splits (see Butchery).
 		boolean through = weapon.cuts() && change.before() >= cap - 1.0E-3F;
 		boolean cut = through && (hit.bodyPart() == null || RANDOM.nextFloat() < Math.min(1.0F, level.partChance * 2.0F));

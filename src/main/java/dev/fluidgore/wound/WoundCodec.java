@@ -64,6 +64,7 @@ public final class WoundCodec {
 			}
 
 			buf.writeInt(age(now, set.born[i]));
+			buf.writeByte(set.organ[i]);
 		}
 
 		int runs = 0;
@@ -102,10 +103,14 @@ public final class WoundCodec {
 	}
 
 	/**
-	 * Wounds on {@code model} (an entity's) or on {@code root} (a loose piece, with {@code model} null). {@code dated}
-	 * is false for data from before wounds had ages and runs: those read as long-ago wounds with no runs.
+	 * Wounds on {@code model} (an entity's) or on {@code root} (a loose piece, with {@code model} null). {@code version}
+	 * is the record's: 1 is from before wounds had ages and runs (those read as long-ago wounds with no runs), 2 from
+	 * before they kept the organ they reached, 3 the current format.
 	 */
-	public static WoundSet read(ByteBuf buf, @Nullable Model<?> model, ModelPart root, boolean dated) {
+	public static WoundSet read(ByteBuf buf, @Nullable Model<?> model, ModelPart root, int version) {
+		boolean dated = version >= 2;
+		boolean organs = version >= 3;
+		int kinds = dev.fluidgore.anatomy.Anatomy.Kind.values().length;
 		long now = Wounds.now();
 		Flesh[] fleshes = Flesh.values();
 		Flesh flesh = fleshes[Math.floorMod(buf.readByte(), fleshes.length)];
@@ -136,6 +141,7 @@ public final class WoundCodec {
 			}
 
 			int age = dated ? buf.readInt() : Integer.MAX_VALUE;
+			byte organ = organs ? buf.readByte() : 0;
 			if (part < 0 || part >= parts.size() || set.count >= WoundSet.MAX || !plausible(f)) {
 				continue;
 			}
@@ -163,6 +169,7 @@ public final class WoundCodec {
 			set.oz[i] = f[6];
 			set.yaw[i] = f[7];
 			set.born[i] = now - Math.max(0, age);
+			set.organ[i] = organ >= 0 && organ <= kinds ? organ : 0;
 		}
 
 		if (dated) {

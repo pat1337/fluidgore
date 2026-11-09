@@ -312,23 +312,40 @@ public final class SheepAnatomyModels extends Quadruped {
 	static final int[] MOD_GRAINS = {16, 32, 64};
 
 	/**
-	 * The same anatomy at the scale of the game: squashed into the vanilla sheep's 8x6x16 body cube, inside its fat and
-	 * muscle (as the mod's {@code Region.BEAST_TRUNK} lays them), cut into voxels of 16 / {@code res} of a pixel and drawn
-	 * with the mod's own anatomy.png, so Blockbench shows what the game draws. At {@link #MOD_RES} it also writes the mod's piece table.
+	 * How far the vanilla fleece stands off the body cube on every side, in pixels ({@code SheepFurModel}'s body cube is
+	 * the sheep's grown by this). The mod's trunk is framed in the fleece, not the body cube, so the ewe keeps her
+	 * proportions: she is taller than the body cube and a little longer, and the wool hides the difference.
+	 */
+	static final double FLEECE_PX = 1.75;
+
+	/**
+	 * Centimetres a pixel in the mod's trunk, the same on every axis: the ewe's 45 cm of height (4 cm under the belly to
+	 * the tips of the withers' spines) into the fleece's 9.5 px, which is the tightest of the three axes.
+	 */
+	static final double FLEECE_CM = 45.0 / (6 + 2 * FLEECE_PX);
+
+	/**
+	 * The same anatomy at the scale of the game: the ewe at one scale ({@link #FLEECE_CM}) inside the vanilla sheep's
+	 * fleece, which is its 8x6x16 body cube grown {@link #FLEECE_PX} each way, so that she keeps her proportions and only
+	 * her wool hides what reaches past the body cube; cut into voxels of 16 / {@code res} of a pixel and drawn with the
+	 * mod's own anatomy.png, so Blockbench shows what the game draws. At {@link #MOD_RES} it also writes the mod's piece table.
 	 */
 	static List<String> mob(Path out, int res) throws IOException {
 		Files.createDirectories(out.resolve("previews"));
 		double vox = 16.0 / res;
-		// Pixels to centimetres (the model has the right at -x, the anatomy at +x): the vanilla body cube, +-4 px across, 12 to
-		// 18 px up, -8 to 8 along, holds the ewe under her skin: +-18.6 cm across the barrel, from 4 cm under the belly to
-		// 41 cm, over the tips of the withers' spines (7.5 cm a pixel up, near enough the 8 cm the organs were first fitted at:
-		// the heart's quarter-pixel cut stays few enough cubes to carry), from the brisket to the seat of the leg, -44.8 to 44.8 cm. The legs below the elbow and the stifle, the neck and the head are other
-		// parts of the model.
-		SCALE = new double[] {-18.6 / 4, 45.0 / 6, 5.6};
-		SHIFT = new double[] {0, -4.0 - 45.0 / 6 * 12, 0};
-		CLIP_LO = new double[] {-4, 12, -8};
-		CLIP_HI = new double[] {4, 18, 8};
-		LOD = vox * 5.6;
+		// Pixels to centimetres (the model has the right at -x, the anatomy at +x), one scale on every axis so the ewe keeps
+		// her proportions: 4.74 cm a pixel, the most that fits her 45 cm, from 4 cm under the belly to the tips of the
+		// withers' spines, into the 9.5 px of the fleece (the body cube, 12 to 18 px up, grown 1.75 px each way by the wool,
+		// SheepFurModel). Across she is +-18.6 cm under her skin, narrower than the body cube; along, -44.8 to 44.8 cm from
+		// the brisket to the seat of the leg, 1.45 px past each end of the cube into the wool. What lies outside the body
+		// cube is there under the wool: a blast throws it, and in place it is drawn only where the surface lets it be seen
+		// (never on a shorn sheep). The legs below the elbow and the stifle, and the head, are other parts of the model.
+		double cm = FLEECE_CM;
+		SCALE = new double[] {-cm, cm, cm};
+		SHIFT = new double[] {0, -4.0 - cm * (12 - FLEECE_PX), 0};
+		CLIP_LO = new double[] {-4 - FLEECE_PX, 12 - FLEECE_PX, -8 - FLEECE_PX};
+		CLIP_HI = new double[] {4 + FLEECE_PX, 18 + FLEECE_PX, 8 + FLEECE_PX};
+		LOD = vox * cm;
 		THIN = res <= 16 ? 0.8 : 0.55;
 		TILES = ImageIO.read(Path.of("src/main/resources/assets/fluidgore/textures/misc/anatomy.png").toFile());
 		PARTS.clear();
@@ -541,6 +558,12 @@ public final class SheepAnatomyModels extends Quadruped {
 				}
 			}
 		}
+
+		// A fine organ recut inside the half-pixel cells it owned can lose a cell to a neighbour that owned that cell at half
+		// pixels (the pancreas's tail behind the duodenum): an organ the body has one of is joined up again across a one-cell
+		// gap, taking the cell from skin, fat or muscle only.
+		bridge(m, id -> UNPAIRED.contains(names.get(id - 1)[1]) ? names.get(id - 1)[1] : null,
+				id -> java.util.Set.of("DERMIS", "MUTTON", "SUET").contains(names.get(id - 1)[0]));
 
 		// A fine organ's specks (a few quarter-pixel cells cut off from the rest) are left out: alone they would be organs of
 		// their own, a loose cube of heart beside the heart. An organ that is all small pieces (an adrenal) keeps them.
@@ -831,8 +854,9 @@ public final class SheepAnatomyModels extends Quadruped {
 	static List<String> legTable(Path out, boolean fore, int res) throws IOException {
 		Files.createDirectories(out.resolve("previews"));
 		double vox = 16.0 / res;
-		// The leg starts where the trunk's cube ends (see mob), 4 cm under the floor of the belly.
-		double top = -4.0;
+		// The leg starts where the body cube ends (see mob): the trunk's frame is the fleece, whose floor is 4 cm under the
+		// belly, and the body cube's floor lies FLEECE_PX above that, so the two tables meet without overlapping.
+		double top = -4.0 + FLEECE_PX * FLEECE_CM;
 		double ground = BODY.fore.toes[3].points()[1][1];
 		double centreX = fore ? 7.8 : 8.2;
 		double centreZ = fore ? -32.0 : 30.9;
@@ -931,7 +955,8 @@ public final class SheepAnatomyModels extends Quadruped {
 				/**
 				 * A ruminant's trunk (a sheep's, which a cow shares), generated by {@code tools/SheepAnatomyModels.java} from its
 				 * veterinary model of a ewe: do not edit, change the tool and run it again. The organs lie where they do in the
-				 * animal, squashed into the vanilla body, cut to half pixels (the smallest organs to quarter pixels) and drawn with the
+				 * animal, at one scale inside the vanilla sheep's fleece (the body cube grown 1.75 px each way: the back and the
+				 * belly, the brisket and the rump reach past the body cube under the wool), cut to half pixels (the smallest organs to quarter pixels) and drawn with the
 				 * 16x tiles; every cube is named by the organ it belongs to, so the pieces of one organ (the liver's lobes, gallbladder
 				 * and veins; the heart and its fat) can be kept together as one object. In {@link Anatomy.Region#BEAST_TRUNK}'s
 				 * canonical pixels as the beast stands: the body's right at -x, the back at -y, the chest at -z. Blockbench files of
@@ -1231,12 +1256,17 @@ public final class SheepAnatomyModels extends Quadruped {
 	 * papillae, the honeycomb and the fibrous mat of cud inside.
 	 */
 	private static void stomachs() {
-		// The dorsal sac, the ventral sac, the atrium, the caudodorsal and the caudoventral blind sacs.
-		double[][] c = {{-5.5, 18.0, 7.0, 7.5, 7.0, 13.5}, {-3.0, 7.0, 9.5, 9.0, 6.2, 13.5}, {-4.0, 13.5, -3.0, 5.8, 6.5, 4.5},
-				{-6.0, 17.0, 21.0, 6.2, 6.3, 6.0}, {-3.5, 7.5, 23.0, 7.0, 6.0, 6.8}};
+		// The dorsal sac, the ventral sac, the atrium, the caudodorsal and the caudoventral blind sacs. The dorsal sac rises
+		// to the sublumbar muscles, a few centimetres under the lumbar vertebrae, so the upper left flank lies on it.
+		double[][] c = {{-5.5, 19.0, 7.0, 7.5, 7.5, 13.5}, {-3.0, 7.0, 9.5, 9.0, 6.2, 13.5}, {-4.0, 13.5, -3.0, 5.8, 6.5, 4.5},
+				{-6.0, 18.0, 21.0, 6.2, 6.8, 6.0}, {-3.5, 7.5, 23.0, 7.0, 6.0, 6.8}};
 		// A suckling lamb's rumen is small, drawn up under the loin on the left: milk bypasses it down the oesophageal groove
 		// to the abomasum, which is the big stomach until the lamb grazes.
 		double shrink = LAMB ? 0.62 : 1.0;
+		// The wall of the rumen and the reticulum is about a centimetre thick. The game's half-pixel voxels are over two,
+		// so there the wall is drawn a voxel thick, or it would alias into a shell full of holes with the gas cap behind
+		// them; the organ's outside is unchanged.
+		double wall = TILES != null ? 2.6 : 1.0;
 		double[] anchor = {-6.5, 19.0, 6.0};
 		Shape[] sacs = new Shape[c.length];
 		Shape[] inner = new Shape[c.length];
@@ -1247,14 +1277,14 @@ public final class SheepAnatomyModels extends Quadruped {
 			}
 
 			sacs[i] = ell(c[i][0], c[i][1], c[i][2], c[i][3], c[i][4], c[i][5]);
-			inner[i] = ell(c[i][0], c[i][1], c[i][2], c[i][3] - 1.0, c[i][4] - 1.0, c[i][5] - 1.0);
+			inner[i] = ell(c[i][0], c[i][1], c[i][2], c[i][3] - wall, c[i][4] - wall, c[i][5] - wall);
 		}
 
 		double k = 3.2 * shrink;
 		Shape rumenOut = union(k, sacs);
 		Shape rumenIn = union(k, inner);
 		Shape retOut = ell(-1.5, 7.5, -6.0, 5.0, 5.0, 4.0);
-		Shape retIn = ell(-1.5, 7.5, -6.0, 4.0, 4.0, 3.0);
+		Shape retIn = ell(-1.5, 7.5, -6.0, 5.0 - wall, 5.0 - wall, 4.0 - wall);
 		P3 rumenWindow = (x, y, z) -> x < -6.0 && sq((y - 14.5) / 5.0) + sq((z - 8.0) / 6.5) < 1;
 		P3 retWindow = (x, y, z) -> x < -3.6 && sq((y - 7.0) / 2.8) + sq((z + 6.0) / 2.6) < 1;
 		Shape cavity = union(1.5, rumenIn, retIn);
@@ -1293,8 +1323,14 @@ public final class SheepAnatomyModels extends Quadruped {
 
 			return mix(0xC2ABA5, 0xD6C4BE, noise(x * 1.5, y * 1.5, z * 1.5, 62));
 		};
-		Shape rumenWall = cut(cut(rumenOut, rumenIn), region(rumenOut.lo, rumenOut.hi, rumenWindow));
-		Shape retWall = cut(cut(retOut, retIn), region(retOut.lo, retOut.hi, retWindow));
+		Shape rumenWall = cut(rumenOut, rumenIn);
+		Shape retWall = cut(retOut, retIn);
+		if (TILES == null) {
+			// The windows into the rumen and the reticulum are for the art, to show the papillae, the honeycomb and the
+			// cud: in the game the walls are whole, and a blade opens them.
+			rumenWall = cut(rumenWall, region(rumenOut.lo, rumenOut.hi, rumenWindow));
+			retWall = cut(retWall, region(retOut.lo, retOut.hi, retWindow));
+		}
 		Mat omasum = organic(0xBBA29A, 0xA58A82, 0xCDB8B0, 1.4, 63);
 		Mat abomasum = veined(0xD3A398, 0xBE8A80, 0xE2BBB0, 0xA54A48, 64);
 		// The omasum, the "manyplies": a ball of thin leaves radiating from a central mesentery, cut as angular wedges
@@ -1565,8 +1601,10 @@ public final class SheepAnatomyModels extends Quadruped {
 	 * the caudal vena cava, the left one by the aorta ahead of the left kidney, which the rumen has pushed back.
 	 */
 	private static void adrenals() {
-		part("abdomen/adrenals/right", "right_adrenal", gland(123), tube().duct().p(3.6, 26.2, 2.2, 0.6).p(3.2, 26.2, 4.2, 0.6).build());
-		part("abdomen/adrenals/left", "left_adrenal", gland(124), tube().duct().p(0.5, 25.8, 9.2, 0.6).p(0.2, 25.8, 11.2, 0.6).build());
+		// A ewe's adrenal is about 2.5 cm long and 1.5 cm across, flattened; the right one bean-shaped, the left longer. The
+		// right one lies against the vena cava's side, not in it, or the vein takes its every voxel.
+		part("abdomen/adrenals/right", "right_adrenal", gland(123), tube().duct().p(4.4, 26.4, 2.0, 0.75).p(4.0, 26.4, 4.4, 0.7).build());
+		part("abdomen/adrenals/left", "left_adrenal", gland(124), tube().duct().p(0.5, 25.8, 9.0, 0.7).p(0.2, 25.8, 11.6, 0.65).build());
 	}
 
 	/**
@@ -2302,8 +2340,8 @@ public final class SheepAnatomyModels extends Quadruped {
 
 	/**
 	 * The output frame: centimetres = output unit x {@code SCALE} + {@code SHIFT}, per axis. For the organ files the
-	 * output unit is the centimetre; for the mod it is the vanilla sheep's own pixel, its body squashed into the 8x6x16
-	 * cube. {@code CLIP_LO/HI}: only voxels whose centre lies inside, in output units (null: everything).
+	 * output unit is the centimetre; for the mod it is the vanilla sheep's own pixel, its trunk at one scale inside the
+	 * fleece's cube (see {@link #FLEECE_CM}). {@code CLIP_LO/HI}: only voxels whose centre lies inside, in output units (null: everything).
 	 */
 	static double[] SCALE = {1, 1, 1};
 	static double[] SHIFT = {0, 0, 0};
@@ -2338,6 +2376,167 @@ public final class SheepAnatomyModels extends Quadruped {
 		}
 
 		return g.wz(k) * SCALE[2] + SHIFT[2];
+	}
+
+	/**
+	 * An organ as the centre-voxel and bridging rules count it: its mod name, with its side for a paired one, so that each
+	 * adrenal and each kidney is its own ("right:adrenal_gland"), as the mod names them.
+	 */
+	static String organKey(Part p) {
+		String side = sideOf(p.name);
+		for (String step : p.path.split("/")) {
+			if (side.isEmpty()) {
+				side = sideOf(step);
+			}
+		}
+
+		return side + modPiece(p)[1];
+	}
+
+	private static String sideOf(String name) {
+		return name.startsWith("right") ? "right:" : name.startsWith("left") ? "left:" : "";
+	}
+
+	/** A soft organ, not bone, skin, fat, muscle or nerve: what {@link #bridge} keeps in one piece. */
+	static boolean softOrgan(Part p) {
+		String path = p.path;
+		return !(path.startsWith("skeleton") || path.startsWith("skin") || path.startsWith("fat") || path.startsWith("muscles") || path.startsWith("nervous"));
+	}
+
+	/** A part that gives up a cell to bridge an organ through it: skin, fat and muscle, and the fat round the guts. */
+	static boolean yields(Part p) {
+		String path = p.path;
+		return path.startsWith("skin") || path.startsWith("fat") || path.startsWith("muscles") || path.startsWith("abdomen/omentum")
+				|| path.contains("mesentery") || p.name.contains("kidney_fat");
+	}
+
+	/**
+	 * A soft organ cut in two where a neighbour won the cell between its parts (the pancreas behind the duodenum, a thin
+	 * gland against its vessel) is joined up again: where two of its pieces lie one cell apart, the cell between goes to
+	 * it if only skin, fat or muscle holds that cell. The mod joins cells that touch at a face, an edge or a corner into
+	 * one organ ({@code Anatomy.objects}), so it is the one-cell gap that breaks an organ in two.
+	 */
+	static void bridge(Grid raw, Part[] parts) {
+		bridge(raw, id -> softOrgan(parts[id - 1]) ? organKey(parts[id - 1]) : null, id -> yields(parts[id - 1]));
+	}
+
+	/**
+	 * Organs the body has one of, which {@link #bridge} may join up on a mixed grid, where a cell carries only its mod
+	 * name and a paired organ's two sides (the lungs, the kidneys) could not be told apart.
+	 */
+	static final Set<String> UNPAIRED = Set.of("pancreas", "esophagus", "windpipe", "small_intestine", "colon", "omasum", "abomasum", "rumen", "reticulum",
+			"liver", "spleen", "bladder", "urethra", "uterus", "vagina", "cervix", "heart", "thymus", "spinal_cord", "aorta", "vena_cava", "penis", "prepuce",
+			"scrotum", "diaphragm", "omentum", "mesentery");
+
+	/**
+	 * {@link #bridge(Grid, Part[])} for any grid: {@code keyOf} names the organ a cell's id belongs to (null for a cell
+	 * that is not bridged), {@code yields} says whether a cell's id gives way to a bridge.
+	 */
+	static void bridge(Grid raw, java.util.function.IntFunction<String> keyOf, java.util.function.IntPredicate yields) {
+		Map<String, List<int[]>> organs = new LinkedHashMap<>();
+		for (int i = 0; i < raw.nx; i++) {
+			for (int j = 0; j < raw.ny; j++) {
+				for (int k = 0; k < raw.nz; k++) {
+					int id = raw.at(i, j, k);
+					String key = id == 0 ? null : keyOf.apply(id);
+					if (key != null) {
+						organs.computeIfAbsent(key, s -> new ArrayList<>()).add(new int[] {i, j, k, id});
+					}
+				}
+			}
+		}
+
+		for (Map.Entry<String, List<int[]>> organ : organs.entrySet()) {
+			List<int[]> cells = organ.getValue();
+			int bridged = 0;
+			boolean changed = true;
+			while (changed) {
+				changed = false;
+				int[] comp = components(cells);
+				boolean one = true;
+				for (int c : comp) {
+					one &= c == comp[0];
+				}
+
+				if (one) {
+					break;
+				}
+
+				search:
+				for (int a = 0; a < cells.size(); a++) {
+					for (int b = a + 1; b < cells.size(); b++) {
+						if (comp[a] == comp[b]) {
+							continue;
+						}
+
+						int[] ca = cells.get(a);
+						int[] cb = cells.get(b);
+						int di = cb[0] - ca[0];
+						int dj = cb[1] - ca[1];
+						int dk = cb[2] - ca[2];
+						if (Math.max(Math.abs(di), Math.max(Math.abs(dj), Math.abs(dk))) != 2) {
+							continue;
+						}
+
+						int mi = ca[0] + di / 2;
+						int mj = ca[1] + dj / 2;
+						int mk = ca[2] + dk / 2;
+						int held = raw.at(mi, mj, mk);
+						if (held != 0 && !yields.test(held)) {
+							continue;
+						}
+
+						raw.set(mi, mj, mk, ca[3]);
+						cells.add(new int[] {mi, mj, mk, ca[3]});
+						bridged++;
+						changed = true;
+						break search;
+					}
+				}
+			}
+
+			if (bridged > 0) {
+				System.out.println("bridged " + organ.getKey() + " with " + bridged + " cell" + (bridged == 1 ? "" : "s"));
+			}
+		}
+	}
+
+	/** The connected piece each of {@code cells} belongs to (cells touching at a face, an edge or a corner), as a label per cell. */
+	static int[] components(List<int[]> cells) {
+		int[] parent = new int[cells.size()];
+		for (int i = 0; i < parent.length; i++) {
+			parent[i] = i;
+		}
+
+		for (int a = 0; a < cells.size(); a++) {
+			int[] ca = cells.get(a);
+			for (int b = a + 1; b < cells.size(); b++) {
+				int[] cb = cells.get(b);
+				if (Math.abs(ca[0] - cb[0]) <= 1 && Math.abs(ca[1] - cb[1]) <= 1 && Math.abs(ca[2] - cb[2]) <= 1) {
+					int ra = root(parent, a);
+					int rb = root(parent, b);
+					if (ra != rb) {
+						parent[ra] = rb;
+					}
+				}
+			}
+		}
+
+		int[] comp = new int[parent.length];
+		for (int i = 0; i < parent.length; i++) {
+			comp[i] = root(parent, i);
+		}
+
+		return comp;
+	}
+
+	private static int root(int[] parent, int i) {
+		while (parent[i] != i) {
+			parent[i] = parent[parent[i]];
+			i = parent[i];
+		}
+
+		return i;
 	}
 
 	static Grid voxelize(double vox, Predicate<Part> keep) {
@@ -2417,12 +2616,12 @@ public final class SheepAnatomyModels extends Quadruped {
 			java.util.Set<String> won = new java.util.HashSet<>();
 			for (int c : raw.cell) {
 				if (c != 0) {
-					won.add(modPiece(PARTS.get(c - 1))[1]);
+					won.add(organKey(PARTS.get(c - 1)));
 				}
 			}
 
 			for (Part p : PARTS) {
-				if (won.contains(modPiece(p)[1]) || !keep.test(p) || p.path.startsWith("skin") || p.path.startsWith("fat") || p.path.startsWith("muscles")) {
+				if (won.contains(organKey(p)) || !keep.test(p) || p.path.startsWith("skin") || p.path.startsWith("fat") || p.path.startsWith("muscles")) {
 					continue;
 				}
 
@@ -2438,16 +2637,17 @@ public final class SheepAnatomyModels extends Quadruped {
 				}
 
 				int held = raw.at(at[0], at[1], at[2]);
-				String by = held == 0 ? "" : PARTS.get(held - 1).path;
-				if (held == 0 || by.startsWith("skin") || by.startsWith("fat") || by.startsWith("muscles")) {
+				if (held == 0 || yields(PARTS.get(held - 1))) {
 					raw.set(at[0], at[1], at[2], p.index + 1);
-					won.add(modPiece(p)[1]);
+					won.add(organKey(p));
 					for (int a = 0; a < 3; a++) {
 						min[a] = Math.min(min[a], at[a]);
 						max[a] = Math.max(max[a], at[a]);
 					}
 				}
 			}
+
+			bridge(raw, parts);
 		}
 
 		Grid g = new Grid(max[0] - min[0] + 1, max[1] - min[1] + 1, max[2] - min[2] + 1, vox, raw.ox + min[0] * vox, raw.oy + min[1] * vox,
@@ -2731,9 +2931,11 @@ public final class SheepAnatomyModels extends Quadruped {
 		return """
 				# Sheep anatomy at %1$s
 
-				The same veterinary model of a ewe as `../sheep_anatomy`, at the scale of the game: squashed into the vanilla sheep's
-				8x6x16 body, inside its fat and muscle, cut into voxels of 16/%2$s of a pixel and drawn with the mod's own
-				`anatomy.png` tiles, exactly as the game draws them. %3$s
+				The same veterinary model of a ewe as `../sheep_anatomy`, at the scale of the game: at one scale (4.74 cm a pixel)
+				inside the vanilla sheep's fleece, which is its 8x6x16 body grown 1.75 px each way, so the ewe keeps her proportions
+				and the wool hides what reaches past the body (the top of the back, the floor of the belly, the brisket and the
+				rump); cut into voxels of 16/%2$s of a pixel and drawn with the mod's own `anatomy.png` tiles, exactly as the game
+				draws them. %3$s
 
 				| File | What | Cubes |
 				|---|---|---|

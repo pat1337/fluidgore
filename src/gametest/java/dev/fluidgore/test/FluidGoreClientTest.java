@@ -8,6 +8,7 @@ import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.ui.GoreSettingsScreen;
 import dev.fluidgore.wound.ModelHit;
+import net.minecraft.world.phys.Vec3;
 import dev.fluidgore.wound.Weapon;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -131,6 +132,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			bloodyCoats(context, singleplayer.getServer());
 			bodiesInWater(context, singleplayer.getServer());
 			stuckPig(context, singleplayer.getServer());
+			windows(context, singleplayer.getServer());
 			pallor(context, singleplayer.getServer());
 			lying(context, singleplayer.getServer());
 			deadBlast(context, singleplayer.getServer());
@@ -243,6 +245,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			case "bodiesInWater" -> bodiesInWater(context, server);
 			case "meatsAndWool" -> meatsAndWool(context, server);
 			case "stuckPig" -> stuckPig(context, server);
+			case "windows" -> windows(context, server);
 			case "pallor" -> pallor(context, server);
 			case "pieceReactions" -> pieceReactions(context, server);
 			case "sourceAttribution" -> sourceAttribution(context, server);
@@ -1423,6 +1426,170 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 	 * the blood runs from it down the chest and the fronts of the forelegs, the pig bleeds out, and once it lies the
 	 * blood runs across the side it lies on. The wounds and runs survive the codec. A punched pig's bruise starts red.
 	 */
+	/**
+	 * Wounds as windows into the anatomy: a sword into a ewe's left flank opens onto the belly wall and then the rumen
+	 * behind it, which spills cud; into another ewe's left chest it reaches a lung, which froths, and she dies of the
+	 * chest wound. Every wound keeps the organ it reached, and the wound's floor is drawn from the table under it. Two
+	 * ewes, because three cuts deep enough to reach an organ are nearly a sheep's whole health.
+	 */
+	private static void windows(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("gamerule send_command_feedback false");
+		server.runCommand("gamerule show_death_messages false");
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("time set noon");
+		server.runCommand("weather clear");
+		server.runCommand("fill 644 -61 -8 658 -61 7 minecraft:smooth_stone");
+		server.runCommand("fill 644 -60 -8 658 -55 7 minecraft:air");
+		server.runCommand("tp @a 653.0 -60 0.3 90 10");
+		context.waitTicks(20);
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+			GoreConfig.get().deathThroes = false;
+		});
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:iron_sword");
+		// Both facing south, so their left sides are east, towards the player. The UUIDs pick ewes (see Anatomy.male).
+		server.runCommand("summon minecraft:sheep 650.5 -60 0.5 {NoAI:1b,Silent:1b,Sheared:1b,Tags:[\"fg_win_a\"],UUID:[I;11,0,0,3],Rotation:[0f,0f]}");
+		server.runCommand("summon minecraft:sheep 650.5 -60 -3.5 {NoAI:1b,Silent:1b,Sheared:1b,Tags:[\"fg_win_b\"],UUID:[I;11,0,0,4],Rotation:[0f,0f]}");
+		context.waitTicks(20);
+		int flankEwe = context.computeOnClient(mc -> sheepNear(mc, 650.5, 0.5));
+		int chestEwe = context.computeOnClient(mc -> sheepNear(mc, 650.5, -3.5));
+		check(flankEwe >= 0 && chestEwe >= 0, "windows: the sheep were not found: " + flankEwe + ", " + chestEwe);
+		boolean rams = context.computeOnClient(mc -> dev.fluidgore.anatomy.Anatomy.male(mc.level.getEntity(flankEwe).getUUID())
+				|| dev.fluidgore.anatomy.Anatomy.male(mc.level.getEntity(chestEwe).getUUID()));
+		check(!rams, "windows: a test sheep is a ram, so its belly is laid out differently; pick other UUIDs");
+		int gibletsBefore = context.computeOnClient(mc -> GoreSystems.dismemberment().giblets().count());
+		// Three cuts into the left flank, just behind the middle of the trunk, where the rumen lies against the belly wall.
+		for (int n = 0; n < 3; n++) {
+			context.runOnClient(mc -> aimTrunk(mc, (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(flankEwe), -0.16, -0.06));
+			server.runCommand("execute as @p run damage @e[tag=fg_win_a,limit=1] 2.6 minecraft:player_attack by @s");
+			context.waitTicks(12);
+		}
+
+		String flank = context.computeOnClient(mc -> describeReached(flankEwe));
+		System.out.println("[FluidGoreTest] windows flank: " + flank);
+		check(flank.contains("RUMEN"), "windows: three sword cuts into the left flank did not reach the rumen: " + flank);
+		int gibletsAfter = context.computeOnClient(mc -> GoreSystems.dismemberment().giblets().count());
+		check(gibletsAfter > gibletsBefore, "windows: the cut rumen spilled no cud: " + gibletsBefore + " -> " + gibletsAfter);
+		// From a pit, level with the wound and close to it.
+		server.runCommand("fill 652 -61 0 652 -61 0 minecraft:air");
+		server.runCommand("tp @a 652.0 -61.0 0.3 90 5");
+		context.waitTicks(5);
+		context.runOnClient(mc -> aimTrunk(mc, (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(flankEwe), -0.16, -0.06));
+		context.waitTicks(2);
+		context.takeScreenshot("windows_01_flank");
+		server.runCommand("fill 652 -61 0 652 -61 0 minecraft:smooth_stone");
+
+		// Three cuts into the other ewe's left chest, just ahead of the middle and high, behind the shoulder, over the ribs that
+		// have a lung behind them (further forward the shoulder's muscles lie over the ribs, too thick for a sword).
+		server.runCommand("tp @a 653.0 -60 -3.7 90 10");
+		context.waitTicks(5);
+		for (int n = 0; n < 3; n++) {
+			context.runOnClient(mc -> aimTrunk(mc, (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(chestEwe), 0.145, 0.02));
+			server.runCommand("execute as @p run damage @e[tag=fg_win_b,limit=1] 2.6 minecraft:player_attack by @s");
+			context.waitTicks(12);
+		}
+
+		String chest = context.computeOnClient(mc -> describeReached(chestEwe));
+		System.out.println("[FluidGoreTest] windows chest: " + chest);
+		check(chest.contains("LUNG"), "windows: three sword cuts into the left chest did not reach a lung: " + chest);
+		boolean lung = context.computeOnClient(mc -> GoreSystems.dismemberment().wounds().get(chestEwe).lungPierced());
+		check(lung, "windows: the lung wound is not counted as a pierced lung");
+		server.runCommand("fill 652 -61 -4 652 -61 -4 minecraft:air");
+		server.runCommand("tp @a 652.0 -61.0 -3.7 90 5");
+		context.waitTicks(5);
+		context.runOnClient(mc -> aimTrunk(mc, (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(chestEwe), 0.145, 0.02));
+		context.waitTicks(2);
+		context.takeScreenshot("windows_02_chest");
+		server.runCommand("fill 652 -61 -4 652 -61 -4 minecraft:smooth_stone");
+		server.runCommand("tp @a 653.0 -60 -3.7 90 10");
+
+		// The picture of the flank ewe carries the organs reached, for a player who comes along later.
+		String codec = context.computeOnClient(mc -> {
+			var set = GoreSystems.dismemberment().wounds().get(flankEwe);
+			var body = (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(flankEwe);
+			var posed = ModelParts.pose(body);
+			io.netty.buffer.ByteBuf buf = io.netty.buffer.Unpooled.buffer();
+			dev.fluidgore.wound.WoundCodec.write(set, buf);
+			var back = dev.fluidgore.wound.WoundCodec.read(buf, posed.model(), posed.model().root(), 3);
+			StringBuilder out = new StringBuilder("same=" + (back.count() == set.count()));
+			for (int i = 0; i < back.count(); i++) {
+				if (back.reached(i) != set.reached(i)) {
+					out.append(" differs at ").append(i);
+				}
+			}
+
+			return out.toString();
+		});
+		System.out.println("[FluidGoreTest] windows codec: " + codec);
+		check(codec.equals("same=true"), "windows: the organs reached did not survive the codec: " + codec);
+
+		// Dead of it: a pierced lung bleeds from the mouth and nose (the chest death), whatever the dice said.
+		server.runCommand("damage @e[tag=fg_win_b,limit=1] 100 minecraft:generic");
+		context.waitTicks(10);
+		String kind = context.computeOnClient(mc -> {
+			var corpse = GoreSystems.suffering().corpse(chestEwe);
+			return corpse == null ? "no body" : corpse.kind.name();
+		});
+		System.out.println("[FluidGoreTest] windows death: " + kind);
+		check(kind.equals("CHEST"), "windows: a sheep with a lung wound did not die of the chest: " + kind);
+		context.waitTicks(60);
+		server.runCommand("tp @a 651.8 -60 -2.4 125 30");
+		context.waitTicks(5);
+		context.takeScreenshot("windows_03_dead");
+		server.runCommand("kill @e[type=!minecraft:player]");
+		context.runOnClient(mc -> GoreConfig.get().deathThroes = true);
+		System.out.println("[FluidGoreTest] windows passed");
+	}
+
+	/** The id of the sheep nearest {@code x, z}, within a block, or -1. */
+	private static int sheepNear(net.minecraft.client.Minecraft mc, double x, double z) {
+		int best = -1;
+		double bestSq = 1.0;
+		for (Entity e : mc.level.entitiesForRendering()) {
+			if (e instanceof net.minecraft.world.entity.animal.sheep.Sheep) {
+				double d = (e.getX() - x) * (e.getX() - x) + (e.getZ() - z) * (e.getZ() - z);
+				if (d < bestSq) {
+					bestSq = d;
+					best = e.getId();
+				}
+			}
+		}
+
+		return best;
+	}
+
+	/**
+	 * Aims at the side of {@code body}'s trunk facing the player, {@code along} blocks from the trunk's middle towards its head
+	 * (negative: towards its rump), at the trunk's own height, so the blow lands on the trunk whichever way the body stands.
+	 */
+	private static void aimTrunk(net.minecraft.client.Minecraft mc, net.minecraft.world.entity.LivingEntity body, double along, double up) {
+		var posed = ModelParts.pose(body);
+		Vec3 trunk = ModelHit.centre(body, posed, ModelParts.torso(posed.model()));
+		Vec3 head = ModelHit.centre(body, posed, BodyPart.HEAD);
+		Vec3 toHead = new Vec3(head.x - trunk.x, 0.0, head.z - trunk.z).normalize();
+		Vec3 at = trunk.add(toHead.scale(along)).add(0.0, up, 0.0);
+		aimAt(mc, at.x, at.y, at.z);
+	}
+
+	/** Every wound of {@code entityId} as "morph severity organ", for the windows test. */
+	private static String describeReached(int entityId) {
+		var set = GoreSystems.dismemberment().wounds().get(entityId);
+		if (set == null) {
+			return "no wounds";
+		}
+
+		StringBuilder out = new StringBuilder();
+		for (int i = 0; i < set.count(); i++) {
+			var organ = set.reached(i);
+			out.append(i).append(':').append(String.format(java.util.Locale.ROOT, "%.2f", set.severity(i))).append('/').append(organ == null ? "wall" : organ.name())
+					.append(' ');
+		}
+
+		return out.toString().trim();
+	}
+
 	private static void stuckPig(ClientGameTestContext context, TestServerContext server) {
 		server.runCommand("gamerule send_command_feedback false");
 		server.runCommand("gamerule show_death_messages false");
@@ -1525,7 +1692,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 
 			var buf = io.netty.buffer.Unpooled.buffer();
 			dev.fluidgore.wound.WoundCodec.write(set, buf);
-			var back = dev.fluidgore.wound.WoundCodec.read(buf, posed.model(), posed.model().root(), true);
+			var back = dev.fluidgore.wound.WoundCodec.read(buf, posed.model(), posed.model().root(), 3);
 			return "runs " + set.runCount() + "->" + back.runCount() + " throat " + back.throatCut() + " left " + buf.readableBytes();
 		});
 		System.out.println("[FluidGoreTest] stuck pig codec: " + codec);
@@ -3056,7 +3223,9 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 				context.takeScreenshot("kept_02_lying");
 			}
 
-			// The same chops, played the way an action relayed from another player is played.
+			// The same cuts, played the way an action relayed from another player is played. A sword, not an axe: an axe goes
+			// to the bone in one and splits the carcass on the next chop through it, and a ragdoll lies so that the six blows
+			// land two on its trunk, which takes the body apart here, before the picture of it chopped is checked below.
 			int r = run;
 			context.runOnClient(mc -> {
 				var corpse = GoreSystems.suffering().corpse(cowId);
@@ -3064,7 +3233,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 				for (int i = 0; i < 6; i++) {
 					var eye = centre.add(Math.cos(i * 1.3) * 1.3, 1.0, Math.sin(i * 1.3) * 1.3);
 					dev.fluidgore.net.GoreSync.perform(dev.fluidgore.net.GoreAction.of(dev.fluidgore.net.GoreAction.STRIKE, cowId, 0L, eye,
-							centre.subtract(eye).normalize(), Weapon.CHOP.ordinal(), 9.0F));
+							centre.subtract(eye).normalize(), Weapon.BLADE.ordinal(), 9.0F));
 				}
 
 				var set = GoreSystems.dismemberment().wounds().get(cowId);
@@ -4577,54 +4746,55 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			return out.toString();
 		});
 		System.out.println("[FluidGoreTest] organs tables: " + tables);
-		// The accessory lobe: the generated trunk's one lung cube on the midline behind the heart (its own canonical pixels),
-		// in a grown sheep's turned table and a lamb's. The trunk holds the whole body under the skin, so the right lung reaches the
-		// midline and the lobe lies against it. It is the right lung's, once, and the lungs stay two.
+		// The accessory lobe: the right lung's lobe that lies on the midline behind the heart, under the vena cava. In the
+		// generated trunk it is the right lung's cubes that reach the midline (in a grown sheep's turned table and a lamb's);
+		// the left lung stays off it. The lungs stay two.
 		String accessory = context.computeOnClient(mc -> {
 			StringBuilder out = new StringBuilder();
 			for (boolean turned : new boolean[] {true, false}) {
-				float[] cube = turned ? new float[] {-0.625F, -3.5F, -2.6667F, 0.0F, -3.0F, -1.3333F} : new float[] {-0.625F, 1.3333F, -3.5F, 0.0F, 2.6667F, -3.0F};
 				var table = dev.fluidgore.anatomy.Anatomy.pieces(dev.fluidgore.anatomy.Anatomy.Region.BEAST_TRUNK, false, dev.fluidgore.anatomy.Anatomy.Beast.SHEEP, turned);
 				var objects = dev.fluidgore.anatomy.Anatomy.objects(table);
 				var shapes = dev.fluidgore.anatomy.Anatomy.shapes(table);
 				out.append(turned ? "grown:" : "lamb:");
+				int lungs = 0;
 				for (int k = 0; k < objects.length; k++) {
 					var o = objects[k];
 					if (!o.name().equals("lung")) {
 						continue;
 					}
 
-					int found = 0;
+					lungs++;
+					// Cubes of this lung that touch or cross the midline (x = 0; the body's right is -x).
+					int onMidline = 0;
 					int cubes = 1;
 					if (shapes[k] != null) {
 						cubes = shapes[k].cubes();
+						float mid = (o.x0() + o.x1()) * 0.5F;
+						float half = (o.x1() - o.x0()) * 0.5F;
 						for (int c = 0; c < shapes[k].cubes(); c++) {
-							boolean same = true;
-							for (int a = 0; a < 3; a++) {
-								float mid = (o.min(a) + o.max(a)) * 0.5F;
-								float half = (o.max(a) - o.min(a)) * 0.5F;
-								same &= Math.abs(mid + shapes[k].side(c, a, false) * half - cube[a]) < 1.0E-3F
-										&& Math.abs(mid + shapes[k].side(c, a, true) * half - cube[3 + a]) < 1.0E-3F;
-							}
-
-							found += same ? 1 : 0;
+							float lo = mid + shapes[k].side(c, 0, false) * half;
+							float hi = mid + shapes[k].side(c, 0, true) * half;
+							onMidline += lo <= 1.0E-3F && hi >= -1.0E-3F ? 1 : 0;
 						}
 					} else {
-						found = Math.abs(o.x0() - cube[0]) < 1.0E-3F && Math.abs(o.y0() - cube[1]) < 1.0E-3F && Math.abs(o.z0() - cube[2]) < 1.0E-3F ? 1 : 0;
+						onMidline = o.x0() <= 1.0E-3F && o.x1() >= -1.0E-3F ? 1 : 0;
 					}
 
-					out.append(' ').append(o.side().isEmpty() ? "mid" : o.side()).append('=').append(cubes).append("/acc").append(found);
+					out.append(' ').append(o.side().isEmpty() ? "mid" : o.side()).append('=').append(cubes).append("/mid").append(onMidline);
 				}
 
-				out.append("; ");
+				out.append(" lungs=").append(lungs).append("; ");
 			}
 
 			return out.toString();
 		});
 		System.out.println("[FluidGoreTest] organs accessory lobe: " + accessory);
-		check(accessory.equals("grown: right=49/acc1 left=27/acc0; lamb: right=49/acc1 left=27/acc0; "),
-				"the accessory lobe is not the right lung's alone, or the lungs are not two: " + accessory);
-		check(tables.contains("liver:16+gall") && tables.contains("right lung:49") && tables.contains("left lung:27") && tables.contains("lone=0"),
+		for (String half : accessory.split("; ")) {
+			check(half.contains(" lungs=2") && half.matches(".* right=\\d+/mid[1-9]\\d*.*") && half.matches(".* left=\\d+/mid0.*"),
+					"the accessory lobe is not the right lung's alone, or the lungs are not two: " + accessory);
+		}
+
+		check(tables.contains("liver:24+gall") && tables.contains("right lung:54") && tables.contains("left lung:42") && tables.contains("lone=0"),
 				"the liver and lungs are not their cubes, or the accessory lobe is not the right lung's: " + tables);
 		check(tables.contains("pairedLung=true") && tables.contains("pairedLiver=false"), "the lungs are not a pair, or the liver is: " + tables);
 
@@ -4676,7 +4846,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			return report;
 		});
 		System.out.println("[FluidGoreTest] organs standing: " + standing);
-		check(standing.contains("Sheep · liver=16") && standing.contains("Sheep · right lung=49") && standing.contains("Sheep · left lung=27"),
+		check(standing.contains("Sheep · liver=24") && standing.contains("Sheep · right lung=54") && standing.contains("Sheep · left lung=42"),
 				"the liver and lungs did not come out whole and named: " + standing);
 		check(standing.contains("off=0.00"), "the organs did not come out where and as they lay: " + standing);
 		check(!standing.contains("right liver"), "the liver was given a side: " + standing);
@@ -4992,7 +5162,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		check(rolledLiver[0] != 0L, "no liver came out of the rolled body: " + side);
 		closeUp(context, server, at(context, rolledLiver[0]), 1.2, "organs_09_rolled_liver");
 		check(Math.abs(roll) >= 1.2F, "the dead sheep did not roll onto its side: " + roll);
-		check(side.contains("Sheep · liver=16") && side.contains("off=0.00"), "the liver did not come out of the rolled body where and as it lay: " + side);
+		check(side.contains("Sheep · liver=24") && side.contains("off=0.00"), "the liver did not come out of the rolled body where and as it lay: " + side);
 
 		// 10. Cleared away: nothing left of them, here or in what is shown.
 		context.runOnClient(mc -> GoreSystems.dismemberment().clear());

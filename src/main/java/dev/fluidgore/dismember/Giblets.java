@@ -324,6 +324,40 @@ public final class Giblets {
 	}
 
 	/**
+	 * What a wound lets out of the organ behind it (see {@code WoundAnatomy}): {@code n} bits of {@code tissue} (cud from
+	 * a cut rumen, gut from a cut bowel) that come out of the wound at {@code at} with a slow push along {@code out}, the
+	 * wound's normal, and fall. Returns how many were made.
+	 */
+	public int leak(ClientLevel level, LivingEntity entity, Vec3 at, Vec3 out, Tissue tissue, int n) {
+		GoreConfig config = GoreConfig.get();
+		if (!config.goreLevel.enabled() || n <= 0) {
+			return 0;
+		}
+
+		makeRoom(n, config.maxGiblets);
+		Flesh flesh = Flesh.of(entity);
+		int rgb = dev.fluidgore.trigger.EntityFilter.bloodType(entity).rgb;
+		int lightAt = LightCoordsUtil.getLightCoords(level, entity.blockPosition());
+		Condition fleshWas = bodies.apply(entity, Material.MUSCLE);
+		keyBody = bodyBits(entity);
+		Vec3 push = out.lengthSqr() < 1.0E-6 ? new Vec3(0.0, 1.0, 0.0) : out.normalize();
+		int made = 0;
+		for (int k = 0; k < n && count < config.maxGiblets; k++) {
+			Vec3 vel = push.scale(0.08 + RANDOM.nextDouble() * 0.08).add(RANDOM.nextGaussian() * 0.03, 0.04 + RANDOM.nextDouble() * 0.05,
+					RANDOM.nextGaussian() * 0.03);
+			int i = spawn(at, vel, tissue, flesh, rgb, lightAt, Math.round((config.partLifetimeSeconds * 10 + RANDOM.nextInt(200)) * config.goreLevel.duration));
+			owner[i] = entity.getType();
+			condition[i].inherit(fleshWas);
+			traceInherited(i, entity);
+			recolor(i);
+			made++;
+		}
+
+		keyBody = 0L;
+		return made;
+	}
+
+	/**
 	 * Bits knocked out of a wound by a pick or an axe: skin and fat first, muscle as it goes deeper, bone once it is
 	 * down to the bone. {@code normal} points out of the wound.
 	 */

@@ -413,6 +413,8 @@ public abstract class ModelFeatureRendererMixin extends RenderTypeFeatureRendere
 				}
 
 				WoundRenderer.draw(wounds, poseStack, getVertexBuilder(WoundRenderer.renderType()), submit.lightCoords(), submit.overlayCoords());
+				// The floors of wounds that open into the anatomy, on its own atlas (one buffer is filled at a time).
+				WoundRenderer.drawFloors(wounds, poseStack, getVertexBuilder(MeltRenderer.renderType()), submit.lightCoords(), submit.overlayCoords());
 				if (submit.model() instanceof PlayerModel && GoreConfig.get().bloodyClothes) {
 					// Blood soaks through the jacket, sleeves and trousers over the wounds.
 					WoundRenderer.drawStains(wounds, submit.model(), true, poseStack, getVertexBuilder(WoundRenderer.renderType()), submit.lightCoords(),

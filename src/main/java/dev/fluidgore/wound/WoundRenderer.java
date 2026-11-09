@@ -81,6 +81,12 @@ public final class WoundRenderer {
 	private static final Layer[] CUT_ROTTEN = rotten(CUT_MEAT);
 	/** Outward lift per layer, in model pixels, so the layers stack instead of fighting. */
 	private static final float LIFT = 0.02F;
+	/**
+	 * How far a wound's anatomy floor stands off the face, in model pixels: over every stock layer, and far enough that
+	 * the anatomy atlas, drawn without the wound layers' polygon offset, does not fight the skin (a split head's cut
+	 * faces stand off as far).
+	 */
+	private static final float FLOOR_LIFT = 0.15F;
 	/** wounds.png is 8 tiles across and 21 down. */
 	private static final float TILE_U = 1.0F / 8.0F;
 	public static final float TILE_V = 1.0F / 21.0F;
@@ -112,11 +118,30 @@ public final class WoundRenderer {
 		return RenderTypes.entityCutoutZOffset(TEXTURE);
 	}
 
-	/** Draws the wounds of {@code set}; {@code poseStack} holds the model's root transform, as after renderToBuffer. */
+	/**
+	 * Draws the wounds of {@code set} from {@code wounds.png}; {@code poseStack} holds the model's root transform, as after
+	 * renderToBuffer. A wound that opens into the body's anatomy (see {@link WoundAnatomy}) gets its bruise and split skin
+	 * here and its floor from {@link #drawFloors}, which draws on another atlas and so in a pass of its own: the game
+	 * fills one buffer at a time, and taking a second ends the first.
+	 */
 	public static void draw(WoundSet set, PoseStack poseStack, VertexConsumer buffer, int light, int overlay) {
+		pass(set, poseStack, buffer, false, light, overlay);
+	}
+
+	/**
+	 * Draws the floors of the wounds of {@code set} that open into the body's anatomy: {@code anatomy} is a buffer on the
+	 * anatomy atlas ({@link dev.fluidgore.anatomy.MeltRenderer#renderType}). Nothing is drawn for a body without a table.
+	 */
+	public static void drawFloors(WoundSet set, PoseStack poseStack, VertexConsumer anatomy, int light, int overlay) {
+		if (set.beast != null) {
+			pass(set, poseStack, anatomy, true, light, overlay);
+		}
+	}
+
+	private static void pass(WoundSet set, PoseStack poseStack, VertexConsumer buffer, boolean floors, int light, int overlay) {
 		ModelPart root = set.root;
 		long now = Wounds.now();
-		for (int i = 0; i < set.runCount; i++) {
+		for (int i = 0; !floors && i < set.runCount; i++) {
 			WoundSet.Run run = set.runs[i];
 			ModelPart[] chain = ModelParts.chain(root, run.part());
 			if (chain.length == 0 || !visible(chain)) {
@@ -137,7 +162,7 @@ public final class WoundRenderer {
 
 			poseStack.pushPose();
 			Bends.chain(poseStack, chain);
-			wound(set, i, now, poseStack.last(), buffer, light, overlay);
+			wound(set, i, now, poseStack.last(), buffer, floors, light, overlay);
 			poseStack.popPose();
 		}
 	}
@@ -237,7 +262,11 @@ public final class WoundRenderer {
 		return true;
 	}
 
-	private static void wound(WoundSet set, int i, long now, PoseStack.Pose pose, VertexConsumer buffer, int light, int overlay) {
+	/**
+	 * One wound: its stock layers ({@code floors} false), or only the floor of its window into the anatomy ({@code floors}
+	 * true, {@code buffer} on the anatomy atlas). Both passes decide the same way whether the wound is a window.
+	 */
+	private static void wound(WoundSet set, int i, long now, PoseStack.Pose pose, VertexConsumer buffer, boolean floors, int light, int overlay) {
 		ModelPart.Cube cube = set.cube[i];
 		int a = set.axis[i];
 		int b = (a + 1) % 3;
@@ -255,6 +284,16 @@ public final class WoundRenderer {
 			case WoundSet.INCISED, WoundSet.STICK -> set.flesh.rots() ? INCISED_ROTTEN : INCISED;
 			default -> set.flesh.rots() ? slash ? SLASH_ROTTEN : ROUND_ROTTEN : slash ? SLASH : ROUND;
 		};
+		// A wound into a body with an anatomy shows that anatomy in its depth, in place of the stock fat, meat and bone
+		// (the bruise round it and the split skin stay): the first of those layers it has opened is where the floor goes.
+		boolean window = set.beast != null && severity > WoundAnatomy.OPENS && !set.flesh.rots()
+				&& (set.morph[i] == WoundSet.ROUND || slash || set.morph[i] == WoundSet.INCISED || set.morph[i] == WoundSet.STICK);
+		WoundAnatomy.Context ctx = window ? WoundAnatomy.of(set, i) : null;
+		boolean floor = ctx != null && WoundAnatomy.shows(set, i, ctx);
+		if (floors && !floor) {
+			return;
+		}
+
 		for (int n = 0; n < layers.length; n++) {
 			Layer layer = layers[n];
 			if (layer.opens() > 0.0F && severity <= layer.opens()) {
@@ -265,6 +304,20 @@ public final class WoundRenderer {
 			float grow = Mth.clamp((severity - layer.opens()) / 0.25F + 0.4F, 0.4F, 1.0F);
 			// A cut face is meat right across, so its layers span the whole face whatever its size.
 			float r = (set.morph[i] == WoundSet.CUT ? Math.max(max[b] - min[b], max[c] - min[c]) * 0.5F : set.radius[i]) * layer.size() * grow;
+			if (floor && (layer.tissue() == Flesh.Tissue.FAT || layer.tissue() == Flesh.Tissue.MUSCLE || layer.tissue() == Flesh.Tissue.BONE)) {
+				if (floors) {
+					// The first of these layers the wound has opened is where the floor goes; it stands for the rest of them.
+					WoundAnatomy.floor(set, i, ctx, r, FLOOR_LIFT, pose, buffer, light, overlay);
+					return;
+				}
+
+				continue;
+			}
+
+			if (floors) {
+				continue;
+			}
+
 			float b0 = Math.max(min[b], set.u[i] - r);
 			float b1 = Math.min(max[b], set.u[i] + r);
 			float c0 = Math.max(min[c], set.v[i] - r);

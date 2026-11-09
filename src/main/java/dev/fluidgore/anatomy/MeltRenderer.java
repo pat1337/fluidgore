@@ -69,6 +69,13 @@ public final class MeltRenderer {
 	private static final float PROTRUDES = 1.3F;
 	/** How thick the muscle is under its own surface, drawn at the walls of a hole through it. */
 	private static final float MEAT_DEPTH = 0.6F;
+	/**
+	 * How far a body's table may reach outside its cube, in the cube's pixels: a sheep's trunk is framed in its fleece,
+	 * which stands this far off the body cube ({@code SheepFurModel}).
+	 */
+	private static final float FLEECE_REACH = 1.75F;
+	/** How deep under its own skin a table is read for fat, in canonical pixels: about the thickest fat a sheep carries. */
+	private static final float FAT_SEARCH = 1.5F;
 	private static final int ROAST = 0x9A6A48;
 	/** Pork rind in a fire: it dries, puffs and crisps golden into crackling before it chars. */
 	private static final int CRACKLING = 0xD8A458;
@@ -844,8 +851,9 @@ public final class MeltRenderer {
 		float hz = region.hingeZ * SCALE[2] + OFFSET[2];
 		float cos = Mth.cos(jaw);
 		float sin = Mth.sin(jaw);
-		// A beast's table carries its own skin, fat and muscle out to the cube's faces. The shell above draws those layers as
-		// they burn, so here the skin and the fat under it are left out and the lean is cut back to below the shell's meat.
+		// A beast's table carries its own skin, fat and muscle out to the cube's faces, and a sheep's whole body reaches past
+		// them into its fleece. The shell above draws the skin and fat as they burn, so here those are left out and the lean
+		// is cut back to below the shell's meat; whatever lies outside the cube (under the wool) is clipped to its faces.
 		float[] cubeLo = region.min(left, turned);
 		float[] cubeHi = region.max(left, turned);
 		float inset = muscleDepth(region) + MEAT_DEPTH;
@@ -857,7 +865,8 @@ public final class MeltRenderer {
 			}
 
 			boolean underShell = beast != null && kind == beast.lean;
-			if (underShell && !clipsInside(piece, cubeLo, cubeHi, inset)) {
+			float clip = underShell ? inset : 0.0F;
+			if (!clipsInside(piece, cubeLo, cubeHi, clip)) {
 				continue;
 			}
 			int tile = kind.tile;
@@ -916,8 +925,8 @@ public final class MeltRenderer {
 
 			for (int i = 0; i < 3; i++) {
 				float pushed = i == outAxis && (kind == Kind.INTESTINE || kind == Kind.COLON) ? outSign * bulge : 0.0F;
-				float c0 = underShell ? Math.max(piece.min(i), cubeLo[i] + inset) : piece.min(i);
-				float c1 = underShell ? Math.min(piece.max(i), cubeHi[i] - inset) : piece.max(i);
+				float c0 = Math.max(piece.min(i), cubeLo[i] + clip);
+				float c1 = Math.min(piece.max(i), cubeHi[i] - clip);
 				float lo = (c0 + pushed) * SCALE[i] + OFFSET[i];
 				float hi = (c1 + pushed) * SCALE[i] + OFFSET[i];
 				if (lo > hi) {
@@ -1200,6 +1209,9 @@ public final class MeltRenderer {
 		float[][] thresholds = new float[6][];
 		float[] min = {cube.minX, cube.minY, cube.minZ};
 		float[] max = {cube.maxX, cube.maxY, cube.maxZ};
+		// Only a sheep's trunk table carries the fat under the skin; the other tables' shells keep their set depths.
+		Piece[] fatTable = beast != null && beast.walled() && region == Region.BEAST_TRUNK ? Anatomy.pieces(region, left, beast, turned) : null;
+		float[] column = new float[3];
 		for (int face = 0; face < 6; face++) {
 			int a = face >> 1;
 			int sign = (face & 1) == 0 ? -1 : 1;
@@ -1221,6 +1233,19 @@ public final class MeltRenderer {
 					float cx = (p[0] - OFFSET[0]) / SCALE[0];
 					float cy = (p[1] - OFFSET[1]) / SCALE[1];
 					float cz = (p[2] - OFFSET[2]) / SCALE[2];
+					// The fat under this cell's skin, read off the body's own table where it has one (a sheep's trunk carries its
+					// subcutaneous fat: thick over the loin and the rump, thin on the flank, none over the spine's tips).
+					boolean tableFatless = false;
+					if (fatTable != null) {
+						column[0] = cx;
+						column[1] = cy;
+						column[2] = cz;
+						int canonicalSign = SCALE[a] < 0.0F ? -sign : sign;
+						float outward = FLEECE_REACH / Math.abs(SCALE[a]);
+						tableFatless = !Probe.underSkin(fatTable, column, a, canonicalSign, outward, FAT_SEARCH, FAT_SEARCH,
+								k -> k == Kind.SUET || k == Kind.FAT || k == Kind.LARD);
+					}
+
 					if (left) {
 						cx = -cx;
 					}
@@ -1243,7 +1268,7 @@ public final class MeltRenderer {
 					int k = (j * nb + i) * STRIDE;
 					t[k + OUT] = Math.max(0.004F, 0.012F + 0.06F * noise(seed, wx, wy, wz) + 0.3F * thin);
 					t[k + SKIN] = 0.24F + 0.2F * noise(seed ^ 0x2545F4914F6CDD1DL, wx, wy, wz) + thin + shield;
-					t[k + FAT] = region.fatless(cx, cy, cz) ? t[k + SKIN] : t[k + SKIN] + 0.05F + 0.07F * noise(seed ^ 0x6C8E9CF570932BD5L, wx, wy, wz);
+					t[k + FAT] = region.fatless(cx, cy, cz) || tableFatless ? t[k + SKIN] : t[k + SKIN] + 0.05F + 0.07F * noise(seed ^ 0x6C8E9CF570932BD5L, wx, wy, wz);
 					t[k + MEAT] = region.bare(cx, cy, cz) ? t[k + FAT] : t[k + FAT] + 0.1F + 0.16F * noise(seed ^ 0x1B873593L, wx, wy, wz);
 					t[k + BLISTER] = patch(seed ^ 0x3C6EF372FE94F82BL, wx, wy, wz, 1.3F);
 					t[k + PEEL] = patch(seed ^ 0x7F4A7C15A54FF53AL, wx, wy, wz, 2.2F);

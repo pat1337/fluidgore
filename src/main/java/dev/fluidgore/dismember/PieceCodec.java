@@ -29,8 +29,8 @@ import org.jspecify.annotations.Nullable;
  * comes along later finds the same pieces lying there (see {@code net/Evidence}).
  */
 public final class PieceCodec {
-	/** 2: wounds carry their ages and the runs of blood on the skin (1 is still read). */
-	private static final int VERSION = 2;
+	/** 3: wounds keep the organ they reached; 2: wounds carry their ages and the runs of blood on the skin (both are still read, and 1). */
+	private static final int VERSION = 3;
 	/** A horse is four parts deep and a few dozen big; diced pieces are smaller. */
 	private static final int MAX_DEPTH = 16;
 	private static final int MAX_PARTS = 256;
@@ -92,7 +92,7 @@ public final class PieceCodec {
 		ByteBuf buf = Unpooled.wrappedBuffer(data);
 		try {
 			int version = buf.readByte();
-			if (version != VERSION && version != 1) {
+			if (version < 1 || version > VERSION) {
 				return null;
 			}
 
@@ -113,7 +113,7 @@ public final class PieceCodec {
 			part.tint = tint;
 			part.rawFaces = rawFaces;
 			if (buf.readBoolean()) {
-				part.wounds = WoundCodec.read(buf, null, model, version >= 2);
+				part.wounds = WoundCodec.read(buf, null, model, version);
 			}
 
 			// Sent by a game from before conditions: a fresh piece.

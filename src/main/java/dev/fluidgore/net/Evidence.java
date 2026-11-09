@@ -34,8 +34,8 @@ import org.jspecify.annotations.Nullable;
  * it fell.
  */
 public final class Evidence {
-	/** 2: wounds carry their ages and the runs of blood on the skin (1 is still read). */
-	private static final int VERSION = 2;
+	/** 3: wounds keep the organ they reached; 2: wounds carry their ages and the runs of blood on the skin (both are still read, and 1). */
+	private static final int VERSION = 3;
 	/** Ticks between two pictures of the same creature while it is being worked on. */
 	private static final int EVERY = 10;
 	/** Ticks a picture waits for its creature to be drawn here (its model is needed) before it is dropped. */
@@ -166,7 +166,7 @@ public final class Evidence {
 		ByteBuf buf = Unpooled.wrappedBuffer(data);
 		try {
 			int version = buf.readByte();
-			if (version != VERSION && version != 1) {
+			if (version < 1 || version > VERSION) {
 				return;
 			}
 
@@ -183,7 +183,8 @@ public final class Evidence {
 			if (buf.readBoolean()) {
 				ModelParts.Posed posed = ModelParts.pose(entity);
 				if (posed != null) {
-					wounds = WoundCodec.read(buf, posed.model(), posed.model().root(), version >= 2);
+					wounds = WoundCodec.read(buf, posed.model(), posed.model().root(), version);
+					dev.fluidgore.wound.WoundAnatomy.bind(wounds, entity, posed.model());
 				}
 			}
 

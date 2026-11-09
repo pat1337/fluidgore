@@ -33,6 +33,7 @@ public final class Demos {
 	/** Fluid Gore's own demos. */
 	private static final List<Demo> OWN = List.of(
 			new Demo("tumble", "4.1.0", "Bodies down a brick pyramid: a pig and then a sheep killed on the edge of its top step. With Ragdoll Physics on, each carries its weight as the animal does, most of it in the trunk: it goes over the edge trunk first, legs swinging loose, and tumbles on down the steps until it lies on its side. With the mod on the server, everyone finds it where it came to rest", true, Demos::tumble),
+			new Demo("windows", "4.1.0", "Wounds that open into the body: two shorn ewes. The nearer is cut with a sword in the left flank, three times in the same place; each cut shows what lies under it at the depth it has reached, from the table of her anatomy: the belly wall's layers, then the wall of the rumen behind them, which spills cud. The other takes three cuts over the left ribs, which reach a lung, and the blood at the wound froths with air; killed, she dies of the chest wound, bleeding from the mouth and nose. Look close at each cut", false, Demos::windows),
 			new Demo("sheepblast", "4.1.0", "A sheep blown apart: a block of TNT under a sheep. It comes apart as the body it is: its hide torn in patches with the white fat under it, its muscles (the eye of the loin in chunks, the chump, the leg muscles, the cheek), its legs down to the cannon bones and hooves, besides its organs and bones. Look at any piece to see what it is", true, Demos::sheepBlast),
 			new Demo("underwater", "4.0.0", "TNT under water: a block of TNT goes off at the bottom of a deep pool between two pigs. No flame and no scorch: its gas swells into a bubble, collapses and rebounds, the water rushing out and back with it, then bursts out of the surface in a plume of spray that rains back down. The pig beside it is torn apart inside the bubble and its blood clouds out in the water; the one further along only coughs blood from its lungs", true, Demos::underwater),
 			new Demo("deadblast", "4.0.0", "A blast on bodies already dead: two cows killed, then a block of TNT beside them. The body next to it comes apart, and the one further off is thrown limp by the wave", true, Demos::deadBlast),
@@ -1097,6 +1098,32 @@ public final class Demos {
 		s.say("Bloated with the gas of its rot, it comes up and floats low in the water (Extreme, with Bodies Rot on)").pause(300);
 	}
 
+	/**
+	 * 4.1: wounds as windows into the anatomy (see {@code WoundAnatomy}). From the game test {@code windows}. Two shorn
+	 * ewes stand across the player's view with their left sides to them: the near one takes the flank cuts, behind the
+	 * middle of her trunk, the far one the chest cuts, ahead of it. Two, because three cuts that deep are nearly a
+	 * sheep's whole health.
+	 */
+	private static void windows(Script s, Stage st) {
+		s.summon(st, "sheep", "fgd_window_a", -1.1, 0, 3.0, -90.0F, "Sheared:1b,UUID:[I;11,0,0,5]");
+		s.summon(st, "sheep", "fgd_window_b", 1.1, 0, 3.0, -90.0F, "Sheared:1b,UUID:[I;11,0,0,8]");
+		s.pause(20).hold("minecraft:iron_sword").say("Two shorn ewes, their left sides to you. A sword into the nearer one's flank opens the belly wall: the skin, the fat under it, the muscles of the wall");
+		for (int n = 0; n < 3; n++) {
+			s.client(mc -> aimTrunk(mc, st.find(mc.level, EntityTypes.SHEEP, -1.1, 0, 3.0), -0.16, -0.06));
+			s.hit("fgd_window_a", 2.6F).pause(n < 2 ? 30 : 60);
+		}
+
+		s.say("Deeper, the cut reaches the rumen behind the wall, and cud comes out of it").pause(100);
+		for (int n = 0; n < 3; n++) {
+			s.client(mc -> aimTrunk(mc, st.find(mc.level, EntityTypes.SHEEP, 1.1, 0, 3.0), 0.145, 0.02));
+			s.hit("fgd_window_b", 2.6F).pause(n < 2 ? 30 : 60);
+		}
+
+		s.say("Over the other's ribs the same blade finds a lung, and the blood at the wound froths with air").pause(100);
+		s.cmd("damage @e[tag=fgd_window_b,limit=1] 100 minecraft:generic");
+		s.say("She dies of the chest wound: blood from the mouth and nose, whatever else was done to her").pause(200);
+	}
+
 	/** 4.0: sticking, blood running down the skin, and a fresh bruise. From the game test {@code stuckPig}. */
 	private static void stuckPig(Script s, Stage st) {
 		s.summon(st, "pig", "fgd_stuck", 0, 0, 2.5, 160.0F, "");
@@ -1472,6 +1499,22 @@ public final class Demos {
 	 * Turns the player to {@code target} and records the swing on it, as a real click would: on {@code part}, or on
 	 * the middle of the body if null.
 	 */
+	/**
+	 * Aims at the side of {@code target}'s trunk facing the player, {@code along} blocks from the trunk's middle towards its
+	 * head (negative: towards its rump) and {@code up} blocks above the trunk's middle, whichever way it stands.
+	 */
+	private static void aimTrunk(Minecraft mc, @Nullable LivingEntity target, double along, double up) {
+		ModelParts.Posed posed = target == null ? null : ModelParts.pose(target);
+		Vec3 trunk = posed == null ? null : ModelHit.centre(target, posed, ModelParts.torso(posed.model()));
+		Vec3 head = posed == null ? null : ModelHit.centre(target, posed, BodyPart.HEAD);
+		if (trunk == null || head == null) {
+			return;
+		}
+
+		Vec3 toHead = new Vec3(head.x - trunk.x, 0.0, head.z - trunk.z).normalize();
+		lookAt(mc, trunk.add(toHead.scale(along)).add(0.0, up, 0.0));
+	}
+
 	private static void aim(Minecraft mc, @Nullable LivingEntity target, @Nullable BodyPart part) {
 		if (target == null) {
 			return;

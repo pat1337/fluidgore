@@ -12,12 +12,27 @@ All notable changes to Fluid Gore are listed here. The format follows
   own, from the elbow and the stifle to the hooves. A sheep blown apart throws these as pieces of their own: the hide
   in patches, the fat, the loin in chunks, the chump, the leg bones and hooves, the cheek muscles. Demo: `sheepblast`.
 - Identify Remains names the new pieces.
+- Wounds open into a sheep's anatomy. What shows in a cut or a blow on a sheep is what lies under it at the depth the
+  wound has reached, read off the animal's own anatomy half-pixel by half-pixel: the fat where there is fat, the named
+  muscle, a rib, the wall of the rumen, a lung. Every wound keeps the organ it reached, and a player who comes along
+  later sees the same. What is hit answers: a cut rumen spills cud, and a pierced lung froths the blood pale with air.
+  A sheep with a lung wound dies coughing blood from the mouth and nose. Other animals keep the stock wound layers until they
+  have anatomy of their own. Demo: `windows`.
+- A sheep's insides keep the real animal's proportions. The anatomy is laid out at one scale inside the fleece rather
+  than squashed into the body cube: she is taller and a little longer than the vanilla body, and the top of her back,
+  the floor of her belly, her brisket and her rump lie inside the wool. A blast throws all of it; on a shorn sheep
+  those parts are not drawn in place (see the README's known limitations).
 - `/fluidgore clear` takes away the bodies and gore in an area so a scene can be played again: within 16 blocks, a
   radius you give, the blocks between two corners (as `/fill` takes them), or `all`. The server removes the bodies it
   keeps there, and every player with the mod loses the blood, loose pieces and bodies shown there. Living animals are
   left alone. It needs operator rights, so a command block can run it.
 
 ### Fixed
+- A sheep had one adrenal gland, its pancreas was in two pieces, and the wall of its rumen and reticulum was full of
+  holes at the game's grain (with the art's inspection window cut into it as well). Both adrenals are there, the
+  pancreas is one, and the stomach walls are whole in the game.
+- A burning sheep's fat layer now follows the animal: fat shows where the body carries it under the skin and not
+  where it does not.
 - Blood no longer hangs in the air over fences, fence gates and walls. It used to land on their collision box, which
   stands half a block above the rails, and lay there as a square sheet. Blood that lands on a rail, a wall top or a pane
   now leaves a thin line along it, and the rest runs off the edge and drips to the ground below. No pool forms on top

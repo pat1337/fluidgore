@@ -95,6 +95,15 @@ public final class WoundSet {
 	final float[] yaw = new float[MAX];
 	/** Game time each wound was opened; a bruise darkens as the blood in it goes stale. */
 	final long[] born = new long[MAX];
+	/**
+	 * The organ each wound has reached, as one more than an {@link dev.fluidgore.anatomy.Anatomy.Kind} ordinal, or 0 for a
+	 * wound still in the body wall (see {@link WoundAnatomy}).
+	 */
+	final byte[] organ = new byte[MAX];
+	/** The animal whose anatomy the wounds open into (see {@link WoundAnatomy#bind}), or null for a body without a table or a loose piece. */
+	dev.fluidgore.anatomy.Anatomy.@Nullable Beast beast;
+	boolean male;
+	boolean young;
 	int count;
 	final Run[] runs = new Run[MAX_RUNS];
 	int runCount;
@@ -411,6 +420,7 @@ public final class WoundSet {
 				target.radius[j] = radius[i];
 				target.severity[j] = severity[i];
 				target.born[j] = born[i];
+				target.organ[j] = organ[i];
 				target.ox[j] = target.oy[j] = target.oz[j] = Float.NaN;
 			}
 		}
@@ -519,6 +529,27 @@ public final class WoundSet {
 
 	public Run run(int i) {
 		return runs[i];
+	}
+
+	/** How deep wound {@code i} is, 0 to 1. */
+	public float severity(int i) {
+		return severity[i];
+	}
+
+	/** The organ wound {@code i} has reached (see {@link WoundAnatomy}), or null for one still in the body wall. */
+	public dev.fluidgore.anatomy.Anatomy.@Nullable Kind reached(int i) {
+		return organ[i] == 0 ? null : dev.fluidgore.anatomy.Anatomy.Kind.values()[organ[i] - 1];
+	}
+
+	/** True if a wound has gone into a lung: the body bleeds from the mouth and nose, and froths at the wound. */
+	public boolean lungPierced() {
+		for (int i = 0; i < count; i++) {
+			if (reached(i) == dev.fluidgore.anatomy.Anatomy.Kind.LUNG && severity[i] > WoundAnatomy.OPENS) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/** True if the throat has been cut: the sticking wound, through the great vessels and the windpipe. */

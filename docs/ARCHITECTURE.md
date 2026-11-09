@@ -73,8 +73,16 @@ when a feature is turned off.
 - `Wounds`: resolves blows, applies the gore level's depth cap, decides targeted cuts, heals with health, and clots
   after `woundClotSeconds`. Only aimed blows sever precisely; guessed spots keep random severing.
 - `WoundRenderer`: draws a wound as a stack of layers from `wounds.png`, in the same part transforms as the model, so
-  wounds follow the animation. Rotten flesh adds pus and maggot layers. `WoundCodec` serialises a body's wounds, their ages and
-  runs for sync (format 2 in `PieceCodec` and `Evidence`; format 1 still reads).
+  wounds follow the animation. Rotten flesh adds pus and maggot layers. `WoundCodec` serialises a body's wounds, their ages,
+  runs and the organ each reached for sync (format 3 in `PieceCodec` and `Evidence`; formats 1 and 2 still read).
+- `WoundAnatomy`: a wound as a window into the body. Where the body has an anatomy table (`WoundSet.beast`, bound from
+  the entity by `WoundAnatomy.bind`), the stock fat, meat and bone layers of a round or cut wound are replaced by a
+  floor drawn from the table: for every half-pixel cell of the wound's footprint, the tissue `Probe` finds at the
+  wound's depth under that cell, in its own `anatomy.png` tile, shaded by depth and wetted with blood. The depth grows
+  with severity to a third of the cube's thickness. The bruise round the wound and the split skin stay. A wound keeps
+  the organ it has reached (`WoundSet.reached`); the first time a blow reaches one, `answer` plays what it lets out
+  (cud from the rumen as `Giblets.leak`, gut, froth from a lung, a `Spurts` jet from the heart or a great vessel). A
+  body with a pierced lung dies the chest death (`Suffering`), as a cut throat dies of bleeding.
 - `Weapon` (blunt, flint, blade, chop, pick, pierce, bite, blast) and `Flesh` (meat, bone, dried, rotten, poultry,
   pork, beef, mutton, ender) pick the look and sound. `HitFeedback`: per-weapon, per-flesh hit sounds and directional
   blood.
@@ -132,10 +140,19 @@ when a feature is turned off.
   layers under the skin. `Piece`s are bones and organs, and `Kind` gives each one its tile in `anatomy.png` and how it
   cooks. There are human regions (head, torso, arm, leg) and beast regions (head, trunk, foreleg, hindleg) for sheep,
   pigs and cows. A grown beast's trunk cube is stood on end in the vanilla model, so its pieces are pre-turned.
-- `SheepTrunk`, `SheepHead`, `SheepLegs` and `CowTrunk` are **generated** tables (see `tools/`). A sheep's trunk table fills
-  the whole body cube under the skin (hide, fat, named muscles, organs, bones); the hide, fat and muscles carry owners
-  that tear them into patches and chunks in a blast (`Viscera.wall`: they fly as giblets, never as carried pieces), and
-  `MeltRenderer.inside` leaves the hide and fat to the burning shell and clips the lean to below it. `SheepLegs` is a
+- `Probe`: the one question wounds, fire and arrows ask of a table: what lies under a point on the surface, and how
+  deep. `at` finds the piece holding a canonical point through a per-table grid index; `under` the piece at a depth
+  below a face; `layers` every tissue inward in order; `underSkin` reads a column from outside the cube (where a
+  sheep's real skin can lie, in the fleece) inward and asks what the first stretch under the skin holds.
+- `SheepTrunk`, `SheepHead`, `SheepLegs` and `CowTrunk` are **generated** tables (see `tools/`). A sheep's trunk table holds
+  the whole ewe under her skin (skin, fat, named muscles, organs, bones) at one scale, framed in the fleece rather than
+  the body cube: the vanilla fleece stands 1.75 px off the body cube on every side, and at 4.74 cm a pixel the ewe's
+  45 cm of height fits that exactly, so she keeps her proportions and her back, belly, brisket and rump reach past the
+  body cube into the wool (canonical pixels beyond the `Region`'s cube). Blasts throw all of it; drawing in place
+  (`MeltRenderer.inside`) clips every piece to the body cube's faces, so a shorn sheep shows nothing floating. The skin,
+  fat and muscles carry owners that tear them into patches and chunks in a blast (`Viscera.wall`: they fly as giblets,
+  never as carried pieces), and the burning shell draws the skin and fat itself, reading the fat's presence under each
+  cell from the table (`Probe.underSkin`, from the real skin inward), and clips the lean to below it. `SheepLegs` is a
   sheep's own right fore and hind leg; other beasts still use the hand-made `beastLeg`. The generators share two
   files in `tools/`: `AnatomyKit` (shapes, tissues, the voxel grid, Blockbench export and previews) and `Quadruped`
   (the trunk frame and the axial skeleton, written once and sized by each species' `Body`). A species file adds its

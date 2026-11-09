@@ -1,18 +1,20 @@
 # Sheep anatomy at 64x
 
-The same veterinary model of a ewe as `../sheep_anatomy`, at the scale of the game: squashed into the vanilla sheep's
-8x6x16 body, inside its fat and muscle, cut into voxels of 16/64 of a pixel and drawn with the mod's own
-`anatomy.png` tiles, exactly as the game draws them. The mod carries it too (`SheepTrunk.fine()`), to compare detail with the 32x grain in the `resolution` demo.
+The same veterinary model of a ewe as `../sheep_anatomy`, at the scale of the game: at one scale (4.74 cm a pixel)
+inside the vanilla sheep's fleece, which is its 8x6x16 body grown 1.75 px each way, so the ewe keeps her proportions
+and the wool hides what reaches past the body (the top of the back, the floor of the belly, the brisket and the
+rump); cut into voxels of 16/64 of a pixel and drawn with the mod's own `anatomy.png` tiles, exactly as the game
+draws them. The mod carries it too (`SheepTrunk.fine()`), to compare detail with the 32x grain in the `resolution` demo.
 
 | File | What | Cubes |
 |---|---|---|
-| `sheep_trunk_64x.bbmodel` | Sheep trunk at 64x (as the mod draws it) | 5219 |
-| `sheep_organs_64x.bbmodel` | Sheep organs at 64x (skeleton and diaphragm left out) | 4660 |
-| `sheep_liver_64x.bbmodel` | Sheep liver at 64x | 73 |
-| `sheep_heart_lungs_64x.bbmodel` | Sheep heart and lungs at 64x | 359 |
-| `sheep_stomachs_64x.bbmodel` | Sheep stomachs at 64x | 421 |
-| `sheep_guts_64x.bbmodel` | Sheep intestines, kidneys, spleen at 64x | 207 |
-| `sheep_skeleton_64x.bbmodel` | Sheep trunk skeleton at 64x | 497 |
+| `sheep_trunk_64x.bbmodel` | Sheep trunk at 64x (as the mod draws it) | 8331 |
+| `sheep_organs_64x.bbmodel` | Sheep organs at 64x (skeleton and diaphragm left out) | 7469 |
+| `sheep_liver_64x.bbmodel` | Sheep liver at 64x | 115 |
+| `sheep_heart_lungs_64x.bbmodel` | Sheep heart and lungs at 64x | 558 |
+| `sheep_stomachs_64x.bbmodel` | Sheep stomachs at 64x | 596 |
+| `sheep_guts_64x.bbmodel` | Sheep intestines, kidneys, spleen at 64x | 318 |
+| `sheep_skeleton_64x.bbmodel` | Sheep trunk skeleton at 64x | 751 |
 
 - Blockbench units are the vanilla sheep's own model pixels: the body is x -4..4, 12..18 up, z -8..8, the head
   towards north (-Z). As in the game's model, the sheep's right is -X.
