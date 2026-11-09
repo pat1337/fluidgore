@@ -1362,7 +1362,7 @@ public final class GenerateTextures {
 	 * <li>the bones of a hand or foot; cooked muscle, chest, back and face; heat-fixed viscera; suet; lard</li>
 	 * <li>mutton, pork, beef; hoof, horn; rumen; cooked mutton, cooked pork</li>
 	 * <li>cooked beef; gallbladder, reticulum, vein; cut liver, cut lung; gland, testis</li>
-	 * <li>cut heart, cut brain, cut kidney, cut bone</li>
+	 * <li>cut heart, cut brain, cut kidney, cut bone; wool</li>
 	 * </ol>
 	 */
 	private static BufferedImage anatomy() {
@@ -1822,6 +1822,27 @@ public final class GenerateTextures {
 		});
 		// Bone sawn or cut through: ivory struts of spongy bone round red marrow.
 		paint(image, 59, lobules(new Random(41000), 9, 0xA8443A, 0xE6DABF, 0xC0584C));
+		// Wool (4.1), from its own seed: the fleece of a sheep's head as a loose tuft, cream staples with the crimp running
+		// across them in waves, a yellow tinge of grease at the roots and a few darker locks. Drawn in the fleece's own white,
+		// so a dyed fleece's tufts take their dye as a tint.
+		Random wool = new Random(42000);
+		paint(image, 60, (x, y) -> {
+			double crimp = Math.sin(x * 1.9 + 1.6 * Math.sin(y * 0.8)) * 0.5 + 0.5;
+			double n = wool.nextDouble();
+			if (n < 0.06) {
+				return 0xB8AE9A;
+			}
+
+			if (crimp > 0.78) {
+				return n < 0.5 ? 0xFFFEF8 : 0xF6F2E6;
+			}
+
+			if (crimp < 0.22) {
+				return n < 0.4 ? 0xD9D0BC : 0xE3DAC6;
+			}
+
+			return n < 0.15 ? 0xF0E6CC : 0xECE6D6;
+		});
 		return image;
 	}
 

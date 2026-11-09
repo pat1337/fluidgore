@@ -104,13 +104,13 @@ public final class Probe {
 	 * Whether any tissue that {@code what} accepts lies in the first {@code within} pixels under the body's own surface
 	 * at this point: the column is read from {@code outward} pixels outside the face (a sheep's back and belly reach
 	 * past its body cube into the fleece, so the real skin can lie outside the cube) to {@code inward} pixels inside it,
-	 * and the first tissue met is the surface.
+	 * and the first tissue met is the surface. Wool lies outside the skin and is passed over.
 	 */
 	public static boolean underSkin(Piece[] table, float[] at, int axis, int sign, float outward, float inward, float within, Predicate<Kind> what) {
 		float skin = Float.NaN;
 		for (float d = -outward + STEP * 0.5F; d <= inward; d += STEP) {
 			Piece here = under(table, at, axis, sign, d);
-			if (here == null) {
+			if (here == null || here.kind() == Kind.WOOL) {
 				continue;
 			}
 

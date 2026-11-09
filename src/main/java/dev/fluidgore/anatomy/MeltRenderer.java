@@ -74,8 +74,15 @@ public final class MeltRenderer {
 	 * which stands this far off the body cube ({@code SheepFurModel}).
 	 */
 	private static final float FLEECE_REACH = 1.75F;
+	/** The same for a sheep's head, whose fleece stands 0.6 px off the head cube. */
+	private static final float HEAD_FLEECE_REACH = 0.6F;
 	/** How deep under its own skin a table is read for fat, in canonical pixels: about the thickest fat a sheep carries. */
 	private static final float FAT_SEARCH = 1.5F;
+	/**
+	 * How deep under its skin a head's table is read for muscle, in canonical pixels: where none lies that deep, the skull is
+	 * right under the skin (the nasal bones, the forehead, the rims of the orbits) and the fire bares it first.
+	 */
+	private static final float MUSCLE_SEARCH = 1.2F;
 	private static final int ROAST = 0x9A6A48;
 	/** Pork rind in a fire: it dries, puffs and crisps golden into crackling before it chars. */
 	private static final int CRACKLING = 0xD8A458;
@@ -860,7 +867,7 @@ public final class MeltRenderer {
 		for (int n = 0; n < pieces.length; n++) {
 			Piece piece = pieces[n];
 			Kind kind = lean(piece.kind());
-			if (beast != null && (kind == Kind.DERMIS || piece.name().equals("subcutaneous_fat"))) {
+			if (beast != null && (kind == Kind.DERMIS || kind == Kind.WOOL || piece.name().equals("subcutaneous_fat"))) {
 				continue;
 			}
 
@@ -1209,8 +1216,9 @@ public final class MeltRenderer {
 		float[][] thresholds = new float[6][];
 		float[] min = {cube.minX, cube.minY, cube.minZ};
 		float[] max = {cube.maxX, cube.maxY, cube.maxZ};
-		// Only a sheep's trunk table carries the fat under the skin; the other tables' shells keep their set depths.
-		Piece[] fatTable = beast != null && beast.walled() && region == Region.BEAST_TRUNK ? Anatomy.pieces(region, left, beast, turned) : null;
+		// Only a sheep's trunk and head tables carry the skin and the fat under it; the other tables' shells keep their set depths.
+		boolean head = region == Region.BEAST_HEAD;
+		Piece[] fatTable = beast != null && beast.walled() && (region == Region.BEAST_TRUNK || head) ? Anatomy.pieces(region, left, beast, turned) : null;
 		float[] column = new float[3];
 		for (int face = 0; face < 6; face++) {
 			int a = face >> 1;
@@ -1236,14 +1244,18 @@ public final class MeltRenderer {
 					// The fat under this cell's skin, read off the body's own table where it has one (a sheep's trunk carries its
 					// subcutaneous fat: thick over the loin and the rump, thin on the flank, none over the spine's tips).
 					boolean tableFatless = false;
+					// On a head, whether the skull lies right under the skin with no muscle over it: bared first in a fire.
+					boolean tableBare = false;
 					if (fatTable != null) {
 						column[0] = cx;
 						column[1] = cy;
 						column[2] = cz;
 						int canonicalSign = SCALE[a] < 0.0F ? -sign : sign;
-						float outward = FLEECE_REACH / Math.abs(SCALE[a]);
+						float outward = (head ? HEAD_FLEECE_REACH : FLEECE_REACH) / Math.abs(SCALE[a]);
 						tableFatless = !Probe.underSkin(fatTable, column, a, canonicalSign, outward, FAT_SEARCH, FAT_SEARCH,
 								k -> k == Kind.SUET || k == Kind.FAT || k == Kind.LARD);
+						Kind lean = beast.lean;
+						tableBare = head && !Probe.underSkin(fatTable, column, a, canonicalSign, outward, MUSCLE_SEARCH, MUSCLE_SEARCH, k -> k == lean);
 					}
 
 					if (left) {
@@ -1269,7 +1281,7 @@ public final class MeltRenderer {
 					t[k + OUT] = Math.max(0.004F, 0.012F + 0.06F * noise(seed, wx, wy, wz) + 0.3F * thin);
 					t[k + SKIN] = 0.24F + 0.2F * noise(seed ^ 0x2545F4914F6CDD1DL, wx, wy, wz) + thin + shield;
 					t[k + FAT] = region.fatless(cx, cy, cz) || tableFatless ? t[k + SKIN] : t[k + SKIN] + 0.05F + 0.07F * noise(seed ^ 0x6C8E9CF570932BD5L, wx, wy, wz);
-					t[k + MEAT] = region.bare(cx, cy, cz) ? t[k + FAT] : t[k + FAT] + 0.1F + 0.16F * noise(seed ^ 0x1B873593L, wx, wy, wz);
+					t[k + MEAT] = region.bare(cx, cy, cz) || tableBare ? t[k + FAT] : t[k + FAT] + 0.1F + 0.16F * noise(seed ^ 0x1B873593L, wx, wy, wz);
 					t[k + BLISTER] = patch(seed ^ 0x3C6EF372FE94F82BL, wx, wy, wz, 1.3F);
 					t[k + PEEL] = patch(seed ^ 0x7F4A7C15A54FF53AL, wx, wy, wz, 2.2F);
 					t[k + RUPTURE] = region.rupture(cx, cy, cz);

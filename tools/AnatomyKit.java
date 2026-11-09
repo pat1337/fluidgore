@@ -601,6 +601,15 @@ class AnatomyKit {
 
 	/** Greedy merge: each run of one part's voxels grown along x, then z, then y into the biggest box it fills. */
 	static List<Box> boxes(Grid g) {
+		return boxes(g, key -> false, Integer.MAX_VALUE);
+	}
+
+	/**
+	 * {@link #boxes(Grid)}, with the boxes of the keys {@code small} accepts grown no further than {@code most} voxels along
+	 * any axis: a sheet of skin or wool over a flat face would otherwise merge into one slab, and a blast should tear it
+	 * into patches.
+	 */
+	static List<Box> boxes(Grid g, java.util.function.IntPredicate small, int most) {
 		boolean[] used = new boolean[g.cell.length];
 		List<Box> out = new ArrayList<>();
 		for (int j = 0; j < g.ny; j++) {
@@ -611,14 +620,15 @@ class AnatomyKit {
 						continue;
 					}
 
+					int cap = small.test(key) ? most : Integer.MAX_VALUE;
 					int i1 = i + 1;
-					while (i1 < g.nx && g.at(i1, j, k) == key && !used[(i1 * g.ny + j) * g.nz + k]) {
+					while (i1 < g.nx && i1 - i < cap && g.at(i1, j, k) == key && !used[(i1 * g.ny + j) * g.nz + k]) {
 						i1++;
 					}
 
 					int k1 = k + 1;
 					grow:
-					while (k1 < g.nz) {
+					while (k1 < g.nz && k1 - k < cap) {
 						for (int a = i; a < i1; a++) {
 							if (g.at(a, j, k1) != key || used[(a * g.ny + j) * g.nz + k1]) {
 								break grow;
@@ -630,7 +640,7 @@ class AnatomyKit {
 
 					int j1 = j + 1;
 					grow:
-					while (j1 < g.ny) {
+					while (j1 < g.ny && j1 - j < cap) {
 						for (int a = i; a < i1; a++) {
 							for (int c = k; c < k1; c++) {
 								if (g.at(a, j1, c) != key || used[(a * g.ny + j1) * g.nz + c]) {

@@ -152,7 +152,14 @@ when a feature is turned off.
   (`MeltRenderer.inside`) clips every piece to the body cube's faces, so a shorn sheep shows nothing floating. The skin,
   fat and muscles carry owners that tear them into patches and chunks in a blast (`Viscera.wall`: they fly as giblets,
   never as carried pieces), and the burning shell draws the skin and fat itself, reading the fat's presence under each
-  cell from the table (`Probe.underSkin`, from the real skin inward), and clips the lean to below it. `SheepLegs` is a
+  cell from the table (`Probe.underSkin`, from the real skin inward), and clips the lean to below it. `SheepHead` is
+  the head skin to skin in the vanilla head box at the head's own scale (about 2.2 cm a pixel across, against the
+  trunk's 4.74; the muzzle squashed harder along than the braincase so the eyes and the jaw's hinge fall where the mod
+  burns and swings them): the skull with its skin, the fat of the cheeks and throat, the muscles of chewing and the
+  lean between them, and, outside the box round its back, the wool of the fleece's head (`Kind.WOOL`, which
+  `Viscera` leaves out of a shorn sheep and `Probe.underSkin` passes over). The burning shell reads the head's table for
+  fat and for muscle under each cell, so the skull is bared first where bone lies right under the skin. A lamb's table
+  has no wool: the game paints a lamb's wool on its body cubes. `SheepLegs` is a
   sheep's own right fore and hind leg; other beasts still use the hand-made `beastLeg`. The generators share two
   files in `tools/`: `AnatomyKit` (shapes, tissues, the voxel grid, Blockbench export and previews) and `Quadruped`
   (the trunk frame and the axial skeleton, written once and sized by each species' `Body`). A species file adds its
@@ -323,7 +330,7 @@ humanoid. `GameRendererMixin` adds stagger and the limp hitch to the camera.
   crushed bone, stove-in ribs, cut-meat grain, marbling, fat rim, blood smear, runs of blood, eight nested levels of
   blood soaked into a coat, blood wicked up a coat to a ragged line). The row count is
   `WoundRenderer.TILE_V`, shared by the rot and cremation renderers.
-- `anatomy.png`: 8x7 tiles of 16 px in full colour, in `Anatomy.Kind` order. Tiles 54-55 are free.
+- `anatomy.png`: 8x8 tiles of 16 px in full colour, in `Anatomy.Kind` order. Tiles 61-63 are free.
 - All of them come from `tools/GenerateTextures.java` with fixed seeds. `tools/texture-manifest.txt` records them so
   `VerifyTextures` can show nothing changed by accident.
 - `art/` holds Blockbench models of the sheep and cow anatomy written by the anatomy tools, for reviewing the art.

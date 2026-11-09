@@ -26,6 +26,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.animal.sheep.Sheep;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
@@ -53,6 +54,8 @@ public final class Viscera {
 	/** How much of the overpressure the body lets through to the far side of itself. */
 	private static final float SHIELDED = 0.4F;
 	private static final RandomSource RANDOM = Fate.stream("viscera");
+	/** Whether the body being read is a shorn sheep, whose table's wool is not there (set by {@link #of}). */
+	private static boolean shorn;
 
 	/**
 	 * One piece of a body's inside, where it is in the world: its joint box ({@code hx, hy, hz}, half sides in blocks, in its
@@ -99,6 +102,8 @@ public final class Viscera {
 		ModelPart root = posed.model().root();
 		ModelPart[] parts = ModelParts.index(posed.model());
 		Lie lie = lie(entity, posed);
+		// A shorn sheep has no wool to throw: its table carries the wool of its head all the same (one table for both).
+		shorn = entity instanceof Sheep sheep && sheep.isSheared();
 		region(organs, entity, posed, lie, root, ModelParts.torso(posed.model()), b ? Region.BEAST_TRUNK : Region.TORSO, false, null, beast);
 		BodyPart[] limbs = {BodyPart.HEAD, BodyPart.RIGHT_ARM, BodyPart.LEFT_ARM, BodyPart.RIGHT_LEG, BodyPart.LEFT_LEG};
 		Region[] regions = b ? new Region[] {Region.BEAST_HEAD, Region.FORELEG, Region.FORELEG, Region.HINDLEG, Region.HINDLEG}
@@ -166,6 +171,10 @@ public final class Viscera {
 				.mul(new Quaternionf(flip).conjugate());
 		for (int k = 0; k < pieces.length; k++) {
 			Piece piece = pieces[k];
+			if (shorn && piece.kind() == Anatomy.Kind.WOOL) {
+				continue;
+			}
+
 			float[] lo = new float[3];
 			float[] hi = new float[3];
 			for (int i = 0; i < 3; i++) {
@@ -310,7 +319,7 @@ public final class Viscera {
 	 */
 	public static boolean wall(Organ organ) {
 		Anatomy.Kind k = organ.kind();
-		return k == Anatomy.Kind.MUTTON || k == Anatomy.Kind.PORK || k == Anatomy.Kind.BEEF || k == Anatomy.Kind.DERMIS
+		return k == Anatomy.Kind.MUTTON || k == Anatomy.Kind.PORK || k == Anatomy.Kind.BEEF || k == Anatomy.Kind.DERMIS || k == Anatomy.Kind.WOOL
 				|| organ.name().endsWith("_fat") && !organ.name().equals("kidney_fat");
 	}
 

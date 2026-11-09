@@ -67,7 +67,12 @@ public final class Anatomy {
 		/** A ram's testis: the tough glossy white tunic, fine vessels winding over it. */
 		TESTIS(55, Cooks.ORGAN),
 		/** More cut faces: the heart through its ventricles, the brain's grey and white matter, the kidney's cortex, medulla and pelvis, spongy bone and marrow. */
-		CUT_HEART(56, Cooks.NOT), CUT_BRAIN(57, Cooks.NOT), CUT_KIDNEY(58, Cooks.NOT), CUT_BONE(59, Cooks.NOT);
+		CUT_HEART(56, Cooks.NOT), CUT_BRAIN(57, Cooks.NOT), CUT_KIDNEY(58, Cooks.NOT), CUT_BONE(59, Cooks.NOT),
+		/**
+		 * A sheep's wool, outside its skin: the fleece of its head in the table (the body's is the vanilla fur model). Keratin,
+		 * like horn: it scorches and chars but does not burn away.
+		 */
+		WOOL(60, Cooks.HORN);
 
 		/**
 		 * The plain name of this tissue (a translation id, see {@link Piece#name}), for a piece with no name of its own:
@@ -109,6 +114,7 @@ public final class Anatomy {
 				case VEIN -> "vena_cava";
 				case GLAND -> "gland";
 				case TESTIS -> "testis";
+				case WOOL -> "wool";
 				default -> "remains";
 			};
 		}

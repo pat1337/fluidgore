@@ -35,12 +35,15 @@ public record Material(String name, float water, float fuel, float ignites, floa
 	public static final Material CUD = new Material("cud", 0.85F, 0.3F, 330.0F, 0.8F, 0x6A5A30, 0.0F, 0.4F, 1.05F);
 	/** Hoof, horn, claws: little water, slow to heat, chars rather than burns. */
 	public static final Material KERATIN = new Material("keratin", 0.12F, 0.35F, 450.0F, 0.6F, 0xC8B090, 0.3F, 0.9F, 1.3F);
+	/** Wool: keratin fibre full of air, so a tuft of it is light and floats; slow to catch, and it chars rather than flames. */
+	public static final Material WOOL = new Material("wool", 0.15F, 0.4F, 570.0F, 0.4F, 0x6A5848, 0.05F, 0.5F, 0.3F);
 
 	/** What an anatomical piece is made of. */
 	public static Material of(Anatomy.Kind kind) {
 		return switch (kind) {
 			case BONE, BONE_END, SKULL, TEETH, VERTEBRA, PHALANGES, CARTILAGE -> BONE;
 			case HOOF, HORN -> KERATIN;
+			case WOOL -> WOOL;
 			case STOMACH, INTESTINE, COLON, RUMEN, RETICULUM, BLADDER, GALLBLADDER, TRACHEA, AORTA, VEIN -> GUT;
 			case FAT, SUET, LARD -> FAT;
 			case MUSCLE, MUTTON, PORK, BEEF, TONGUE -> MUSCLE;

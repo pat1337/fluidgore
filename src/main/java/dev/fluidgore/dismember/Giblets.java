@@ -37,6 +37,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.animal.sheep.Sheep;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
@@ -423,6 +424,11 @@ public final class Giblets {
 			shape[i] = o.shape();
 			rx[i] = prx[i] = o.pitch();
 			ry[i] = pry[i] = o.yaw();
+			if (o.kind() == Anatomy.Kind.WOOL && body instanceof Sheep sheep) {
+				// A tuft of wool is the colour the fleece was dyed.
+				base[i] = sheep.getColor().getTextureDiffuseColor() & 0xFFFFFF;
+				recolor(i);
+			}
 		}
 
 		return i;

@@ -22,6 +22,12 @@ All notable changes to Fluid Gore are listed here. The format follows
   than squashed into the body cube: she is taller and a little longer than the vanilla body, and the top of her back,
   the floor of her belly, her brisket and her rump lie inside the wool. A blast throws all of it; on a shorn sheep
   those parts are not drawn in place (see the README's known limitations).
+- A sheep's head is its own anatomy skin to skin. Over the skull lie its skin, the little fat of the cheeks and the
+  throat, the muscles of chewing and the lean between them, and round the back of the head the wool of the fleece. A
+  blast throws the skin in patches, the fat, the eyes, the plates of the skull, the brain and the tongue, and tufts of
+  wool in the colour the fleece was dyed; a shorn sheep throws no wool. A burning head bares the skull first where the
+  bone lies right under the skin: the nasal bones, the forehead and the rims of the orbits. A split head shows the skin
+  and the cheek over the bone on the cut faces. The head keeps its own scale (see the README's known limitations).
 - `/fluidgore clear` takes away the bodies and gore in an area so a scene can be played again: within 16 blocks, a
   radius you give, the blocks between two corners (as `/fill` takes them), or `all`. The server removes the bodies it
   keeps there, and every player with the mod loses the blood, loose pieces and bodies shown there. Living animals are

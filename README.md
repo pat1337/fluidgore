@@ -219,7 +219,8 @@ the blast kills them.
   - Cut through the carcass and it splits, and a blade on a loose piece cuts it again until it is diced.
   - A sheep comes apart into a butcher's joints (neck, shoulder, rack, loin, leg, breast and flank), then down to
     chops.
-  - A blade splits a sheep's severed head down the middle, showing the skull, brain and tongue on the cut faces.
+  - A blade splits a sheep's severed head down the middle, showing the skin and cheek over the bone, the skull, brain
+    and tongue on the cut faces.
 
 ### Rot (Extreme only)
 At the Extreme gore level a body left lying rots, and each Minecraft day counts as one day of decay:
@@ -509,6 +510,10 @@ generators.
 - A sheep's insides keep the real animal's proportions, which are taller and a little longer than the vanilla body:
   the top of its back, the floor of its belly, its brisket and its rump lie inside the wool. A shorn sheep is a thinner
   animal than its insides, so those parts are not drawn in place on it; a blast still throws them.
+- A sheep's head is at its own scale, about half the body's centimetres to a pixel: the vanilla head is drawn big for
+  the body, so the skull inside it is a real skull in a head twice as large as it should be, and the muzzle is
+  squashed harder than the braincase. The eyes inside the head lie on its sides where a sheep's are, further back than
+  the eyes painted on the front of the vanilla face.
 - Where a large pool of blood meets dry floor, its edge can step along the block edges.
 - A body loaded from a save, or seen by a player who arrived after it died, keeps its normal colour: pallor is
   only seen by players who watched it bleed. The same goes for blood on coats.

@@ -22,9 +22,10 @@ of each model from four sides.
 | `sheep_skull.bbmodel` | Sheep skull, jaw and teeth | 633 | 0.5 cm | 12 x 12 x 27 cm |
 | `sheep_brain.bbmodel` | Sheep brain | 76 | 0.5 cm | 4 x 6 x 9 cm |
 | `sheep_head.bbmodel` | Sheep head (skull, jaw, teeth, brain) | 709 | 0.5 cm | 12 x 12 x 27 cm |
+| `sheep_head_whole.bbmodel` | Sheep head under its skin: skin, fat, the muscles of chewing, eyes, glands, skull and brain | 2100 | 0.5 cm | 12 x 14 x 31 cm |
 | `sheep_in_situ.bbmodel` | Sheep anatomy in place | 3955 | 1.0 cm | 30 x 77 x 145 cm |
-| `sheep_muscles.bbmodel` | Sheep muscles on the skeleton (the loin eye, the shoulder, the leg, the belly wall in its layers) | 23890 | 0.5 cm | 35 x 79 x 145 cm |
-| `sheep_whole.bbmodel` | Whole sheep under its skin: skin, fat, muscles, bones and organs in place | 12220 | 1.0 cm | 42 x 80 x 147 cm |
+| `sheep_muscles.bbmodel` | Sheep muscles on the skeleton (the loin eye, the shoulder, the leg, the belly wall in its layers) | 24168 | 0.5 cm | 35 x 79 x 147 cm |
+| `sheep_whole.bbmodel` | Whole sheep under its skin: skin, fat, muscles, bones and organs in place | 12443 | 1.0 cm | 42 x 80 x 151 cm |
 | `sheep_ewe_reproductive.bbmodel` | Ewe reproductive tract and udder, with the bladder and pelvis | 987 | 0.5 cm | 23 x 35 x 35 cm |
 | `sheep_ram_reproductive.bbmodel` | Ram reproductive organs, with the bladder and pelvis | 1356 | 0.5 cm | 23 x 34 x 35 cm |
 | `sheep_lamb_stomachs.bbmodel` | Lamb stomachs (small rumen, big abomasum) and thymus | 2849 | 0.5 cm | 21 x 25 x 65 cm |

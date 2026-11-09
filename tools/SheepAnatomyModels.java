@@ -231,6 +231,8 @@ public final class SheepAnatomyModels extends Quadruped {
 		rows.add(export(out, "sheep_skull", "Sheep skull, jaw and teeth", 0.5, p -> p.under("skeleton/skull")));
 		rows.add(export(out, "sheep_brain", "Sheep brain", 0.5, p -> p.under("head/brain")));
 		rows.add(export(out, "sheep_head", "Sheep head (skull, jaw, teeth, brain)", 0.5, p -> p.under("skeleton/skull") || p.under("head/brain")));
+		rows.add(export(out, "sheep_head_whole", "Sheep head under its skin: skin, fat, the muscles of chewing, eyes, glands, skull and brain", 0.5,
+				p -> p.under("skeleton/skull") || p.under("head") || p.under("muscles/head") || p.under("skin/head") || p.under("fat/head")));
 		Predicate<Part> soft = p -> p.under("muscles") || p.under("fat") || p.under("skin");
 		rows.add(export(out, "sheep_in_situ", "Sheep anatomy in place", 1.0, soft.negate()));
 		rows.add(export(out, "sheep_muscles", "Sheep muscles on the skeleton (the loin eye, the shoulder, the leg, the belly wall in its layers)", 0.5,
@@ -662,12 +664,13 @@ public final class SheepAnatomyModels extends Quadruped {
 			kept.cell[n] = split[n] || c.cell[n] == 0 || hero.contains(ck[c.cell[n] - 1][1]) ? 0 : c.cell[n];
 		}
 
-		for (Box b : boxes(kept)) {
+		int most = (int) Math.round(SMALL_PX / c.vox);
+		for (Box b : boxes(kept, key -> SMALL_BOXES.test(ck[key - 1][1]), most)) {
 			lines.add(line.of(ck[b.key - 1], c.ox + b.x0 * c.vox, c.ox + b.x1 * c.vox, c.oy + b.y0 * c.vox, c.oy + b.y1 * c.vox, c.oz + b.z0 * c.vox,
 					c.oz + b.z1 * c.vox));
 		}
 
-		for (Box b : boxes(m)) {
+		for (Box b : boxes(m, key -> SMALL_BOXES.test(names.get(key - 1)[1]), (int) Math.round(SMALL_PX / v))) {
 			String[] mp = names.get(b.key - 1);
 			lines.add(line.of(mp, m.ox + b.x0 * v, m.ox + b.x1 * v, m.oy + b.y0 * v, m.oy + b.y1 * v, m.oz + b.z0 * v, m.oz + b.z1 * v));
 		}
@@ -676,25 +679,48 @@ public final class SheepAnatomyModels extends Quadruped {
 	}
 
 	/**
+	 * The parts whose cubes {@link #mixed} keeps to {@link #SMALL_PX} pixels a side: the head's skin, fat, filler lean and wool,
+	 * which lie flat along the faces of the head box and would merge into slabs. Nothing for the trunk, whose skin follows the
+	 * ewe's curves.
+	 */
+	static Predicate<String> SMALL_BOXES = n -> false;
+	/** The side of those small cubes, in the grid's own pixels: a patch owner ({@link #HEAD_PATCH}) joins a few into one patch. */
+	static double SMALL_PX = 1.5;
+
+	/**
 	 * The head's small parts that half pixels would lose, cut at quarter pixels in the mixed head: the three parts of the
 	 * brain, the eyes, the teeth and the dental pad.
 	 */
 	static final java.util.Set<String> HEAD_HERO = java.util.Set.of("cerebrum", "cerebellum", "brainstem", "eye", "incisors", "upper_molars",
 			"lower_molars", "dental_pad", "thyroid", "salivary_gland", "thymus");
 
+	/** The vanilla sheep's head box in the head's own pixels: 6 across, 6 up from its floor, 8 along with the nose at -8. */
+	static final double[] HEAD_LO = {-3, 0, -8};
+	static final double[] HEAD_HI = {3, 6, 0};
+	/** How far the fleece's head cube stands off the head box ({@code SheepFurModel}), and how far forward of the poll it reaches. */
+	static final double HEAD_WOOL_PX = 0.6;
+	static final double HEAD_WOOL_FRONT = -6;
+
+	/** The head's own pixels to the ewe's centimetres: across, up and along, with the stretch pairs of {@link #stretch} for y and z. */
+	static final double HEAD_CM_ACROSS = 2.2;
+	static final double[] HEAD_UP = {0, 17.4, 4.39, 26.3, 6, 30.9};
+	static final double[] HEAD_ALONG = {-8, -100.0, -4.25, -81.5, 0, -72.0};
+
 	/**
-	 * The skull and what it holds, squashed into the vanilla sheep's head box like the trunk is into its body, at
-	 * {@code res}. Output units are the head's own model pixels: x across (the right at -x), y up from the bottom of the box
-	 * (6 high), z along it (8 long, the nose at -8). The head's anatomy is not one scale: the long muzzle is squashed far
-	 * more than the braincase, so the eyes and the jaw's hinge come where the game draws the eyes and swings the jaw.
-	 * Only inside the skin, fat and muscle the mod lays over it.
+	 * The head, skin to skin, in the vanilla sheep's head box at {@code res}: the skull with its skin, the little fat a head
+	 * has, the muscles of chewing and what is left between them over the bone, and the fleece's cube of wool round the back
+	 * of it, outside the box. Output units are the head's own model pixels: x across (the right at -x), y up from the bottom
+	 * of the box (6 high), z along it (8 long, the nose at -8). The head keeps its own scale, about 2.2 cm a pixel across
+	 * and 2.2 to 2.9 up, far finer than the trunk's 4.74 (the vanilla head is drawn big for the body); and it is not one
+	 * scale along: the long muzzle is squashed to 4.9 cm a pixel against the braincase's 2.2, so the eyes and the jaw's
+	 * hinge fall where the mod burns and swings them.
 	 */
 	static Grid headGrid(int res, Map<Integer, String[][]> keysOut) {
 		double vox = 16.0 / res;
-		WARP = new java.util.function.DoubleUnaryOperator[] {x -> -1.963 * x, y -> stretch(y, 0.3, 18.4, 4.39, 26.3, 5.7, 29.9),
-				z -> stretch(z, -7.8, -99.3, -4.25, -81.5, -0.2, -73.3)};
-		CLIP_LO = new double[] {-2.85, 0.3, -7.8};
-		CLIP_HI = new double[] {2.85, 5.7, -0.2};
+		WARP = new java.util.function.DoubleUnaryOperator[] {x -> -HEAD_CM_ACROSS * x, y -> stretch(y, HEAD_UP), z -> stretch(z, HEAD_ALONG)};
+		// The grid takes in the wool round the box: the grown fleece head over the poll and cheeks, the muzzle bare.
+		CLIP_LO = new double[] {HEAD_LO[0] - HEAD_WOOL_PX, HEAD_LO[1] - HEAD_WOOL_PX, HEAD_WOOL_FRONT - HEAD_WOOL_PX};
+		CLIP_HI = new double[] {HEAD_HI[0] + HEAD_WOOL_PX, HEAD_HI[1] + HEAD_WOOL_PX, HEAD_HI[2] + HEAD_WOOL_PX};
 		VOX = vox * 1.9;
 		DUCT = 0;
 		LOD = vox * 1.9;
@@ -702,6 +728,12 @@ public final class SheepAnatomyModels extends Quadruped {
 		FULL_BODY = false;
 		PARTS.clear();
 		build();
+		if (!LAMB) {
+			// The wool: the fleece head's cube less the head box, outside the skin. A lamb's wool is painted on its own body
+			// cubes by the game (its wool layer is the baby body model), so a lamb's table carries none.
+			headWool();
+		}
+
 		Grid g = voxelize(vox, p -> headPiece(p) != null);
 		String[][] keys = new String[PARTS.size()][];
 		for (int i = 0; i < keys.length; i++) {
@@ -719,6 +751,44 @@ public final class SheepAnatomyModels extends Quadruped {
 		return g;
 	}
 
+	/** A point in the ewe's centimetres back to the head's own pixels: the inverse of {@link #WARP} as {@link #headGrid} sets it. */
+	static double[] headPx(double x, double y, double z) {
+		return new double[] {-x / HEAD_CM_ACROSS, stretch(y, swap(HEAD_UP)), stretch(z, swap(HEAD_ALONG))};
+	}
+
+	/** The (x, y) pairs of {@link #stretch} the other way round, for its inverse. */
+	static double[] swap(double[] xy) {
+		double[] out = new double[xy.length];
+		for (int i = 0; i < xy.length; i += 2) {
+			out[i] = xy[i + 1];
+			out[i + 1] = xy[i];
+		}
+
+		return out;
+	}
+
+	/** Whether a point in the ewe's centimetres lies in the head box, grown {@code by} pixels each way and reaching forward to {@code front}. */
+	static boolean inHeadBox(double x, double y, double z, double by, double front) {
+		double[] p = headPx(x, y, z);
+		return p[0] >= HEAD_LO[0] - by && p[0] <= HEAD_HI[0] + by && p[1] >= HEAD_LO[1] - by && p[1] <= HEAD_HI[1] + by && p[2] >= front - by
+				&& p[2] <= HEAD_HI[2] + by;
+	}
+
+	/** The fleece's head: a cube of wool {@link #HEAD_WOOL_PX} thick round the back of the head box, from the poll to {@link #HEAD_WOOL_FRONT}. */
+	private static void headWool() {
+		Mat wool = organic(0xF2EEE2, 0xD9D2C0, 0xFFFFFF, 1.4, 240);
+		double[] lo = {1e9, 1e9, 1e9};
+		double[] hi = {-1e9, -1e9, -1e9};
+		for (int a = 0; a < 3; a++) {
+			double u = WARP[a].applyAsDouble(CLIP_LO[a]);
+			double w = WARP[a].applyAsDouble(CLIP_HI[a]);
+			lo[a] = Math.min(u, w);
+			hi[a] = Math.max(u, w);
+		}
+
+		part("wool", "wool", wool, new Shape(lo, hi, (x, y, z) -> inHeadBox(x, y, z, HEAD_WOOL_PX, HEAD_WOOL_FRONT) && !inHeadBox(x, y, z, 0, HEAD_LO[2]) ? -1 : 1));
+	}
+
 	/** Piecewise linear through (x, y) pairs, carried on straight past the ends. */
 	static double stretch(double x, double... xy) {
 		int i = x <= xy[2] ? 0 : xy.length - 4;
@@ -731,17 +801,34 @@ public final class SheepAnatomyModels extends Quadruped {
 		return xy[i + 1] + (xy[i + 3] - xy[i + 1]) * (x - xy[i]) / (xy[i + 2] - xy[i]);
 	}
 
-	/** A head cube in {@code Region.BEAST_HEAD}'s canonical pixels: 8 across, 8 down (the poll at -4), 8 along (the nose at -8). */
+	/**
+	 * A head cube in {@code Region.BEAST_HEAD}'s canonical pixels: 8 across, 8 down (the poll at -4), 8 along (the nose at -8).
+	 * The skin, the fat, the unnamed muscle and the wool carry an owner that tears them into patches of {@link #HEAD_PATCH}
+	 * canonical pixels in a blast, as the trunk's do ({@link #owner}).
+	 */
 	static String headLine(String[] mp, double x0, double x1, double y0, double y1, double z0, double z1) {
 		String name = mp[1];
 		boolean jaw = java.util.Set.of("jawbone", "lower_molars", "incisors", "tongue").contains(name);
 		float texels = name.equals("eye") ? 4.0F : mp[0].equals("TEETH") ? 2.0F : 1.0F;
-		return "p(Kind." + mp[0] + ", " + fl(x0 * 4 / 3) + ", " + fl(4 - y1 * 4 / 3) + ", " + fl(z0) + ", " + fl(x1 * 4 / 3) + ", " + fl(4 - y0 * 4 / 3) + ", "
-				+ fl(z1) + ", " + jaw + ", " + fl(texels) + ", \"" + name + "\")";
+		double[] c = {x0 * 4 / 3, 4 - y1 * 4 / 3, z0, x1 * 4 / 3, 4 - y0 * 4 / 3, z1};
+		String owner = null;
+		if (PATCHES.contains(name) || name.equals("wool")) {
+			int across = (int) Math.floor(((c[0] + c[3]) / 2 + 4) / HEAD_PATCH);
+			int up = (int) Math.floor(((c[1] + c[4]) / 2 + 4) / HEAD_PATCH);
+			int along = (int) Math.floor(((c[2] + c[5]) / 2 + 8) / HEAD_PATCH);
+			owner = ":" + name + "_" + across + "_" + up + "_" + along;
+		}
+
+		return "p(Kind." + mp[0] + ", " + fl(c[0]) + ", " + fl(c[1]) + ", " + fl(c[2]) + ", " + fl(c[3]) + ", " + fl(c[4]) + ", " + fl(c[5]) + ", " + jaw + ", "
+				+ fl(texels) + ", \"" + name + "\"" + (owner == null ? "" : ", \"" + owner + "\"") + ")";
 	}
+
+	/** The side of a patch the head's skin, fat, filler muscle and wool tear into, in canonical pixels. */
+	static final double HEAD_PATCH = 3.0;
 
 	/** {@code anatomy/SheepHead.java}: the mixed head, half pixels with {@link #HEAD_HERO} at quarter pixels. */
 	static String headJava() {
+		SMALL_BOXES = n -> PATCHES.contains(n) || n.equals("wool");
 		Map<Integer, String[][]> keys = new LinkedHashMap<>();
 		Grid c = headGrid(MOD_RES, keys);
 		Grid f = headGrid(MOD_RES * 2, keys);
@@ -752,6 +839,7 @@ public final class SheepAnatomyModels extends Quadruped {
 		Grid lf = headGrid(MOD_RES * 2, lambKeys);
 		List<String> lamb = mixed(lc, lambKeys.get(MOD_RES), lf, lambKeys.get(MOD_RES * 2), HEAD_HERO, SheepAnatomyModels::headLine);
 		LAMB = false;
+		SMALL_BOXES = n -> false;
 		StringBuilder sb = new StringBuilder();
 		sb.append("""
 				package dev.fluidgore.anatomy;
@@ -761,11 +849,14 @@ public final class SheepAnatomyModels extends Quadruped {
 
 				/**
 				 * A sheep's head, generated by {@code tools/SheepAnatomyModels.java} from its veterinary model of a ewe: do not edit,
-				 * change the tool and run it again. The skull (braincase, nasal bones, upper jaw, cheekbones, orbits, the jaw), the
-				 * teeth (the lower incisors biting on the dental pad, the cheek teeth), the brain in its three parts, the eyes, the
-				 * tongue, the larynx and pharynx and the nasal cavity, squashed into the vanilla head box: half pixels, the brain, eyes
-				 * and teeth quarter pixels. In {@link Anatomy.Region#BEAST_HEAD}'s canonical pixels: the right at -x, the poll at -y,
-				 * the nose at -z. What hangs on the jaw swings open with it.
+				 * change the tool and run it again. The head skin to skin in the vanilla head box, at the head's own scale: the skin,
+				 * the little fat of the cheeks and throat, the muscles of chewing and the lean between them, the skull (braincase,
+				 * nasal bones, upper jaw, cheekbones, orbits, the jaw), the teeth (the lower incisors biting on the dental pad, the
+				 * cheek teeth), the brain in its three parts, the eyes, the tongue, the larynx and pharynx and the nasal cavity: half
+				 * pixels, the brain, eyes and teeth quarter pixels. Round the back of the box, outside the skin, the wool of the
+				 * fleece's head (a lamb's wool is painted on its body, so its table has none). In {@link Anatomy.Region#BEAST_HEAD}'s
+				 * canonical pixels: the right at -x, the poll at -y, the nose at -z. What hangs on the jaw swings open with it. The
+				 * skin, fat, lean and wool carry owners that tear them into patches in a blast.
 				 */
 				final class SheepHead {
 					private SheepHead() {
@@ -783,6 +874,10 @@ public final class SheepAnatomyModels extends Quadruped {
 
 					private static Piece p(Kind kind, float x0, float y0, float z0, float x1, float y1, float z1, boolean jaw, float texels, String name) {
 						return new Piece(kind, x0, y0, z0, x1, y1, z1, jaw, texels, name);
+					}
+
+					private static Piece p(Kind kind, float x0, float y0, float z0, float x1, float y1, float z1, boolean jaw, float texels, String name, String owner) {
+						return new Piece(kind, x0, y0, z0, x1, y1, z1, jaw, texels, name, owner);
 					}
 				}
 				""");
@@ -1078,6 +1173,7 @@ public final class SheepAnatomyModels extends Quadruped {
 		spinalCord();
 		head();
 		headMuscles();
+		headSoft();
 		if (FULL_BODY) {
 			limbs();
 			softTissue();
@@ -1943,6 +2039,66 @@ public final class SheepAnatomyModels extends Quadruped {
 	}
 
 	/**
+	 * The outline of the head under its skin: the braincase with the temples over it, the poll, the long muzzle from the
+	 * orbits to the nose with the lower jaw under it, the cheeks over the masseters and the parotids, and the throat under
+	 * the jaw. Simple shapes, as the trunk's {@link Quadruped#outline}.
+	 */
+	private static Shape headOutline() {
+		Shape[] cheeks = new Shape[2];
+		for (int s = -1; s <= 1; s += 2) {
+			cheeks[(s + 1) / 2] = ell(s * 4.3, 21.9, -79.3, 1.8, 3.3, 3.5);
+		}
+
+		Shape muzzle = tube().up((a, b, c) -> new double[] {0, 1, 0})
+				.p(0, 22.6, -83.0, 5.1, 5.3).p(0, 22.4, -88.0, 4.4, 4.7).p(0, 22.0, -93.0, 3.7, 3.8).p(0, 21.4, -98.3, 2.8, 2.7).p(0, 21.2, -100.3, 2.3, 2.2)
+				.build();
+		return union(1.2, lumpy(ell(0, 26.3, -78.4, 3.9, 4.2, 5.3), 0.2, 2.0, 341), ell(0, 25.0, -74.3, 3.5, 3.7, 2.9), muzzle, cheeks[0], cheeks[1],
+				ell(0, 19.6, -78.5, 3.6, 2.3, 5.2));
+	}
+
+	/**
+	 * The soft tissue of the head over the skull, from the skin in: the skin over all of it; the little fat a sheep's head
+	 * carries, in the cheeks and under the jaw and none over the forehead, the nasal bones or the rims of the orbits, where
+	 * the bone lies right under the skin; and what the muscles of chewing leave between them filled with lean (the lips and
+	 * cheeks, the muscles between the jaws under the tongue), never the cranial cavity. The skull, the brain, the eyes and
+	 * the named muscles were made before and keep every voxel they hold. In the head grid ({@link #headGrid}) all of it is
+	 * cut to the head box, so the skin is the box's face where the head reaches it.
+	 */
+	private static void headSoft() {
+		Body b = BODY;
+		Shape outline = headOutline();
+		Shape cavity = ell(0, 26.3, -78.3, 2.05, 2.35, 3.6);
+		double skinDepth = Math.max(0.4, VOX);
+		double fatDepth = Math.max(0.4, VOX);
+		P3 inBox = (x, y, z) -> WARP == null || inHeadBox(x, y, z, 0, HEAD_LO[2]);
+		P3 fatty = (x, y, z) -> Math.abs(x) > 3.0 && y < 25.0 && z > -86.0 && z < -73.0 || y < 20.6 && z > -84.0;
+		part("skin/head", "skin", b.skin, new Shape(outline.lo, outline.hi, (x, y, z) -> {
+			if (!inBox.test(x, y, z)) {
+				return 1;
+			}
+
+			double d = outline.f.at(x, y, z);
+			return Math.max(-d - skinDepth, d);
+		}));
+		part("fat/head", "subcutaneous_fat", b.fat, new Shape(outline.lo, outline.hi, (x, y, z) -> {
+			if (!inBox.test(x, y, z) || !fatty.test(x, y, z)) {
+				return 1;
+			}
+
+			double d = outline.f.at(x, y, z) + skinDepth;
+			return Math.max(-d - fatDepth, d);
+		}));
+		part("muscles/head/other", "other_muscle", b.lean, new Shape(outline.lo, outline.hi, (x, y, z) -> {
+			if (!inBox.test(x, y, z) || cavity.in(x, y, z)) {
+				return 1;
+			}
+
+			double d = outline.f.at(x, y, z) + skinDepth + (fatty.test(x, y, z) ? fatDepth : 0);
+			return d;
+		}));
+	}
+
+	/**
 	 * The skull. The braincase is an ellipsoid shell (cut hollow so the brain fills it) with the nuchal crest and
 	 * occipital round the back and the foramen magnum under them for the cord. The face is a long boxy muzzle in the
 	 * silver-age way: maxilla plates either side, the nasal bridge on top, the hard palate and dental pad below, an
@@ -2042,6 +2198,18 @@ public final class SheepAnatomyModels extends Quadruped {
 		String n = p.name;
 		if (p.under("muscles/head")) {
 			return "MUTTON " + n;
+		}
+
+		if (p.under("skin/head")) {
+			return "DERMIS skin";
+		}
+
+		if (p.under("fat/head")) {
+			return "SUET subcutaneous_fat";
+		}
+
+		if (p.under("wool")) {
+			return "WOOL wool";
 		}
 
 		if (p.under("skeleton/skull/teeth")) {
@@ -2330,7 +2498,8 @@ public final class SheepAnatomyModels extends Quadruped {
 			Map.entry("STOMACH", 20), Map.entry("INTESTINE", 21), Map.entry("COLON", 22), Map.entry("KIDNEY", 23), Map.entry("SPLEEN", 24),
 			Map.entry("BLADDER", 25), Map.entry("TRACHEA", 26), Map.entry("SUET", 38), Map.entry("RUMEN", 45), Map.entry("GALLBLADDER", 49),
 			Map.entry("RETICULUM", 50), Map.entry("VEIN", 51), Map.entry("SKULL", 2), Map.entry("TEETH", 3), Map.entry("SOCKET", 4), Map.entry("BRAIN", 31),
-			Map.entry("EYE", 5), Map.entry("TONGUE", 12), Map.entry("DERMIS", 14), Map.entry("GLAND", 54), Map.entry("TESTIS", 55), Map.entry("MUTTON", 40), Map.entry("PHALANGES", 32), Map.entry("HOOF", 43));
+			Map.entry("EYE", 5), Map.entry("TONGUE", 12), Map.entry("DERMIS", 14), Map.entry("GLAND", 54), Map.entry("TESTIS", 55), Map.entry("MUTTON", 40), Map.entry("PHALANGES", 32), Map.entry("HOOF", 43),
+			Map.entry("WOOL", 60));
 
 	static int tile(Part p) {
 		return TILE.get(modPiece(p)[0]);

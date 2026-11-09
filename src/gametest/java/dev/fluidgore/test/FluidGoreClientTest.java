@@ -124,6 +124,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			beasts(context, singleplayer.getServer());
 			explosions(context, singleplayer.getServer());
 			sheepBlast(context, singleplayer.getServer());
+			headBlast(context, singleplayer.getServer());
 			organs(context, singleplayer.getServer());
 			cowAnatomy(context, singleplayer.getServer());
 			anatomyDetail(context, singleplayer.getServer());
@@ -240,6 +241,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			case "cowAnatomy" -> cowAnatomy(context, server);
 			case "anatomyDetail" -> anatomyDetail(context, server);
 			case "headSplit" -> headSplit(context, server);
+			case "headBlast" -> headBlast(context, server);
 			case "freshBlood" -> freshBlood(context, server);
 			case "bloodyCoats" -> bloodyCoats(context, server);
 			case "bodiesInWater" -> bodiesInWater(context, server);
@@ -4238,6 +4240,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			check(split.startsWith("made=2"), "the head did not split in two: " + split);
 			check(split.contains("[half=-1") && split.contains("[half=1"), "the halves are not the right and the left: " + split);
 			check(split.contains("CUT_BONE") && split.contains("CUT_BRAIN"), "the cut faces do not show bone and brain: " + split);
+			check(split.contains("DERMIS") && split.contains("MUTTON"), "the cut faces do not show the skin and the cheek over the bone: " + split);
 			check(!split.contains("saved=false"), "a half head is not saved with what is inside it: " + split);
 			check(split.contains("young=" + lamb), "the " + (lamb ? "lamb's" : "sheep's") + " head halves are not of its age: " + split);
 		}
@@ -5951,6 +5954,94 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 	}
 
 	/**
+	 * A sheep's head is its own anatomy skin to skin: skin in patches, the little fat of its cheeks and throat, the muscles
+	 * of chewing and the lean between them, the eyes, the skull and the brain, and round the back of it the wool of the
+	 * fleece, which a shorn sheep has not. Read off a woolly sheep and a shorn one as a blast takes a body apart; then TNT
+	 * under the woolly one throws the wool among the rest.
+	 */
+	private static void headBlast(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("time set noon");
+		server.runCommand("fill 780 -60 80 810 -50 110 minecraft:air");
+		server.runCommand("tp @a 795.5 -57 88.5 0 25");
+		context.waitTicks(20);
+		context.waitFor(mc -> mc.levelRenderer.hasRenderedAllSections());
+		context.runOnClient(mc -> {
+			GoreConfig.get().deathThroes = false;
+			GoreConfig.get().keepBodies = false;
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+			if (!mc.gui.hud.isHidden()) {
+				mc.gui.hud.toggle();
+			}
+		});
+		server.runCommand("summon minecraft:sheep 795.5 -60 95.5 {NoAI:1b,Rotation:[90f,0f],UUID:[I;95,96,97,98]}");
+		server.runCommand("summon minecraft:sheep 791.5 -60 95.5 {NoAI:1b,Sheared:1b,Rotation:[90f,0f],UUID:[I;95,96,97,99]}");
+		context.waitTicks(10);
+		int woolly = context.computeOnClient(mc -> idOf(mc, new java.util.UUID(95L << 32 | 96L, 97L << 32 | 98L)));
+		int shorn = context.computeOnClient(mc -> idOf(mc, new java.util.UUID(95L << 32 | 96L, 97L << 32 | 99L)));
+		String[] names = {"skin", "subcutaneous_fat", "other_muscle", "masseter", "eye", "tongue", "wool"};
+		for (int pass = 0; pass < 2; pass++) {
+			int id = pass == 0 ? woolly : shorn;
+			java.util.Map<String, Integer> counts = context.computeOnClient(mc -> {
+				var entity = (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(id);
+				java.util.Map<String, Integer> out = new java.util.TreeMap<>();
+				for (var organ : dev.fluidgore.dismember.Viscera.of(entity, 0)) {
+					if (organ.part() == BodyPart.HEAD) {
+						out.merge(organ.name(), 1, Integer::sum);
+						out.merge("kind:" + organ.kind(), 1, Integer::sum);
+					}
+				}
+
+				return out;
+			});
+			String which = pass == 0 ? "woolly" : "shorn";
+			System.out.println("[FluidGoreTest] " + which + " sheep's head: " + counts);
+			for (String name : names) {
+				int n = counts.getOrDefault(name, 0);
+				if (name.equals("wool")) {
+					check(pass == 0 ? n >= 4 : n == 0, "the " + which + " sheep's head has the wrong wool: " + counts);
+				} else {
+					check(n >= (name.equals("eye") ? 2 : 1), "the " + which + " sheep's head has no " + name + ": " + counts);
+				}
+			}
+
+			check(counts.getOrDefault("skin", 0) >= 6, "the head's skin does not tear into patches: " + counts);
+			check(counts.getOrDefault("kind:SKULL", 0) >= 1 && counts.getOrDefault("kind:BRAIN", 0) >= 1, "the head has no skull or brain: " + counts);
+		}
+
+		context.takeScreenshot("head_blast_01_before");
+		server.runCommand("summon minecraft:tnt 795.5 -60 95.5 {fuse:1}");
+		boolean[] blown = new boolean[1];
+		for (int tick = 0; tick < 40; tick++) {
+			context.waitTicks(1);
+			if (tick == 3 || tick == 8) {
+				context.takeScreenshot("head_blast_02_t" + tick);
+			}
+
+			context.runOnClient(mc -> blown[0] |= GoreSystems.dismemberment().vaporized(woolly));
+		}
+
+		var sheep = net.minecraft.world.entity.EntityTypes.SHEEP;
+		int wool = context.computeOnClient(mc -> GoreSystems.dismemberment().organs(sheep, "wool"));
+		int skin = context.computeOnClient(mc -> GoreSystems.dismemberment().organs(sheep, "skin"));
+		System.out.println("[FluidGoreTest] headBlast: blown=" + blown[0] + " wool=" + wool + " skin=" + skin);
+		check(blown[0], "the sheep over the TNT was not blown apart");
+		check(wool >= 1, "the blown sheep threw no wool: " + wool);
+		check(skin >= 1, "the blown sheep threw no skin: " + skin);
+		server.runCommand("tp @a 795.5 -58.5 91.5 0 30");
+		context.waitTicks(10);
+		context.takeScreenshot("head_blast_03_scene");
+		context.runOnClient(mc -> {
+			GoreConfig.get().deathThroes = true;
+			if (mc.gui.hud.isHidden()) {
+				mc.gui.hud.toggle();
+			}
+		});
+	}
+
+	/**
 	 * A sheep blown apart by TNT under it comes apart as the body it is: its hide in patches and the fat under it, its
 	 * named muscles (the loin eye, the chump), its legs down to the hooves and the cheek muscle of its head, besides its
 	 * organs and bones, each a piece of its own.
@@ -5988,7 +6079,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		}
 
 		var sheep = net.minecraft.world.entity.EntityTypes.SHEEP;
-		String[] names = {"longissimus", "gluteus_medius", "skin", "subcutaneous_fat", "hoof", "cannon_bone", "masseter", "heart", "rumen"};
+		String[] names = {"longissimus", "gluteus_medius", "skin", "subcutaneous_fat", "hoof", "cannon_bone", "masseter", "heart", "rumen", "wool"};
 		StringBuilder thrown = new StringBuilder();
 		int[] counts = new int[names.length];
 		for (int i = 0; i < names.length; i++) {
