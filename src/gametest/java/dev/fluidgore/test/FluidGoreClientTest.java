@@ -205,6 +205,25 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 	/** One test of the pick list ({@code -PonlyTests}), by name. */
 	private static void runNamed(ClientGameTestContext context, TestServerContext server, String name) {
 		switch (name) {
+			case "combat" -> {
+				// The first world of the full suite: the arena, then the three tests that share it.
+				setUpArena(server);
+				context.waitTicks(20);
+				combat(context, server, server instanceof TestDedicatedServerContext ? "server" : "sp");
+				fluid(context, server);
+				offClearsEverything(context);
+			}
+			case "horsesAndFractures" -> horsesAndFractures(context, server);
+			case "suffering" -> suffering(context, server);
+			case "rot" -> rot(context, server);
+			case "sorting" -> sorting(context, server);
+			case "playerInjuries" -> playerInjuries(context, server);
+			case "endermen" -> endermen(context, server);
+			case "babies" -> babies(context, server);
+			case "grief" -> grief(context, server);
+			case "pigPit" -> pigPit(context, server);
+			case "pressureVessel" -> pressureVessel(context, server);
+			case "bloodVolumes" -> bloodVolumes(context, server);
 			case "ragdoll" -> ragdoll(context, server);
 			case "lying" -> lying(context, server);
 			case "deadBlast" -> deadBlast(context, server);
@@ -7503,7 +7522,8 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		java.util.UUID sheep = new java.util.UUID(41L << 32 | 42L, 43L << 32 | 44L);
 		server.runCommand("summon minecraft:sheep 170.5 -60 -39.5 {NoAI:1b,UUID:[I;41,42,43,44]}");
 		context.waitTicks(10);
-		int id = context.computeOnClient(mc -> idOf(mc, sheep));
+		// The player has just come a long way: the sheep may not be on this screen yet.
+		int id = awaitId(context, sheep);
 		server.runCommand("damage @e[type=minecraft:sheep,limit=1] 100 minecraft:generic");
 		context.waitTicks(50);
 		java.util.function.Function<net.minecraft.server.MinecraftServer, double[]> where = s -> {
@@ -7529,6 +7549,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		server.runCommand("setblock 170 -60 -40 minecraft:air");
 		context.waitTicks(5);
 
+		check(context.computeOnClient(mc -> GoreSystems.suffering().corpse(id) != null), "this game holds no body for the kept sheep (id " + id + ")");
 		// A punch moves it on the server.
 		double[] before = server.computeOnServer(where::apply);
 		context.runOnClient(mc -> {
@@ -8071,6 +8092,27 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 	}
 
 	/** The client's entity id for {@code uuid}, or -1. */
+	/**
+	 * The client's id for an entity the server has just summoned, waiting up to five seconds for it to reach this
+	 * screen (after a long teleport the chunks and their entities arrive some ticks later).
+	 */
+	private static int awaitId(ClientGameTestContext context, java.util.UUID uuid) {
+		for (int waited = 0; waited <= 100; waited++) {
+			int id = context.computeOnClient(mc -> idOf(mc, uuid));
+			if (id >= 0) {
+				if (waited > 0) {
+					System.out.println("[FluidGoreTest] waited " + waited + " more ticks for " + uuid + " to reach the client");
+				}
+
+				return id;
+			}
+
+			context.waitTicks(1);
+		}
+
+		throw new AssertionError("the summoned entity " + uuid + " never reached the client");
+	}
+
 	private static int idOf(net.minecraft.client.Minecraft mc, java.util.UUID uuid) {
 		for (Entity e : mc.level.entitiesForRendering()) {
 			if (e.getUUID().equals(uuid)) {
