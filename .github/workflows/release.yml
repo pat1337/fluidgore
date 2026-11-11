@@ -1,0 +1,40 @@
+name: Release
+
+# Pushing a tag vX.Y.Z builds that commit and drafts a GitHub release holding the jar and that version's section of the
+# changelog. The draft is published by hand on the Releases page, after a look at it.
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: gradle
+      - name: Check the tag against gradle.properties
+        run: |
+          declared="$(sed -n 's/^version=//p' gradle.properties | tr -d '\r')"
+          if [ "v$declared" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::The tag is $GITHUB_REF_NAME, but gradle.properties says version=$declared"
+            exit 1
+          fi
+          echo "VERSION=$declared" >> "$GITHUB_ENV"
+      - name: Release notes from the changelog
+        run: java tools/ReleaseNotes.java "$VERSION" > "$RUNNER_TEMP/release-notes.md"
+      - name: Build
+        run: ./gradlew build
+      - name: Draft the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "build/libs/fluidgore-$VERSION.jar" \
+            --draft --verify-tag --title "Fluid Gore $VERSION" --notes-file "$RUNNER_TEMP/release-notes.md"

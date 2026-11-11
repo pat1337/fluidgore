@@ -12,8 +12,9 @@ This file covers how to build and test the mod and the rules the code follows. F
 ```
 ./gradlew build                 # build/libs/fluidgore-<version>.jar
 ./gradlew runClient             # development client, with the Cobble Tank (compiled from ../CobbleTank)
-./gradlew installMod            # build, then copy the jar into %APPDATA%\.minecraft\mods (or -PmodsDir=<dir>),
-                                # deleting older fluidgore-*.jar there (two copies crash the game)
+./gradlew installMod            # build, then copy the jar into the game's mods folder (-PmodsDir=<dir>; by default
+                                # the vanilla launcher's, %APPDATA%\.minecraft\mods or ~/.minecraft/mods), deleting
+                                # older fluidgore-*.jar there (two copies crash the game)
 ./gradlew runClientGameTest     # the automated in-game test (singleplayer, then a dedicated server)
 ```
 

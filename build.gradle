@@ -150,10 +150,17 @@ java {
 	targetCompatibility = JavaVersion.VERSION_25
 }
 
-// Puts the built jar in the game's mods folder for testing in the real game: ./gradlew installMod (or -PmodsDir=<folder>).
+// Puts the built jar in the game's mods folder for testing in the real game: ./gradlew installMod. The folder is
+// -PmodsDir=<folder> (or modsDir=<folder> in ~/.gradle/gradle.properties, for a launcher that keeps its own), else the
+// vanilla launcher's: %APPDATA%\.minecraft\mods on Windows, ~/Library/Application Support/minecraft/mods on macOS,
+// ~/.minecraft/mods elsewhere.
 // Older copies are deleted first, since two copies of the same mod crash the game. The Cobble Tank installs from its own
 // project (../CobbleTank: ./gradlew installMod).
-def modsDir = providers.gradleProperty("modsDir").orElse(providers.environmentVariable("APPDATA").map { it + "/.minecraft/mods" })
+def modsDir = providers.gradleProperty("modsDir")
+		.orElse(providers.environmentVariable("APPDATA").map { it + "/.minecraft/mods" })
+		.orElse(providers.systemProperty("user.home").zip(providers.systemProperty("os.name")) { home, os ->
+			home + (os.toLowerCase(Locale.ROOT).contains("mac") ? "/Library/Application Support/minecraft/mods" : "/.minecraft/mods")
+		})
 tasks.register("installMod") {
 	group = "fluidgore"
 	description = "Builds Fluid Gore and installs it in the game's mods folder, replacing older copies."
