@@ -8,7 +8,7 @@ It is built from the game's own pieces: vanilla sounds and particles, redstone b
 drawn at the size of the model's own pixels. It should feel like part of the game, not a horror pack on top of it. 
 This is to ensure to stay within all guidelines, this mod shows graphic violence against animals, on purpose. 
 At Extreme setting it shows plainly what a kill costs the animal. 
-> The Gore Level and Suffering sliders scale it down to something mild, or switch it off.
+The Gore Level and Suffering sliders scale it down to something mild, or switch it off.
 
 > **Content note:** GitHub recognizes there may be exceptional cases where content related to terrorism or extremism appears on GitHub for legitimate reasons — for instance, in academic research, training data, journalism, or counter-terrorism efforts.
 
