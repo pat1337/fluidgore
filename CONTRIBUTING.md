@@ -54,12 +54,43 @@ change to the shared files, re-run both and check that `git status` shows only t
 ## What the mod is for
 Fluid Gore shows farm animals the way they are: the work of a farm and a butcher's yard (slaughter, jointing, the
 organs of a ewe, a ram and a lamb, blood and how it pools) inside the vanilla world. Its subjects are agriculture,
-husbandry and livestock biology. The rules below follow from that.
-- **True to the animal.** Anatomy, wounds and deaths follow how the real animal is built and how it really dies,
-  from veterinary and meat-science references, as far as a block model allows. When the model forces a compromise
-  (a lamb's skull drawn with the adult shape, say), it goes in the README's known limitations. It is not hidden.
-- **Unlabelled.** Nothing in the world is captioned. A body is read by looking at it; Identify Remains is the
-  opt-in way to name a piece.
+husbandry and livestock biology. It aims to be true to the animal the way a good flight simulator is true to flight,
+inside the game's own blocks and pixels.
+
+### The primitive: one measured animal
+Each species is one data sheet: what it weighs, how much blood it holds, what lies under each patch of skin and how
+deep, with a source for every number. Everything a player sees is read from that sheet, and everything that leaves
+the body is taken off it. Four laws follow.
+
+1. **Read, never drawn.** A wound shows what the sheet says lies there at that depth. A severed part is that part of
+   the sheet. A pool is the litres that left. What cannot be read from the sheet is not shown.
+2. **It adds up.** Litres and kilograms. Blood on the floor, in the ground, in a bucket and lost to the air sums to
+   what left the animal. The pieces of a body sum to its weight.
+3. **Sourced and bounded.** Every number names its reference, from veterinary and meat-science texts. Every
+   compromise the block grid or game time forces (a hide drawn half a pixel thick, a death compressed to five seconds,
+   a lamb's skull drawn with the adult shape) goes in the README's known limitations, with its size. It is not hidden.
+4. **Observed, not told.** Nothing in the world is captioned or scored. A body is read by looking at it; Identify
+   Remains is the opt-in way to name a piece. Behaviour is described as what an observer sees (a call, flight, where
+   the head turns), not as what the animal feels.
+
+**The test for a feature:** which line of the sheet does it read, what does it conserve, and where is its source? A
+feature with no answer is an extra that is off by default, or it belongs in an add-on (rule 1 below).
+
+**The sheep first.** The laws are made true on the sheep before any other animal: one sheet, every number sourced,
+the sums checked by the game test. The other farm animals follow by the same route, then the game's mobs. The aim is
+that another mod can bring its own animal and use the engine (the blood, the question of what lies under a point,
+the pieces) exactly as the sheep does.
+
+**Not there yet.** Shorten this list as it comes true.
+- The sheet is not one file: a sheep's weight, blood and anatomy live in `physics/BodyMass`, `blood/BloodSupply`
+  and the generator, and do not all agree. Until it exists, add no new place that tests for a species by name; put a
+  number or a table beside the others of its kind.
+- Only a sheep's wounds are read from its anatomy. Other animals show a stock picture of fat, meat and bone.
+- Blood is drawn from each body's real volume and is conserved on the ground. Weight is not: pieces carry no mass,
+  and the anatomy tables are drawn, not weighed.
+- The weights and blood volumes name no source in the code.
+
+### What also holds
 - **Shown, not scored.** The core changes how things look and sound, never how the game plays (rule 2 below).
   Gameplay realism (injuries that slow an animal, bleeding that drains health, husbandry effects) belongs in a separate
   opt-in add-on with its own mod id, the way the Cobble Tank is.
