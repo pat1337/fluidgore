@@ -11,11 +11,19 @@ import javax.imageio.ImageIO;
  * <pre>java tools/GenerateTextures.java src/main/resources/assets/fluidgore</pre>
  * Output is deterministic (fixed seeds), so re-running produces identical PNGs.
  *
- * <p>blood.png is a 4x4 atlas of 64px tiles. Shapes are drawn white/grey with alpha; the game tints them with
+ * <p>blood.png is an 8x8 atlas of 64px tiles. Shapes are drawn white/grey with alpha; the game tints them with
  * the vertex colour, so one atlas serves every blood colour. Tile order must match BloodTextures.
+ *
+ * <p>The shapes of its marks (the first {@link #MARK_TILES} tiles) are also written out as a Java table,
+ * {@code blood/MarkMasks.java}, which the mod cuts marks into block pixels from. When the output folder is the
+ * project's own assets folder the table goes into the mod's sources; anywhere else it is written beside the textures.
  */
 public final class GenerateTextures {
 	private static final int TILE = 64;
+	/** Tiles along one side of blood.png. */
+	private static final int GRID = 8;
+	/** The first tiles of blood.png are marks with a shape of their own: splats, a drop, prints. */
+	private static final int MARK_TILES = 14;
 
 	/** A soft circle contributing to a metaball field. */
 	private record Ball(double x, double y, double r) {
@@ -28,25 +36,34 @@ public final class GenerateTextures {
 			throw new IOException("Cannot create " + misc);
 		}
 
-		BufferedImage atlas = new BufferedImage(TILE * 4, TILE * 4, BufferedImage.TYPE_INT_ARGB);
+		BufferedImage atlas = new BufferedImage(TILE * GRID, TILE * GRID, BufferedImage.TYPE_INT_ARGB);
 		for (int i = 0; i < 4; i++) {
 			drawField(atlas, i, splat(new Random(1000 + i)), 0.5, new Random(2000 + i));
 		}
 
-		drawField(atlas, 4, puddle(new Random(3000)), 0.5, new Random(3001));
-		drawPool(atlas, 5, new Random(4000));
 		drawField(atlas, 6, List.of(new Ball(0.5, 0.5, 0.36)), 0.5, new Random(5000));
 		drawField(atlas, 7, footprint(), 0.5, new Random(6000));
-		drawField(atlas, 8, streak(new Random(7000)), 0.5, new Random(7001));
 		drawField(atlas, 9, smallSplat(new Random(8000)), 0.5, new Random(8001));
-		// Pixel-art "redstone" style: 16x16 shapes upscaled 4x so the pixels match Minecraft's texel size.
-		for (int i = 0; i < 4; i++) {
-			drawPixelArt(atlas, 10 + i, pixelSplat(new Random(9100 + i), 0.9 + i * 0.25), new Random(9200 + i));
+		// The prints of other feet: a cloven hoof, a horse's hoof, a paw, a bird's foot.
+		drawField(atlas, 10, clovenPrint(), 0.5, new Random(6010));
+		drawField(atlas, 11, hoofPrint(), 0.5, new Random(6020));
+		drawField(atlas, 12, pawPrint(), 0.5, new Random(6030));
+		drawField(atlas, 13, birdPrint(), 0.5, new Random(6040));
+		// The fluid's own tiles: each covers its whole tile and repeats without a seam, one tile to a block. One set for
+		// each resolution blood can be drawn at: 64 pixels to a block from tile 16, 32 from tile 24, 16 from tile 32.
+		int[] fine = {64, 32, 16};
+		for (int i = 0; i < fine.length; i++) {
+			int first = 16 + i * 8;
+			drawFilm(atlas, first, fine[i], new Random(9500));
+			drawStain(atlas, first + 1, fine[i], new Random(9510));
+			drawCrust(atlas, first + 2, fine[i], new Random(9520));
+			drawRibbon(atlas, first + 4, fine[i], new Random(9530));
+			drawSpark(atlas, first + 5, fine[i], new Random(9540));
 		}
 
-		drawPixelArt(atlas, 14, pixelPuddle(new Random(9300)), new Random(9301));
-		drawPixelArt(atlas, 15, pixelDroplet(), new Random(9400));
+		drawFlat(atlas, 19);
 		ImageIO.write(atlas, "png", new File(misc, "blood.png"));
+		writeMarkMasks(atlas, root);
 		ImageIO.write(wounds(), "png", new File(misc, "wounds.png"));
 		ImageIO.write(flesh(), "png", new File(misc, "flesh.png"));
 		ImageIO.write(hurt(), "png", new File(misc, "hurt.png"));
@@ -67,6 +84,7 @@ public final class GenerateTextures {
 		for (int stage = 1; stage <= 3; stage++) {
 			ImageIO.write(spongeBlood(stage), "png", new File(block, "sponge_blood_" + stage + ".png"));
 			ImageIO.write(brushBlood(stage), "png", new File(item, "brush_blood_" + stage + ".png"));
+			ImageIO.write(bucketBlood(stage), "png", new File(item, "bucket_blood_" + stage + ".png"));
 		}
 
 		ImageIO.write(icon(), "png", new File(root, "icon.png"));
@@ -110,7 +128,46 @@ public final class GenerateTextures {
 		return image;
 	}
 
-	/** Which pixels of the vanilla brush (16x16) are its bristles: their outline included, the handle and ferrule not. */
+/** Which pixels of the vanilla bucket (16x16) show what is in it: where the water of a water bucket is drawn. */
+private static final String[] BUCKET_MOUTH = {
+		"................",
+		"................",
+		"................",
+		"....########....",
+		"...##########...",
+		".....######.....",
+		"................",
+		"................",
+		"................",
+		"................",
+		"................",
+		"................",
+		"................",
+		"................",
+		"................",
+		"................"};
+
+/**
+ * Blood in a bucket, over the vanilla bucket as a second layer, light grey for the blood colour to tint. It shows in
+ * the bucket's mouth: stage 1 a little at the bottom of it, stage 2 most of it, stage 3 to the brim.
+ */
+private static BufferedImage bucketBlood(int stage) {
+	BufferedImage image = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+	Random random = new Random(13_300);
+	int top = stage == 1 ? 5 : stage == 2 ? 4 : 3;
+	for (int y = 0; y < 16; y++) {
+		for (int x = 0; x < 16; x++) {
+			int shade = 185 + random.nextInt(40) + (y == top ? 25 : 0);
+			if (BUCKET_MOUTH[y].charAt(x) == '#' && y >= top) {
+				image.setRGB(x, y, argb(255, shade, shade, shade));
+			}
+		}
+	}
+
+	return image;
+}
+
+/** Which pixels of the vanilla brush (16x16) are its bristles: their outline included, the handle and ferrule not. */
 	private static final String[] BRISTLES = {
 			"................",
 			".........###....",
@@ -185,55 +242,77 @@ public final class GenerateTextures {
 		return balls;
 	}
 
-	private static List<Ball> puddle(Random random) {
-		List<Ball> balls = new ArrayList<>();
-		// Uneven lobes around a core, plus a few separate drops, so tiled puddles do not read as circles.
-		for (int i = 0; i < 12; i++) {
-			double angle = i / 12.0 * Math.PI * 2.0 + random.nextDouble() * 0.4;
-			double dist = 0.08 + random.nextDouble() * 0.17;
-			balls.add(new Ball(0.5 + Math.cos(angle) * dist, 0.5 + Math.sin(angle) * dist, 0.07 + random.nextDouble() * 0.11));
-		}
-
-		balls.add(new Ball(0.5, 0.5, 0.2));
-		for (int d = 0; d < 5; d++) {
-			double angle = random.nextDouble() * Math.PI * 2.0;
-			double dist = 0.36 + random.nextDouble() * 0.08;
-			balls.add(new Ball(0.5 + Math.cos(angle) * dist, 0.5 + Math.sin(angle) * dist, 0.02 + random.nextDouble() * 0.025));
-		}
-		return balls;
-	}
-
-	/** A shoe print pointing up (toe at the top of the tile = low V), narrow so it reads as one foot. */
+	/** A shoe print pointing up (toe at the top of the tile = low V): the sole, and the heel behind it. */
 	private static List<Ball> footprint() {
 		List<Ball> balls = new ArrayList<>();
-		for (double y = 0.18; y <= 0.52; y += 0.04) {
-			double width = 0.11 - Math.abs(y - 0.33) * 0.12;
+		for (double y = 0.16; y <= 0.44; y += 0.04) {
+			double width = 0.145 - Math.abs(y - 0.3) * 0.14;
 			balls.add(new Ball(0.5 - width * 0.3, y, width));
 			balls.add(new Ball(0.5 + width * 0.3, y, width));
 		}
 
-		for (double y = 0.68; y <= 0.84; y += 0.04) {
-			balls.add(new Ball(0.5, y, 0.085));
+		for (double y = 0.76; y <= 0.84; y += 0.04) {
+			balls.add(new Ball(0.5, y, 0.1));
 		}
 
 		return balls;
 	}
 
-	/** Blood running down a wall: a blob at the top and a few thinning trails ending in drops. */
-	private static List<Ball> streak(Random random) {
+	/**
+	 * The print of a cloven hoof (a pig, a cow, a sheep, a goat) pointing up the tile: two claws side by side, each
+	 * rounded at the heel and drawn to a blunt point at the toe, with a narrow gap between them.
+	 */
+	private static List<Ball> clovenPrint() {
 		List<Ball> balls = new ArrayList<>();
-		balls.add(new Ball(0.5, 0.12, 0.14));
-		balls.add(new Ball(0.42, 0.1, 0.1));
-		balls.add(new Ball(0.58, 0.12, 0.1));
-		int trails = 2 + random.nextInt(3);
-		for (int t = 0; t < trails; t++) {
-			double x = 0.38 + random.nextDouble() * 0.24;
-			double end = 0.55 + random.nextDouble() * 0.38;
-			for (double y = 0.15; y < end; y += 0.02) {
-				balls.add(new Ball(x + Math.sin(y * 9.0 + t) * 0.008, y, 0.028 * (1.0 - (y - 0.15) / end * 0.5)));
+		for (int side = -1; side <= 1; side += 2) {
+			for (double t = 0.0; t <= 1.0; t += 0.05) {
+				// From the toe (the top) to the heel: widest two thirds of the way back.
+				double width = 0.03 + 0.07 * Math.sin(Math.PI * Math.pow(t, 0.75));
+				balls.add(new Ball(0.5 + side * (0.075 + width * 0.85), 0.2 + t * 0.58, width));
 			}
+		}
 
-			balls.add(new Ball(x, end, 0.045));
+		return balls;
+	}
+
+	/** The print of a horse's hoof pointing up the tile: the wall of the hoof as an arch, open at the heel. */
+	private static List<Ball> hoofPrint() {
+		List<Ball> balls = new ArrayList<>();
+		for (double angle = -140.0; angle <= 140.0; angle += 5.0) {
+			double a = Math.toRadians(angle);
+			balls.add(new Ball(0.5 + Math.sin(a) * 0.21, 0.52 - Math.cos(a) * 0.25, 0.06 - 0.02 * Math.abs(angle) / 140.0));
+		}
+
+		// The frog: the wedge in the middle of the sole, towards the heel.
+		for (double t = 0.0; t <= 1.0; t += 0.25) {
+			balls.add(new Ball(0.5, 0.56 + t * 0.14, 0.03 + 0.03 * t));
+		}
+
+		return balls;
+	}
+
+	/** A paw print pointing up the tile: the pad and four toes over it. */
+	private static List<Ball> pawPrint() {
+		List<Ball> balls = new ArrayList<>();
+		balls.add(new Ball(0.5, 0.62, 0.12));
+		balls.add(new Ball(0.41, 0.67, 0.09));
+		balls.add(new Ball(0.59, 0.67, 0.09));
+		balls.add(new Ball(0.26, 0.42, 0.062));
+		balls.add(new Ball(0.4, 0.28, 0.062));
+		balls.add(new Ball(0.6, 0.28, 0.062));
+		balls.add(new Ball(0.74, 0.42, 0.062));
+		return balls;
+	}
+
+	/** A bird's footprint pointing up the tile: three toes spread forward and a short one behind. */
+	private static List<Ball> birdPrint() {
+		List<Ball> balls = new ArrayList<>();
+		for (double angle : new double[]{-38.0, 0.0, 38.0, 180.0}) {
+			double a = Math.toRadians(angle);
+			double length = angle == 180.0 ? 0.17 : 0.37;
+			for (double t = 0.0; t <= length; t += 0.02) {
+				balls.add(new Ball(0.5 + Math.sin(a) * t, 0.6 - Math.cos(a) * t, 0.036 - 0.014 * t / length));
+			}
 		}
 
 		return balls;
@@ -256,8 +335,8 @@ public final class GenerateTextures {
 	 * gentle noise plus a highlight near the thick centre so the blood looks wet.
 	 */
 	private static void drawField(BufferedImage image, int tile, List<Ball> balls, double threshold, Random noiseSeed) {
-		int ox = (tile % 4) * TILE;
-		int oy = (tile / 4) * TILE;
+		int ox = (tile % GRID) * TILE;
+		int oy = (tile / GRID) * TILE;
 		double[] noise = valueNoise(noiseSeed);
 		for (int py = 0; py < TILE; py++) {
 			for (int px = 0; px < TILE; px++) {
@@ -289,17 +368,239 @@ public final class GenerateTextures {
 		}
 	}
 
-	/** Fully covered tile for deep pools, so neighbouring pool cells join without seams. */
-	private static void drawPool(BufferedImage image, int tile, Random random) {
-		int ox = (tile % 4) * TILE;
-		int oy = (tile / 4) * TILE;
-		double[] noise = valueNoise(random);
+	/**
+	 * Value noise over one tile that repeats at the tile's edges, in [-1, 1]: {@code grid} lattice cells across, the
+	 * last wrapping onto the first.
+	 */
+	private static double[] wrapNoise(Random random, int grid) {
+		double[] lattice = new double[grid * grid];
+		for (int i = 0; i < lattice.length; i++) {
+			lattice[i] = random.nextDouble() * 2.0 - 1.0;
+		}
+
+		double[] out = new double[TILE * TILE];
 		for (int py = 0; py < TILE; py++) {
 			for (int px = 0; px < TILE; px++) {
-				double light = 0.75 + 0.2 * noise[py * TILE + px];
-				image.setRGB(ox + px, oy + py, argb(1.0, light));
+				double gx = (px + 0.5) / TILE * grid;
+				double gy = (py + 0.5) / TILE * grid;
+				int ix = (int) gx;
+				int iy = (int) gy;
+				double fx = smoothstep(0.0, 1.0, gx - ix);
+				double fy = smoothstep(0.0, 1.0, gy - iy);
+				double a = lattice[iy % grid * grid + ix % grid];
+				double b = lattice[iy % grid * grid + (ix + 1) % grid];
+				double c = lattice[(iy + 1) % grid * grid + ix % grid];
+				double d = lattice[(iy + 1) % grid * grid + (ix + 1) % grid];
+				out[py * TILE + px] = lerp(fy, lerp(fx, a, b), lerp(fx, c, d));
 			}
 		}
+
+		return out;
+	}
+
+	/** One pixel of a tile drawn at a chosen resolution: its colour from where its middle is, 0 to 1 across the tile. */
+	private interface FineTexel {
+		int at(double x, double y);
+	}
+
+	/** Fills a tile of blood.png with {@code res} by {@code res} pixels, each as many of the tile's own as it takes. */
+	private static void drawTexels(BufferedImage image, int tile, int res, FineTexel texel) {
+		int ox = (tile % GRID) * TILE;
+		int oy = (tile / GRID) * TILE;
+		int step = TILE / res;
+		for (int ty = 0; ty < res; ty++) {
+			for (int tx = 0; tx < res; tx++) {
+				int argb = texel.at((tx + 0.5) / res, (ty + 0.5) / res);
+				for (int py = 0; py < step; py++) {
+					for (int px = 0; px < step; px++) {
+						image.setRGB(ox + tx * step + px, oy + ty * step + py, argb);
+					}
+				}
+			}
+		}
+	}
+
+	/** {@code noise} (one tile of it, see {@link #wrapNoise}) at (x, y), 0 to 1 across the tile. */
+	private static double sample(double[] noise, double x, double y) {
+		return noise[Math.min(TILE - 1, (int) (y * TILE)) * TILE + Math.min(TILE - 1, (int) (x * TILE))];
+	}
+
+	/** Rounds to steps of {@code step} when drawing in pixels a block texture's size, so shades band as hand-set pixels do. */
+	private static double banded(double value, double step, int res) {
+		return res >= TILE ? value : Math.round(value / step) * step;
+	}
+
+	/**
+	 * The surface of standing blood: all of the tile, nearly even, with slow mottling where it lies thicker or thinner.
+	 * At the lower resolutions each pixel also gets a shade of its own, as the pixels of a block texture have.
+	 */
+	private static void drawFilm(BufferedImage image, int tile, int res, Random random) {
+		double[] broad = wrapNoise(random, 3);
+		double[] fine = wrapNoise(random, 9);
+		Random grain = new Random(9501 + res);
+		double rough = res >= TILE ? 0.0 : res == 32 ? 0.05 : 0.08;
+		drawTexels(image, tile, res, (x, y) -> {
+			double light = 0.88 + 0.07 * sample(broad, x, y) + 0.035 * sample(fine, x, y) + rough * (grain.nextDouble() * 2.0 - 1.0);
+			return argb(1.0, banded(light, 0.05, res));
+		});
+	}
+
+	/** Blood soaked into a floor: all of the tile, blotchy, thinner in places so the floor's own grain shows through. */
+	private static void drawStain(BufferedImage image, int tile, int res, Random random) {
+		double[] broad = wrapNoise(random, 4);
+		double[] fine = wrapNoise(random, 16);
+		Random grain = new Random(9511 + res);
+		double rough = res >= TILE ? 0.0 : res == 32 ? 0.08 : 0.12;
+		drawTexels(image, tile, res, (x, y) -> {
+			double speck = rough * (grain.nextDouble() * 2.0 - 1.0);
+			double alpha = 0.78 + 0.14 * sample(broad, x, y) + 0.08 * sample(fine, x, y) + speck;
+			double light = 0.86 + 0.08 * sample(broad, x, y) + 0.05 * sample(fine, x, y) + speck * 0.4;
+			return argb(Math.max(0.45, banded(alpha, 0.1, res)), banded(light, 0.05, res));
+		});
+	}
+
+	/**
+	 * The cracks of a dried pool: a dried sheet of blood shrinks and splits into plates. The lines between the cells of
+	 * scattered points, repeated past the tile's edges so the cracks run on into the next tile. Clear between the cracks.
+	 */
+	private static void drawCrust(BufferedImage image, int tile, int res, Random random) {
+		int points = 15;
+		double[] xs = new double[points];
+		double[] ys = new double[points];
+		for (int i = 0; i < points; i++) {
+			xs[i] = random.nextDouble();
+			ys[i] = random.nextDouble();
+		}
+
+		double[] fine = wrapNoise(random, 12);
+		drawTexels(image, tile, res, (x, y) -> {
+			double nearest = 9.0;
+			double second = 9.0;
+			for (int i = 0; i < points; i++) {
+				for (int wy = -1; wy <= 1; wy++) {
+					for (int wx = -1; wx <= 1; wx++) {
+						double d = Math.hypot(x - xs[i] - wx, y - ys[i] - wy);
+						if (d < nearest) {
+							second = nearest;
+							nearest = d;
+						} else if (d < second) {
+							second = d;
+						}
+					}
+				}
+			}
+
+			// Thin where two plates meet, a little ragged. In coarse pixels a crack is a pixel wide or it is not there.
+			double edge = second - nearest;
+			if (res < TILE) {
+				return edge < (res == 32 ? 0.034 : 0.06) ? argb(1.0, 1.0) : 0;
+			}
+
+			double alpha = 1.0 - smoothstep(0.012, 0.03 + 0.012 * sample(fine, x, y), edge);
+			return alpha <= 0.04 ? 0 : argb(alpha, 1.0);
+		});
+	}
+
+	/** Plain white: for anything that takes all of its look from its vertex colours. */
+	private static void drawFlat(BufferedImage image, int tile) {
+		drawTexels(image, tile, 1, (x, y) -> argb(1.0, 1.0));
+	}
+
+	/**
+	 * Blood pouring down a face: strands side by side, each as it is all the way down, thinner between them. It repeats
+	 * down and across.
+	 */
+	private static void drawRibbon(BufferedImage image, int tile, int res, Random random) {
+		double[] strands = wrapNoise(random, 10);
+		double[] fine = wrapNoise(random, 6);
+		drawTexels(image, tile, res, (x, y) -> {
+			// One row of the noise read across: the same strand at every height.
+			double strand = sample(strands, x, 0.0);
+			double alpha = 0.45 + 0.5 * smoothstep(-0.35, 0.3, strand) + (res >= TILE ? 0.05 * sample(fine, x, y) : 0.0);
+			return argb(banded(alpha, 0.25, res), banded(0.88 + 0.1 * smoothstep(-0.2, 0.6, strand), 0.05, res));
+		});
+	}
+
+	/**
+	 * Highlights on wet blood: a scatter of small bright marks, each leaning the same way as light catching a liquid
+	 * does, clear between them. In coarse pixels a mark is one bright pixel, some with a dimmer one beside it.
+	 */
+	private static void drawSpark(BufferedImage image, int tile, int res, Random random) {
+		int marks = res == 16 ? 7 : res == 32 ? 12 : 16;
+		double[] alpha = new double[res * res];
+		for (int i = 0; i < marks; i++) {
+			int x = random.nextInt(res);
+			int y = random.nextInt(res);
+			boolean pair = random.nextBoolean();
+			if (res < TILE) {
+				alpha[y * res + x] = 1.0;
+				if (pair) {
+					int beside = Math.floorMod(y - 1, res) * res + Math.floorMod(x + 1, res);
+					alpha[beside] = Math.max(0.55, alpha[beside]);
+				}
+
+				continue;
+			}
+
+			// A soft streak a few pixels long, up and to the right.
+			double length = pair ? 3.0 : 1.5;
+			for (int py = -6; py <= 6; py++) {
+				for (int px = -6; px <= 6; px++) {
+					double along = (px - py) / Math.sqrt(2.0);
+					double across = (px + py) / Math.sqrt(2.0);
+					double a = Math.exp(-(along * along) / (length * length) - (across * across) / 1.1);
+					int at = Math.floorMod(y + py, res) * res + Math.floorMod(x + px, res);
+					alpha[at] = Math.max(alpha[at], a);
+				}
+			}
+		}
+
+		drawTexels(image, tile, res, (x, y) -> {
+			double a = alpha[Math.min(res - 1, (int) (y * res)) * res + Math.min(res - 1, (int) (x * res))];
+			return a < 0.12 ? 0 : argb(a, 1.0);
+		});
+	}
+
+	/**
+	 * Writes {@code blood/MarkMasks.java}: for each mark tile, which of its pixels are blood (at least half opaque), one
+	 * long a row with bit x set for the pixel at x.
+	 */
+	private static void writeMarkMasks(BufferedImage atlas, File root) throws IOException {
+		StringBuilder out = new StringBuilder();
+		out.append("package dev.fluidgore.blood;\n\n");
+		out.append("/**\n");
+		out.append(" * GENERATED by tools/GenerateTextures.java; do not edit. The shapes of the marks in blood.png (its first tiles):\n");
+		out.append(" * which of a tile's pixels are blood, one long a row, bit x set for the pixel at x. {@link MarkPixels} cuts marks\n");
+		out.append(" * into the game's own pixels from them.\n");
+		out.append(" */\n");
+		out.append("final class MarkMasks {\n");
+		out.append("\t/** Pixels along one side of a tile. */\n");
+		out.append("\tstatic final int SIZE = ").append(TILE).append(";\n");
+		out.append("\tstatic final long[][] ROWS = {\n");
+		for (int tile = 0; tile < MARK_TILES; tile++) {
+			int ox = (tile % GRID) * TILE;
+			int oy = (tile / GRID) * TILE;
+			out.append("\t\t{");
+			for (int py = 0; py < TILE; py++) {
+				long row = 0L;
+				for (int px = 0; px < TILE; px++) {
+					if ((atlas.getRGB(ox + px, oy + py) >>> 24) >= 128) {
+						row |= 1L << px;
+					}
+				}
+
+				out.append(py == 0 ? "" : py % 4 == 0 ? ",\n\t\t\t" : ", ").append(String.format("0x%016XL", row));
+			}
+
+			out.append(tile == MARK_TILES - 1 ? "}\n" : "},\n");
+		}
+
+		out.append("\t};\n\n");
+		out.append("\tprivate MarkMasks() {\n\t}\n}\n");
+		String path = root.getPath().replace('\\', '/');
+		File table = path.endsWith("src/main/resources/assets/fluidgore") ? new File(root, "../../../java/dev/fluidgore/blood/MarkMasks.java")
+				: new File(root, "MarkMasks.java");
+		java.nio.file.Files.writeString(table.toPath(), out.toString());
 	}
 
 	private static BufferedImage icon() {
@@ -350,79 +651,6 @@ public final class GenerateTextures {
 		return f;
 	}
 
-	/**
-	 * A blocky splat on a 16x16 grid, like redstone dust smeared on the ground: a lumpy core, a few jagged arms
-	 * and loose single-pixel specks. {@code size} scales the core.
-	 */
-	private static boolean[][] pixelSplat(Random random, double size) {
-		boolean[][] mask = new boolean[16][16];
-		int blobs = 3 + random.nextInt(3);
-		for (int b = 0; b < blobs; b++) {
-			double cx = 7.5 + random.nextGaussian() * 1.4;
-			double cy = 7.5 + random.nextGaussian() * 1.4;
-			double r = (1.6 + random.nextDouble() * 1.6) * size;
-			fillCircle(mask, cx, cy, r);
-		}
-
-		int arms = 3 + random.nextInt(4);
-		for (int a = 0; a < arms; a++) {
-			double angle = random.nextDouble() * Math.PI * 2.0;
-			double x = 7.5;
-			double y = 7.5;
-			int length = 4 + random.nextInt(4);
-			for (int s = 0; s < length; s++) {
-				angle += random.nextGaussian() * 0.35;
-				x += Math.cos(angle);
-				y += Math.sin(angle);
-				set(mask, (int) Math.round(x), (int) Math.round(y));
-				if (s < length / 2 && random.nextBoolean()) {
-					set(mask, (int) Math.round(x + Math.sin(angle)), (int) Math.round(y - Math.cos(angle)));
-				}
-			}
-
-			// A drop at the end of the arm.
-			fillCircle(mask, x + Math.cos(angle), y + Math.sin(angle), 0.9 + random.nextDouble() * 0.6);
-		}
-
-		int specks = 6 + random.nextInt(8);
-		for (int s = 0; s < specks; s++) {
-			double angle = random.nextDouble() * Math.PI * 2.0;
-			double dist = 4.0 + random.nextDouble() * 3.5;
-			set(mask, (int) Math.round(7.5 + Math.cos(angle) * dist), (int) Math.round(7.5 + Math.sin(angle) * dist));
-		}
-
-		return mask;
-	}
-
-	private static boolean[][] pixelPuddle(Random random) {
-		boolean[][] mask = new boolean[16][16];
-		fillCircle(mask, 7.5, 7.5, 5.2);
-		for (int i = 0; i < 7; i++) {
-			double angle = i / 7.0 * Math.PI * 2.0 + random.nextDouble() * 0.5;
-			fillCircle(mask, 7.5 + Math.cos(angle) * 4.0, 7.5 + Math.sin(angle) * 4.0, 1.5 + random.nextDouble() * 1.6);
-		}
-
-		for (int s = 0; s < 5; s++) {
-			double angle = random.nextDouble() * Math.PI * 2.0;
-			set(mask, (int) Math.round(7.5 + Math.cos(angle) * 7.2), (int) Math.round(7.5 + Math.sin(angle) * 7.2));
-		}
-
-		return mask;
-	}
-
-	/** A chunky drop: a plus shape filled out to a 4x4 pixel blob, centred. */
-	private static boolean[][] pixelDroplet() {
-		boolean[][] mask = new boolean[16][16];
-		for (int y = 5; y <= 10; y++) {
-			for (int x = 5; x <= 10; x++) {
-				boolean corner = (x == 5 || x == 10) && (y == 5 || y == 10);
-				mask[y][x] = !corner;
-			}
-		}
-
-		return mask;
-	}
-
 	private static void fillCircle(boolean[][] mask, double cx, double cy, double r) {
 		for (int y = 0; y < mask.length; y++) {
 			for (int x = 0; x < mask[y].length; x++) {
@@ -438,40 +666,6 @@ public final class GenerateTextures {
 	private static void set(boolean[][] mask, int x, int y) {
 		if (x >= 1 && y >= 1 && y < mask.length - 1 && x < mask[y].length - 1) {
 			mask[y][x] = true;
-		}
-	}
-
-	/**
-	 * Draws a 16x16 mask as 4x4 blocks of solid pixels. Each texel gets one of a few shades, darker towards the
-	 * edge of the shape, which reads like the speckled red of redstone dust.
-	 */
-	private static void drawPixelArt(BufferedImage image, int tile, boolean[][] mask, Random random) {
-		int ox = (tile % 4) * TILE;
-		int oy = (tile / 4) * TILE;
-		double[] shades = {0.5, 0.62, 0.75, 0.88};
-		for (int ty = 0; ty < 16; ty++) {
-			for (int tx = 0; tx < 16; tx++) {
-				int argb = 0;
-				if (mask[ty][tx]) {
-					int neighbours = 0;
-					for (int[] d : new int[][]{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
-						int nx = tx + d[0];
-						int ny = ty + d[1];
-						if (nx >= 0 && ny >= 0 && nx < 16 && ny < 16 && mask[ny][nx]) {
-							neighbours++;
-						}
-					}
-
-					int shade = Math.max(0, Math.min(3, neighbours - 1 + random.nextInt(2) - (random.nextInt(4) == 0 ? 1 : 0)));
-					argb = argb(1.0, shades[shade]);
-				}
-
-				for (int py = 0; py < 4; py++) {
-					for (int px = 0; px < 4; px++) {
-						image.setRGB(ox + tx * 4 + px, oy + ty * 4 + py, argb);
-					}
-				}
-			}
 		}
 	}
 
@@ -1220,7 +1414,7 @@ public final class GenerateTextures {
 		return image;
 	}
 
-	/** Draws a mask texel for texel, darker at the edges like {@link #drawPixelArt}, with a wet highlight inside. */
+	/** Draws a mask texel for texel, each texel one of a few shades, darker at the edges, with a wet highlight inside. */
 	private static void shadeMask(BufferedImage image, int ox, int oy, boolean[][] mask, Random random) {
 		double[] shades = {0.5, 0.62, 0.75, 0.88};
 		for (int y = 0; y < mask.length; y++) {

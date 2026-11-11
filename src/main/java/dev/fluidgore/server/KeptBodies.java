@@ -503,9 +503,33 @@ public final class KeptBodies {
 			return;
 		}
 
+		GoreAction shown = action;
+		if (action.kind() == GoreAction.SCOOP || action.kind() == GoreAction.POUR) {
+			// The bucket is the server's to fill and empty: the others are shown what really went in or came out of it.
+			if (!GoreConfig.get().bloodBuckets) {
+				return;
+			}
+
+			float litres;
+			int rgb = (int) action.partKey() & 0xFFFFFF;
+			if (action.kind() == GoreAction.SCOOP) {
+				litres = BloodBuckets.scoop(player, action.damage(), rgb);
+			} else {
+				BloodBuckets.Held held = BloodBuckets.pour(player);
+				litres = held.litres();
+				rgb = held.rgb();
+			}
+
+			if (!(litres > 0.0F)) {
+				return;
+			}
+
+			shown = new GoreAction(action.kind(), -1, rgb, action.x(), action.y(), action.z(), 0.0F, 0.0F, 0.0F, (byte) 0, litres);
+		}
+
 		for (ServerPlayer other : PlayerLookup.around(level, where, SHOW_RANGE)) {
 			if (other != player && ServerPlayNetworking.canSend(other, GoreAction.TYPE)) {
-				ServerPlayNetworking.send(other, action);
+				ServerPlayNetworking.send(other, shown);
 			}
 		}
 

@@ -1,0 +1,13 @@
+{
+	"model": {
+		"type": "minecraft:range_dispatch",
+		"property": "minecraft:custom_model_data",
+		"index": 0,
+		"entries": [
+			{"threshold": 0.0005, "model": {"type": "minecraft:model", "model": "fluidgore:item/bucket_blood_1", "tints": [{"type": "minecraft:constant", "value": -1}, {"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}},
+			{"threshold": 0.3, "model": {"type": "minecraft:model", "model": "fluidgore:item/bucket_blood_2", "tints": [{"type": "minecraft:constant", "value": -1}, {"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}},
+			{"threshold": 0.75, "model": {"type": "minecraft:model", "model": "fluidgore:item/bucket_blood_3", "tints": [{"type": "minecraft:constant", "value": -1}, {"type": "minecraft:custom_model_data", "index": 0, "default": 9044739}]}}
+		],
+		"fallback": {"type": "minecraft:model", "model": "minecraft:item/bucket"}
+	}
+}

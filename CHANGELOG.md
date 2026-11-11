@@ -7,6 +7,24 @@ All notable changes to Fluid Gore are listed here. The format follows
 ## [Unreleased]
 
 ### Added
+- Blood on the ground is a liquid measured in litres. It runs to lower ground, spreads on the flat until the film is
+  too thin to move, goes round walls, runs down steps, pours off ledges, fills a pit from the bottom and runs over its
+  rim. None is made or lost on the way: what lies on the floor and what has soaked into it add up to what came out of
+  the animal. It is drawn as one surface with a rounded edge that creeps outwards as it fills. Demo: `floors`.
+- Every floor takes blood differently. It runs widest and thinnest on glass, ice, polished stone and metal; it stands
+  deeper on plain stone and planks; turf holds it among the grass and drinks it slowly; sand and gravel drink it within
+  seconds and keep a dark clump; wool, hay and snow soak it up.
+- Wet blood on a smooth floor is slippery underfoot. Only your own footing changes. Setting: Slippery Blood.
+- Buckets of blood. An empty bucket used on standing blood takes it up by the litre, and a bucket holding blood can be
+  tipped out again, onto the floor or into water. A bucket takes 1,000 litres, as the game's buckets take a whole block
+  of liquid. With the mod on the server the bucket shows the blood in it and how much it holds. Settings: Buckets of
+  Blood, Bucket Holds. Demo: `bucket`.
+- A blast throws blood that is standing in its way: a red mist close to the charge, drops further out that land in
+  streaks pointing back at it, and a seared stain where the fireball reached. Demo: `poolblast`.
+- A blast in the air over water tears a crown of spray off the surface; under a charge close enough, a column of water
+  goes up a moment later, and the spray rains back down.
+- Blood Resolution setting: 16x (the default) draws blood in the same pixels as the block textures, on the same grid;
+  32x and 64x use smaller pixels; Smooth has clean edges, soft shading and the sun's glint on wet blood.
 - A sheep's anatomy now reaches its skin. Its trunk holds the hide, the fat under it and its named muscles (the
   longissimus, psoas, gluteus medius, the shoulder and thigh muscles, the flank in its layers), and its legs are its
   own, from the elbow and the stifle to the hooves. A sheep blown apart throws these as pieces of their own: the hide
@@ -33,7 +51,40 @@ All notable changes to Fluid Gore are listed here. The format follows
   keeps there, and every player with the mod loses the blood, loose pieces and bodies shown there. Living animals are
   left alone. It needs operator rights, so a command block can run it.
 
+- Blood runs down walls. A drop that hits a wall hard enough leaves a run that creeps down from where it struck,
+  thinning as it goes, and stops in a bead, or reaches the floor and pools at the foot of the wall. Demo: `spatter`.
+- Footprints are made by the foot that walked through the blood: a shoe, a cloven hoof for pigs, cows, sheep and
+  goats, a horse's hoof, a paw, a bird's foot, each as long as the real one and spaced as the animal steps. Young and
+  small animals leave smaller prints.
+
+### Changed
+- Spatter is drawn in the same pixels as the block it lies on. At 16x a drop is a single pixel or a small cluster on
+  the block's own grid, the same grid the pools use, instead of a smooth splat laid over the texture. Drops thrown
+  across a surface still land drawn out the way they flew. A second drop on the same spot no longer stacks a second
+  mark.
+- Spatter dries ahead of the pool beside it: a fine mark goes dark and dull while the pool is still wet.
+- On turf, sand and other floors that drink blood, spatter is a stain in the floor rather than a film on it.
+- Drawn Smooth, a lone wet spot is round instead of a diamond, and the outline of a pool is rounder.
+- Wet blood mirrors far less of the sky. Looked at across a polished floor or obsidian, a pool used to turn a flat
+  mauve pink; it now keeps its dark red under a sheen.
+- When there is too much blood in view and the oldest has to go, stains go before pools.
+- Blood's colours follow real blood: scarlet in a thin film, crimson in a pool and darker the deeper it stands, and
+  brown-black when dry, when a dried pool cracks. Wet blood catches the light and mirrors the sky when you look across
+  it.
+- Blood that thickens stops running, so a pool no longer spreads for as long as it lies there.
+- A deep pool stays wet and stays on the ground far longer than a film: up to 21 times the Persistence setting for a
+  pit full of blood.
+- Scrubbing lifts the liquid within reach of the tool and most of what has dried on. A floor that has drunk blood
+  keeps most of its stain.
+
+### Removed
+- The blood Style setting (Redstone, Realistic, Mixed). Resolution replaces it.
+
 ### Fixed
+- A sheep's severed head or leg keeps its wool in the sheep's own colour. A brown or dyed sheep's head used to come
+  off white.
+- Drops of blood in flight, and the joins between neighbouring puddles, were drawn with the whole sheet of blood
+  shapes instead of one of them, which showed as speckled squares and rows of footprint shapes on the ground.
 - A sheep had one adrenal gland, its pancreas was in two pieces, and the wall of its rumen and reticulum was full of
   holes at the game's grain (with the art's inspection window cut into it as well). Both adrenals are there, the
   pancreas is one, and the stomach walls are whole in the game.

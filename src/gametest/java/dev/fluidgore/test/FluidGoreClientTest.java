@@ -165,6 +165,10 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			tankOverhaul(context, singleplayer.getServer());
 			fragmentContacts(context, singleplayer.getServer());
 			bloodVolumes(context, singleplayer.getServer());
+			bloodFluid(context, singleplayer.getServer());
+			bloodUses(context, singleplayer.getServer());
+			bloodMarks(context, singleplayer.getServer());
+			dyedHead(context, singleplayer.getServer());
 			floorAndDeath(context, singleplayer.getServer());
 			deaths(context, singleplayer.getServer());
 			burntAndEvidence(context, singleplayer.getServer());
@@ -224,6 +228,10 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			case "pigPit" -> pigPit(context, server);
 			case "pressureVessel" -> pressureVessel(context, server);
 			case "bloodVolumes" -> bloodVolumes(context, server);
+			case "bloodFluid" -> bloodFluid(context, server);
+			case "bloodUses" -> bloodUses(context, server);
+			case "bloodMarks" -> bloodMarks(context, server);
+			case "dyedHead" -> dyedHead(context, server);
 			case "ragdoll" -> ragdoll(context, server);
 			case "lying" -> lying(context, server);
 			case "deadBlast" -> deadBlast(context, server);
@@ -273,6 +281,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			case "anatomyLook" -> anatomyLook(context, server);
 			case "burnLook" -> burnLook(context, server);
 			case "bugLook" -> bugLook(context, server);
+			case "bloodLook" -> bloodLook(context, server);
 			case "fireSpread" -> fireSpread(context, server);
 			case "decay" -> decay(context, server);
 			case "rotHistory" -> rotHistory(context, server);
@@ -527,8 +536,8 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			int leg = BodyPart.RIGHT_LEG.ordinal();
 			var sheepCell = GoreSystems.blood().fluid().cellAt(705, -60, 0);
 			var pigCell = GoreSystems.blood().fluid().cellAt(702, -60, 0);
-			return wool.wade(ids[0], leg) + " " + wool.wade(ids[1], leg) + " " + (pigCell == null ? 0.0F : pigCell.volume) + " "
-					+ (sheepCell == null ? 0.0F : sheepCell.volume);
+			return wool.wade(ids[0], leg) + " " + wool.wade(ids[1], leg) + " " + (pigCell == null ? 0.0F : pigCell.volume()) + " "
+					+ (sheepCell == null ? 0.0F : sheepCell.volume());
 		});
 		System.out.println("[FluidGoreTest] bloody coats, standing in a pool (pig leg, sheep leg, pig pool, sheep pool): " + legs);
 		String[] l = legs.split(" ");
@@ -8825,15 +8834,15 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			var cow = level.getEntitiesOfClass(net.minecraft.world.entity.animal.cow.Cow.class, new net.minecraft.world.phys.AABB(origin,origin).inflate(30),
 					e -> e.isAlive() && e.getUUID().getLeastSignificantBits() == ((93L << 32) | 4)).getFirst();
 			cow.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH).setBaseValue(500); cow.setHealth(500);
-			var tank = new dev.cobbletank.TankState(); tank.litres=600; tank.psi=10000; tank.wavePercent=1;
-			long seed = net.minecraft.core.BlockPos.containing(origin).asLong() ^ (long) Float.floatToIntBits(600) << 32 ^ Float.floatToIntBits(tank.psiNow());
-			var shots = dev.fluidgore.fragment.FragmentTrace.scatter(seed, dev.cobbletank.TankConfig.get().fragmentRayBudget, dev.cobbletank.TankConfig.get().tankFragmentRange, 8);
-			var direction = shots.stream().map(dev.fluidgore.fragment.FragmentTrace.Launch::direction).filter(d -> d.y > 0.2 && d.y < 0.6 && d.z < -0.2 && d.x < 0).findFirst().orElseThrow();
+			// Nearly empty, so its wave is too weak to hurt at 9 m and only its fragments count.
+			var tank = new dev.cobbletank.TankState(); tank.litres=600; tank.psi=10000; tank.fraction=0.02F;
+			var shots = dev.cobbletank.TankBurst.fragments(origin, tank);
+			var direction = shots.stream().map(dev.cobbletank.fragment.FragmentTrace.Launch::direction).filter(d -> d.y > 0.2 && d.y < 0.6 && d.z < -0.2 && d.x < 0).findFirst().orElseThrow();
 			var target = origin.add(direction.scale(9)); cow.setPos(target.x, target.y - cow.getBbHeight()/2, target.z);
-			var contacts = dev.fluidgore.fragment.FragmentTrace.trace(level,origin,shots);
+			var contacts = dev.cobbletank.fragment.FragmentTrace.trace(level,origin,shots);
 			float expected = (float) contacts.stream().filter(p -> p.contact()!=null && p.contact().entityId()==cow.getId()).mapToDouble(p -> p.contact().damage()).sum();
 			check(expected>0, "tank damage fixture missed all contacts");
-			check(dev.fluidgore.physics.Blast.overpressure(cow.getBoundingBox().getCenter().distanceTo(origin),tank.waveKg(),tank.psiNow()) < dev.fluidgore.physics.Blast.EARDRUM_KPA, "damage fixture includes primary pressure damage");
+			check(tank.wave().overpressure(cow.getBoundingBox().getCenter().distanceTo(origin)) < dev.cobbletank.physics.Blast.EARDRUM_KPA, "damage fixture includes primary pressure damage");
 			dev.cobbletank.TankBurst.burst(level,origin,tank,null);
 			float lost = 500-cow.getHealth();
 			check(Math.abs(lost-expected)<0.001, "fragment damage was lost or duplicated: "+lost+" vs "+expected);
@@ -8851,27 +8860,38 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 	private static void tankOverhaul(ClientGameTestContext context, TestServerContext server) {
 		var dice = net.minecraft.util.RandomSource.create(7L);
 		var cold = new dev.cobbletank.TankState();
-		cold.litres = 600; cold.psi = 10000; cold.wavePercent = 35;
+		cold.litres = 600; cold.psi = 10000;
+		// Real nitrogen: NIST gives 498 kg/m^3 at 70 MPa and 293 K, so 600 L at 10,000 psi holds 297 kg, not an ideal gas's 476.
+		check(Math.abs(cold.gasKg() - 297) < 9, "600 L at 10,000 psi does not hold the nitrogen it really would: " + cold.gasKg() + " kg");
+		check(cold.mass() > 580 && cold.mass() < 640, "the full tank does not weigh its wall plus its gas: " + cold.mass() + " kg");
+		check(cold.energy() > 5.5E7 && cold.energy() < 7.5E7, "the burst energy is not the real gas's 65 MJ: " + cold.energy());
+		check(cold.wave().overpressure(0.6) < 4000 && cold.wave().overpressure(0.6) > 1000, "the wave did not start at the shock a vessel drives into air: " + cold.wave().overpressure(0.6));
+		check(Math.abs(cold.burstPsi() - 22500) < 1, "an undamaged wall does not hold 2.25 times its rated pressure");
 		var vent = cold.copy(); vent.vent();
-		double startEnergy = vent.waveKg();
+		double fullThrust = vent.thrust();
+		check(fullThrust > 7500 && fullThrust < 9000, "1 cm^2 at 10,000 psi does not thrust 8 kN: " + fullThrust);
+		double startEnergy = vent.energy();
 		for (int i = 0; i < 200; i++) {
 			check(!cold.advance(false), "a pristine unheated tank ruptured");
 			check(!vent.advance(false), "an undamaged venting tank spontaneously ruptured");
 		}
-		check(cold.psiNow() == 10000 && vent.fraction < 0.8F && vent.waveKg() < startEnergy, "venting did not remove finite gas and stored energy");
-		check(vent.gasC < vent.shellC && vent.mass() < cold.mass(), "blowdown did not cool gas separately or reduce mass");
-		check(Math.abs(cold.waveKg() / dev.fluidgore.physics.Blast.tntKg(600, 10000) - 0.35) < 1.0E-6, "stored energy was treated as full blast coupling");
+		check(Math.abs(cold.psiNow() - 10000) < 2 && vent.fraction < 0.8F && vent.energy() < startEnergy, "venting did not remove finite gas and stored energy");
+		check(vent.gasC < -30 && vent.gasC < vent.shellC && vent.mass() < cold.mass() && vent.thrust() < 0.5 * fullThrust, "blowdown did not cool gas separately, reduce mass or lose thrust");
 		var heated = cold.copy();
 		var relieved = cold.copy(); relieved.vent();
 		int failedAt = -1;
+		// Heat a hundred times faster than real, or the 28 minutes a fire needs would be 33,000 steps.
+		int fireSpeed = dev.cobbletank.TankConfig.get().tankFireSpeed;
+		dev.cobbletank.TankConfig.get().tankFireSpeed = 100;
 		for (int i = 0; i < 1200; i++) {
 			if (heated.advance(true)) { failedAt = i; break; }
 			check(!relieved.advance(true), "vented tank failed before the sealed control");
 		}
-		check(failedAt > 80 && failedAt < 1200, "fire used a TNT fuse or never weakened the casing: " + failedAt);
-		check(heated.heatDamage > 0 && heated.psiNow() > cold.psiNow(), "fire did not weaken the shell and raise pressure");
+		check(failedAt > 200 && failedAt < 600, "fire did not take the 17 to 50 minutes a wall this thick needs: " + failedAt * 5 / 60 + " min");
+		check(heated.heatDamage > 0.3F && heated.psiNow() > cold.psiNow() && heated.psiNow() < 13000, "fire did not burst it by charring its wall, with the pressure only a little up");
 		float permanent = heated.heatDamage;
 		for (int i = 0; i < 200; i++) heated.advance(false);
+		dev.cobbletank.TankConfig.get().tankFireSpeed = fireSpeed;
 		check(heated.heatDamage >= permanent, "cooling repaired fire-damaged carbon fibres");
 		var weak = cold.copy(); weak.shock(30, dice);
 		check(!weak.leaking() && !weak.fails(), "a weak external shock forced a chain rupture");
@@ -8879,7 +8899,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		check(hard.shock(650, dice) == dev.cobbletank.TankState.Blow.BURST, "a severe casing shock did not rupture the tank");
 		var empty = cold.copy(); empty.fraction = 0;
 		check(empty.blow(1, dice) != dev.cobbletank.TankState.Blow.BURST && !empty.advance(true), "an empty shell produced a pressure rupture");
-		var wire = new dev.fluidgore.net.VesselBurstPayload(0, 0, 0, 600, 10000, (float) cold.waveKg(), 6, 7L, 9L, java.util.List.of());
+		var wire = new dev.fluidgore.net.VesselBurstPayload(0, 0, 0, 600, 10000, (float) cold.wave().tntKg(), 6, 7L, 9L, java.util.List.of());
 		var wireBytes = io.netty.buffer.Unpooled.buffer();
 		try {
 			dev.fluidgore.net.VesselBurstPayload.CODEC.encode(wireBytes, wire);
@@ -8916,6 +8936,8 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		context.takeScreenshot("roadster_01_valve");
 		context.runOnClient(mc -> { if (mc.gui.hud.isHidden() != hidden) mc.gui.hud.toggle(); });
 
+		// The fire, a hundred times faster than real: 25 ticks are two minutes of it, and it needs about 28.
+		server.computeOnServer(s -> { dev.cobbletank.TankConfig.get().tankFireSpeed = 100; return true; });
 		server.runCommand("setblock 1520 -60 3 cobbletank:cobble_tank");
 		server.runCommand("setblock 1521 -60 3 minecraft:campfire");
 		context.waitTicks(25);
@@ -8924,11 +8946,20 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		server.runCommand("setblock 1521 -60 3 minecraft:air");
 		context.waitTicks(160);
 		check("cobble_tank".equals(blockAt(server, 1520, -60, 3)), "removing brief heat still forced a timed explosion");
+		check(server.computeOnServer(s -> s.overworld().getBlockEntity(new net.minecraft.core.BlockPos(1520, -60, 3))
+				instanceof dev.cobbletank.TankBlockEntity t && t.state().heatDamage > 0 && t.state().shellC < 200), "two minutes of fire left no char, or the wall did not cool");
 		server.runCommand("setblock 1521 -60 3 minecraft:campfire");
-		context.waitTicks(200);
+		int fireTicks = 0;
+		while (fireTicks < 600 && "cobble_tank".equals(blockAt(server, 1520, -60, 3))) {
+			context.waitTicks(10);
+			fireTicks += 10;
+		}
+
+		System.out.println("[FluidGoreTest] tankOverhaul: sustained fire burst the tank in game after " + fireTicks * 5 / 60 + " min of it");
 		check("air".equals(blockAt(server, 1520, -60, 3)), "sustained fire never ruptured the sealed tank in game");
 		context.takeScreenshot("roadster_02_fire_rupture");
 		server.runCommand("setblock 1521 -60 3 minecraft:air");
+		server.computeOnServer(s -> { dev.cobbletank.TankConfig.get().tankFireSpeed = 1; return true; });
 
 		// A directed leak reaches an exposed liver, but the matching lung behind solid cover is untouched.
 		server.runCommand("summon minecraft:cow 1503 -60 8 {NoAI:1b,Invulnerable:1b,Tags:[\"tank_donor\"]}");
@@ -9023,6 +9054,15 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		context.waitTicks(30);
 		int near = cowsAlive(server, 600.5, -60, 2.5, 6.0);
 		int mid = cowsAlive(server, 600.5, -60, -4.5, 6.0);
+		float midHealth = server.computeOnServer(s -> {
+			float least = 10.0F;
+			for (var cow : s.overworld().getEntitiesOfClass(net.minecraft.world.entity.animal.cow.Cow.class,
+					new net.minecraft.world.phys.AABB(600.5, -60, -4.5, 600.5, -60, -4.5).inflate(12.0), e -> e.isAlive() && e.getZ() < 0)) {
+				least = Math.min(least, cow.getHealth());
+			}
+
+			return least;
+		});
 		int far = cowsAlive(server, 640.5, -60, 0.5, 4.0);
 		String tankThere = blockAt(server, 600, -60, 0);
 		String glass40 = blockAt(server, 600, -60, -30);
@@ -9032,20 +9072,21 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		boolean playerAlive = context.computeOnClient(mc -> mc.player.isAlive());
 		context.takeScreenshot("tank_02_after");
 		System.out.println("[FluidGoreTest] tank: cows alive at 2 m " + near + ", 5 m " + mid + ", 40 m " + far + "; near cow shredded " + shredded
-				+ "; block " + tankThere + "; glass at 30 m " + glass40 + ", at 70 m " + glass70 + "; gate open " + gateOpen + "; hearing " + hearing);
+				+ " (health of the one at 5 m " + midHealth + "); block " + tankThere + "; glass at 30 m " + glass40 + ", at 70 m " + glass70 + "; gate open " + gateOpen + "; hearing " + hearing);
 		check("air".equals(tankThere), "the tank is still there after its fuse: " + tankThere);
 		check(near == 0, "the cow 2 m from the tank lived");
-		check(mid == 0, "the cow 5 m from the tank lived (156 kPa is fatal)");
+		// 124 kPa at 5 m bruises lungs (about a third of its health) but is not fatal by itself; a fragment may still kill it.
+		check(mid == 0 || midHealth < 8.0F, "the cow 5 m from the tank was not hurt by 124 kPa: health " + midHealth);
 		check(far == 1, "the cow 40 m from the tank died");
 		check(shredded, "the cow 2 m from the tank was not shredded on the client");
-		check("air".equals(glass40), "glass 30 m off (10 kPa) did not break");
-		check("glass".equals(glass70), "glass 70 m off (5 kPa) broke");
-		check(gateOpen, "the gate 18 m off (21 kPa) was not blown open");
+		check("air".equals(glass40), "glass 30 m off (9 kPa) did not break");
+		check("glass".equals(glass70), "glass 70 m off (3 kPa) broke");
+		check(gateOpen, "the gate 18 m off (19 kPa) was not blown open");
 		check(playerAlive, "the player 30 m off was killed");
-		check(hearing < 0.9F, "the player 30 m off (11 kPa) still hears " + hearing);
+		check(hearing < 0.9F, "the player 30 m off (9 kPa) still hears " + hearing);
 		context.runOnClient(mc -> GoreSystems.injuries().clear());
 
-		// A pinhole stays where it is and bleeds; a cracked fitting tears loose and flies.
+		// A pinhole stays where it is and bleeds; a cracked fitting tears loose and skids off.
 		server.runCommand("kill @e[type=!minecraft:player]");
 		server.runCommand("setblock 600 -60 -20 cobbletank:cobble_tank[leak=pinhole]{Damage:0.6f,Crack:0.05f,JetX:0f,JetY:1f,JetZ:0f}");
 		server.runCommand("setblock 610 -60 -20 cobbletank:cobble_tank[leak=cracked]{Damage:0.8f,Crack:0.6f,JetX:0f,JetY:0f,JetZ:1f}");
@@ -9080,12 +9121,776 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		check(pinhole > 0.9F && pinhole < 1.0F, "the pinhole tank is not slowly losing pressure: " + pinhole);
 		check("air".equals(cracked), "the cracked tank did not tear loose");
 		// It may have burst on the way (the crack can run): then there is nothing left to have flown.
-		check(flown > 3.0 || flown < 0.0, "the cracked tank did not fly: " + flown + " m");
+		// 4.9 kN on 610 kg is 0.8 g: enough to break its grip and skid off spinning, not to leave the ground.
+		check(flown > 1.0 || flown < 0.0, "the cracked tank did not move off: " + flown + " m");
 		server.runCommand("kill @e[type=cobbletank:cobble_tank]");
 		server.runCommand("setblock 600 -60 -20 minecraft:air");
 		server.runCommand("setblock 620 -60 -20 minecraft:air");
 		server.runCommand("tp @a 100.5 -60 -15.5 0 30");
 		context.waitTicks(40);
+	}
+
+	/**
+	 * Blood as a fluid of a fixed amount. Ten litres are poured on four floors side by side (polished stone, stone, turf
+	 * and sand): on each, what lies on the floor and what has soaked into it must add up to what was poured; the pool must
+	 * be widest on the polished floor and smallest on the sand, which must have drunk all of it. Then a pit one block
+	 * square is filled: it must stand as deep as the litres say, and run over its rim once it holds more than a block.
+	 */
+	private static void bloodFluid(ClientGameTestContext context, TestServerContext server) {
+		GoreLevel before = context.computeOnClient(mc -> GoreConfig.get().goreLevel);
+		dev.fluidgore.config.BloodResolution fine = context.computeOnClient(mc -> GoreConfig.get().bloodResolution);
+		context.runOnClient(mc -> {
+			GoreConfig.get().goreLevel = GoreLevel.EXTREME;
+			GoreConfig.get().bloodResolution = dev.fluidgore.config.BloodResolution.SMOOTH;
+		});
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("time set noon");
+		server.runCommand("weather clear");
+		server.runCommand("gamerule send_command_feedback false");
+		// The place must be loaded before anything can be built there.
+		server.runCommand("tp @a 2013.5 -57 -6.5 0 38");
+		context.waitTicks(40);
+		// With -PextraMods holding Iris and -Pshaders: the same scenes under that shader pack.
+		shaders(context);
+		String[] floors = {"minecraft:polished_andesite", "minecraft:stone", "minecraft:grass_block", "minecraft:sand"};
+		for (int i = 0; i < floors.length; i++) {
+			int x = 2000 + i * 7;
+			server.runCommand("fill " + x + " -61 0 " + (x + 4) + " -61 4 " + floors[i]);
+		}
+
+		// A pit one block square and one deep in a stone floor.
+		server.runCommand("fill 2030 -62 0 2034 -61 4 minecraft:stone");
+		server.runCommand("setblock 2032 -61 2 minecraft:air");
+		context.waitTicks(20);
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+		int life = 20 * 600;
+		for (int i = 0; i < floors.length; i++) {
+			double x = 2002.5 + i * 7;
+			context.runOnClient(mc -> GoreSystems.blood().fluid().pour(mc.level, x, -60.0, 2.5, 10.0F, 0x8A0303, life));
+		}
+
+		context.waitTicks(30);
+		context.takeScreenshot("fluid_01_poured");
+		context.waitTicks(270);
+		float[][] pads = new float[floors.length][];
+		for (int i = 0; i < floors.length; i++) {
+			int x = 2000 + i * 7;
+			pads[i] = fluidIn(context, x - 1, -1, x + 6, 6);
+			System.out.println("[FluidGoreTest] fluid on " + floors[i] + ": " + pads[i][0] + " L liquid, " + pads[i][1] + " L soaked in, over "
+					+ pads[i][2] + " m2, deepest " + pads[i][3] + " mm");
+			check(Math.abs(pads[i][0] + pads[i][1] - 10.0F) < 0.3F, "blood was made or lost on " + floors[i] + ": " + (pads[i][0] + pads[i][1]) + " L of 10");
+		}
+
+		context.takeScreenshot("fluid_02_floors");
+		server.runCommand("tp @a 2002.5 -59 -1.2 0 40");
+		context.waitTicks(20);
+		context.takeScreenshot("fluid_03_polished_close");
+		server.runCommand("tp @a 2009.5 -59 -1.2 0 40");
+		context.waitTicks(20);
+		context.takeScreenshot("fluid_04_stone_close");
+		server.runCommand("tp @a 2016.5 -59 -1.2 0 40");
+		context.waitTicks(20);
+		context.takeScreenshot("fluid_05_turf_close");
+		server.runCommand("tp @a 2023.5 -59 -1.2 0 40");
+		context.waitTicks(20);
+		context.takeScreenshot("fluid_06_sand_close");
+		// Low across the polished floor: wet blood mirrors the sky.
+		server.runCommand("tp @a 2002.5 -59.6 -4.5 0 8");
+		context.waitTicks(20);
+		context.takeScreenshot("fluid_07_polished_low");
+		// The afternoon sun on it, looked at towards the sun: its glint lies on the wet blood.
+		server.runCommand("time set 9500");
+		server.runCommand("tp @a 2005.5 -59.3 2.5 90 22");
+		context.waitTicks(20);
+		context.takeScreenshot("fluid_07b_glint");
+		server.runCommand("time set noon");
+		check(pads[0][2] > pads[1][2] * 1.2F, "blood spread no wider on polished stone than on plain stone");
+		check(pads[1][2] > pads[2][2] * 1.2F, "blood spread no wider on stone than on turf");
+		check(pads[2][2] > pads[3][2], "blood spread no wider on turf than on sand");
+		check(pads[3][0] < 0.2F, "sand did not drink the blood: " + pads[3][0] + " L still liquid");
+		check(pads[2][1] > 1.0F && pads[2][0] > 1.0F, "turf should have drunk some of the blood and still hold some: " + pads[2][1] + " L in, " + pads[2][0] + " L on");
+		check(pads[0][1] < 1.5F, "polished stone drank blood: " + pads[0][1] + " L");
+
+		// The pit: 400 litres stand 400 mm deep in a square metre.
+		server.runCommand("tp @a 2032.5 -58 -2.5 0 45");
+		context.waitTicks(20);
+		context.runOnClient(mc -> GoreSystems.blood().fluid().pour(mc.level, 2032.5, -61.0, 2.5, 400.0F, 0x8A0303, life));
+		context.waitTicks(100);
+		float[] pit = fluidIn(context, 2032, 2, 2033, 3);
+		System.out.println("[FluidGoreTest] fluid in the pit: " + pit[0] + " L, deepest " + pit[3] + " mm");
+		check(Math.abs(pit[0] - 400.0F) < 4.0F, "the pit does not hold what was poured into it: " + pit[0] + " L of 400");
+		check(Math.abs(pit[3] - 400.0F) < 25.0F, "400 litres in a square metre do not stand 400 mm deep: " + pit[3]);
+		context.takeScreenshot("fluid_08_pit");
+		// Another 700: it holds 1000, and the rest runs out over the floor round it.
+		context.runOnClient(mc -> GoreSystems.blood().fluid().pour(mc.level, 2032.5, -61.0, 2.5, 700.0F, 0x8A0303, life));
+		context.waitTicks(300);
+		float[] full = fluidIn(context, 2032, 2, 2033, 3);
+		float[] round = fluidIn(context, 2026, -4, 2039, 9);
+		System.out.println("[FluidGoreTest] fluid in the pit after 1100 L: " + full[0] + " L in it, " + round[0] + " L liquid and " + round[1]
+				+ " L soaked in all round, over " + round[2] + " m2 " + stats(context));
+		check(full[0] > 990.0F && full[0] < 1030.0F, "a full pit holds " + full[0] + " L, not its 1000");
+		check(round[0] + round[1] > 1085.0F, "blood was lost when the pit ran over: " + (round[0] + round[1]) + " L of 1100");
+		check(round[2] > 12.0F, "the pit did not run over: " + round[2] + " m2 wet");
+		context.takeScreenshot("fluid_09_pit_over");
+		// What a flood costs: a tick of the blood with all of this running.
+		double ms = context.computeOnClient(mc -> {
+			GoreSystems.blood().fluid().pour(mc.level, 2032.5, -60.0, 0.5, 400.0F, 0x8A0303, life);
+			long start = System.nanoTime();
+			for (int i = 0; i < 40; i++) {
+				GoreSystems.blood().tick(mc.level, 1_000_000 + i);
+			}
+
+			return (System.nanoTime() - start) / 40.0e6;
+		});
+		System.out.println(String.format(java.util.Locale.ROOT, "[FluidGoreTest] fluid: %.3f ms a tick with %d cells and a flood running", ms,
+				context.computeOnClient(mc -> GoreSystems.blood().fluid().size())));
+		check(ms < 2.0, "a tick of flowing blood costs " + ms + " ms");
+		server.runCommand("tp @a 2032.5 -56.5 1.2 0 78");
+		context.waitTicks(20);
+		context.takeScreenshot("fluid_10_pit_above");
+		// The same blood at each resolution, from the game's own 16 pixels to a block upwards.
+		for (dev.fluidgore.config.BloodResolution resolution : new dev.fluidgore.config.BloodResolution[]{dev.fluidgore.config.BloodResolution.X64,
+				dev.fluidgore.config.BloodResolution.X32, dev.fluidgore.config.BloodResolution.X16}) {
+			context.runOnClient(mc -> GoreConfig.get().bloodResolution = resolution);
+			server.runCommand("tp @a 2032.5 -58 -2.5 0 45");
+			context.waitTicks(10);
+			context.takeScreenshot("fluid_11_pit_" + resolution.name().toLowerCase(java.util.Locale.ROOT));
+			server.runCommand("tp @a 2034.5 -59.2 4.2 150 35");
+			context.waitTicks(10);
+			context.takeScreenshot("fluid_12_edge_" + resolution.name().toLowerCase(java.util.Locale.ROOT));
+		}
+
+		server.runCommand("gamerule send_command_feedback true");
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreConfig.get().goreLevel = before;
+			GoreConfig.get().bloodResolution = fine;
+		});
+	}
+
+	/**
+	 * What blood on the ground does to what meets it. A wet film is slippery on polished stone and not on sand. An empty
+	 * bucket dipped in a pit of blood takes it up by the litre and shows it; tipped out, it is a plain bucket again and
+	 * the blood is on the floor. A blast beside a pool throws the pool. A blast in the air over water raises spray.
+	 */
+	private static void bloodUses(ClientGameTestContext context, TestServerContext server) {
+		GoreLevel before = context.computeOnClient(mc -> GoreConfig.get().goreLevel);
+		context.runOnClient(mc -> GoreConfig.get().goreLevel = GoreLevel.EXTREME);
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("time set noon");
+		server.runCommand("weather clear");
+		server.runCommand("gamerule send_command_feedback false");
+		server.runCommand("tp @a 2102.5 -60 2.5 0 60");
+		context.waitTicks(40);
+		server.runCommand("fill 2100 -61 0 2104 -61 4 minecraft:polished_andesite");
+		server.runCommand("fill 2107 -61 0 2111 -61 4 minecraft:sand");
+		// A pit a block square in obsidian, and an obsidian floor for the blast.
+		server.runCommand("fill 2114 -62 0 2118 -61 4 minecraft:obsidian");
+		server.runCommand("setblock 2116 -61 2 minecraft:air");
+		server.runCommand("fill 2121 -61 -2 2129 -61 6 minecraft:obsidian");
+		// A pond three deep.
+		server.runCommand("fill 2134 -64 -2 2142 -61 6 minecraft:stone");
+		server.runCommand("fill 2135 -63 -1 2141 -61 5 minecraft:water");
+		context.waitTicks(20);
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+		int life = 20 * 600;
+
+		// A cauldron holds what is poured into it, and wool, hay and snow drink what lands on them.
+		server.runCommand("setblock 2096 -60 -4 minecraft:cauldron");
+		server.runCommand("setblock 2094 -61 -4 minecraft:white_wool");
+		server.runCommand("setblock 2092 -61 -4 minecraft:hay_block");
+		server.runCommand("setblock 2090 -61 -4 minecraft:snow_block");
+		server.runCommand("tp @a 2093.5 -58 -7.5 0 50");
+		context.waitTicks(20);
+		context.runOnClient(mc -> {
+			GoreSystems.blood().fluid().pour(mc.level, 2096.5, -59.75, -3.5, 30.0F, 0x8A0303, life);
+			GoreSystems.blood().fluid().pour(mc.level, 2094.5, -60.0, -3.5, 3.0F, 0x8A0303, life);
+			GoreSystems.blood().fluid().pour(mc.level, 2092.5, -60.0, -3.5, 3.0F, 0x8A0303, life);
+			GoreSystems.blood().fluid().pour(mc.level, 2090.5, -60.0, -3.5, 3.0F, 0x8A0303, life);
+		});
+		context.waitTicks(120);
+		float[] cauldron = fluidIn(context, 2096, -4, 2097, -3);
+		float[] roundIt = fluidIn(context, 2095, -5, 2098, -2);
+		float[] wool = fluidIn(context, 2094, -4, 2095, -3);
+		float[] hay = fluidIn(context, 2092, -4, 2093, -3);
+		float[] snow = fluidIn(context, 2090, -4, 2091, -3);
+		System.out.println("[FluidGoreTest] cauldron: " + cauldron[0] + " L in it, " + cauldron[3] + " mm deep, " + roundIt[0] + " L with the blocks round it; wool "
+				+ wool[0] + " L on, " + wool[1] + " in; hay " + hay[0] + " on, " + hay[1] + " in; snow " + snow[0] + " on, " + snow[1] + " in");
+		check(cauldron[0] > 29.0F && cauldron[3] > 40.0F, "a cauldron does not hold the 30 litres poured into it: " + cauldron[0] + " L, " + cauldron[3] + " mm");
+		check(roundIt[0] + roundIt[1] - cauldron[0] - cauldron[1] < 0.5F, "blood ran out of the cauldron");
+		check(wool[1] > wool[0] && hay[1] > hay[0] && snow[1] > snow[0], "wool, hay or snow did not drink the blood poured on it");
+		context.takeScreenshot("uses_00_cauldron_wool_hay_snow");
+		server.runCommand("tp @a 2102.5 -60 2.5 0 60");
+		context.waitTicks(20);
+
+		// Slippery: fresh blood on polished stone, under the player's feet.
+		context.runOnClient(mc -> {
+			GoreSystems.blood().fluid().pour(mc.level, 2102.5, -60.0, 2.5, 12.0F, 0x8A0303, life);
+			GoreSystems.blood().fluid().pour(mc.level, 2109.5, -60.0, 2.5, 12.0F, 0x8A0303, life);
+		});
+		context.waitTicks(40);
+		float[] slick = context.computeOnClient(mc -> new float[]{
+				GoreSystems.blood().fluid().slickAt(2102.5, -60.0, 2.5),
+				GoreSystems.blood().fluid().slickAt(2109.5, -60.0, 2.5),
+				dev.fluidgore.player.Slick.friction(mc.player, 0.6F),
+				mc.player.onGround() ? 1.0F : 0.0F});
+		System.out.println("[FluidGoreTest] slippery blood: polished " + slick[0] + ", sand " + slick[1] + ", the floor's friction under the player "
+				+ slick[2] + " (on the ground " + slick[3] + ")");
+		check(slick[0] > 0.6F, "fresh blood on polished stone is not slippery: " + slick[0]);
+		check(slick[1] == 0.0F, "blood on sand is slippery: " + slick[1]);
+		check(slick[2] > 0.85F, "the player's footing on blood on polished stone is not slippery: friction " + slick[2]);
+		check(context.computeOnClient(mc -> dev.fluidgore.player.Slick.asked()), "the game never asked Fluid Gore for the floor's friction: the hook into walking is not in place");
+		context.runOnClient(mc -> GoreConfig.get().slipperyBlood = 0);
+		float off = context.computeOnClient(mc -> dev.fluidgore.player.Slick.friction(mc.player, 0.6F));
+		context.runOnClient(mc -> GoreConfig.get().slipperyBlood = 100);
+		check(off == 0.6F, "Slippery Blood at 0% still changes the footing: " + off);
+		context.takeScreenshot("uses_01_slippery");
+
+		// Buckets: 300 litres in the pit, an empty bucket in the hand, looking down into it.
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:bucket");
+		server.runCommand("tp @a 2116.5 -60 1.6 0 75");
+		context.runOnClient(mc -> GoreSystems.blood().fluid().pour(mc.level, 2116.5, -61.0, 2.5, 300.0F, 0x8A0303, life));
+		context.waitTicks(60);
+		float inPit = fluidIn(context, 2116, 2, 2117, 3)[0];
+		boolean scooped = context.computeOnClient(mc -> dev.fluidgore.blood.Buckets.onUse(mc, GoreSystems.blood()));
+		context.waitTicks(20);
+		float[] after = context.computeOnClient(mc -> new float[]{
+				dev.fluidgore.server.BloodBuckets.litres(mc.player.getMainHandItem()),
+				dev.fluidgore.blood.Buckets.litres(mc.player.getMainHandItem()),
+				mc.player.getMainHandItem().getCount()});
+		float left = fluidIn(context, 2116, 2, 2117, 3)[0];
+		String name = context.computeOnClient(mc -> mc.player.getMainHandItem().getHoverName().getString());
+		System.out.println("[FluidGoreTest] bucket: the pit held " + inPit + " L; scooped " + scooped + "; the bucket holds " + after[0] + " L (" + name
+				+ "), the pit " + left + " L");
+		check(scooped, "the bucket did not dip into the pit (looking at " + context.computeOnClient(mc -> String.valueOf(mc.hitResult)) + ")");
+		check(after[0] > 100.0F, "the bucket holds " + after[0] + " L after dipping into " + inPit);
+		check(Math.abs(after[0] + left - inPit) < 3.0F, "blood was made or lost in the dipping: " + after[0] + " in the bucket + " + left + " in the pit of " + inPit);
+		check(name.contains("Blood"), "a bucket holding blood is called " + name);
+		context.takeScreenshot("uses_02_bucket_filled");
+		// A second dip takes what has run back in.
+		context.runOnClient(mc -> dev.fluidgore.blood.Buckets.onUse(mc, GoreSystems.blood()));
+		context.waitTicks(20);
+		float second = context.computeOnClient(mc -> dev.fluidgore.server.BloodBuckets.litres(mc.player.getMainHandItem()));
+		check(second > after[0], "a second dip took nothing: " + second + " L after " + after[0]);
+		// Tipped out on the obsidian floor: every litre of it is on the floor, and the bucket is a plain bucket.
+		server.runCommand("tp @a 2125.5 -60 -1.5 0 45");
+		context.waitTicks(20);
+		boolean poured = context.computeOnClient(mc -> dev.fluidgore.blood.Buckets.onUse(mc, GoreSystems.blood()));
+		context.waitTicks(15);
+		context.takeScreenshot("uses_03_bucket_pouring");
+		context.waitTicks(120);
+		float[] floor = fluidIn(context, 2119, -4, 2132, 9);
+		float[] emptied = context.computeOnClient(mc -> new float[]{
+				dev.fluidgore.server.BloodBuckets.litres(mc.player.getMainHandItem()),
+				mc.player.getMainHandItem().getComponentsPatch().isEmpty() ? 1.0F : 0.0F});
+		System.out.println("[FluidGoreTest] bucket tipped out: " + poured + ", " + (floor[0] + floor[1]) + " L on the floor of " + second + ", over " + floor[2]
+				+ " m2; the bucket holds " + emptied[0] + " L, plain again " + emptied[1]);
+		check(poured, "the bucket was not tipped out");
+		check(Math.abs(floor[0] + floor[1] - second) < second * 0.03F + 1.0F, "tipped out " + second + " L, on the floor " + (floor[0] + floor[1]));
+		check(emptied[0] == 0.0F && emptied[1] == 1.0F, "an emptied bucket is not a plain bucket again");
+		context.takeScreenshot("uses_04_bucket_poured");
+
+		// A blast beside the pool: the pool is thrown.
+		float[] pool = fluidIn(context, 2119, -4, 2132, 9);
+		long drawnBefore = context.computeOnClient(mc -> GoreSystems.blood().drawn());
+		server.runCommand("tp @a 2125.5 -57 -8.5 0 35");
+		context.waitTicks(10);
+		server.runCommand("summon minecraft:tnt 2125.5 -60 2.5 {fuse:2}");
+		context.waitTicks(6);
+		context.takeScreenshot("uses_05_blast_thrown");
+		int flying = context.computeOnClient(mc -> GoreSystems.blood().droplets().droplets().size());
+		context.waitTicks(80);
+		float[] blown = fluidIn(context, 2119, -4, 2132, 9);
+		float[] wide = fluidIn(context, 2105, -18, 2146, 23);
+		System.out.println("[FluidGoreTest] blast over a pool: " + pool[0] + " L liquid before, " + blown[0] + " L after on the same floor; " + flying
+				+ " drops in flight; " + (wide[0] + wide[1]) + " L lying within 20 blocks, over " + wide[2] + " m2 (was " + pool[2] + ")");
+		check(blown[0] < pool[0] * 0.8F, "the blast did not move the pool: " + blown[0] + " L of " + pool[0]);
+		check(flying > 5, "the blast threw no drops: " + flying);
+		context.takeScreenshot("uses_06_blast_after");
+
+		// A blast in the air over water.
+		server.runCommand("tp @a 2138.5 -57 -9.5 0 25");
+		context.waitTicks(10);
+		server.runCommand("summon minecraft:tnt 2138.5 -59.5 2.5 {fuse:2,NoGravity:1b}");
+		context.waitTicks(4);
+		int bursts = context.computeOnClient(mc -> dev.fluidgore.trigger.SurfaceBursts.active());
+		context.takeScreenshot("uses_07_water_crown");
+		context.waitTicks(8);
+		context.takeScreenshot("uses_08_water_jet");
+		context.waitTicks(20);
+		context.takeScreenshot("uses_09_water_rain");
+		System.out.println("[FluidGoreTest] blast over water: bursts playing " + bursts);
+		check(bursts > 0, "a blast over water raised no spray");
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");
+		server.runCommand("gamerule send_command_feedback true");
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreConfig.get().goreLevel = before;
+		});
+	}
+
+	/**
+	 * Marks of blood. A drop too small to stand as a pool leaves a mark, and at the game's own resolutions the mark is cut
+	 * into the pixels of the block it lies on; a second drop on the same spot leaves no second mark, and a drop big enough
+	 * to show as a pool leaves none. Blood on a wall runs down it as far as there is blood for, and what reaches the foot of
+	 * the wall pools there. Spatter never pushes a pool out at the cap. A pig that bolts out of blood leaves the prints of
+	 * cloven hooves, and the player a shoe's.
+	 */
+	private static void bloodMarks(ClientGameTestContext context, TestServerContext server) {
+		GoreLevel before = context.computeOnClient(mc -> GoreConfig.get().goreLevel);
+		dev.fluidgore.config.BloodResolution fine = context.computeOnClient(mc -> GoreConfig.get().bloodResolution);
+		int cap = context.computeOnClient(mc -> GoreConfig.get().maxBloodDecals);
+		context.runOnClient(mc -> {
+			GoreConfig.get().goreLevel = GoreLevel.EXTREME;
+			GoreConfig.get().bloodResolution = dev.fluidgore.config.BloodResolution.X16;
+		});
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("time set noon");
+		server.runCommand("weather clear");
+		server.runCommand("gamerule send_command_feedback false");
+		server.runCommand("tp @a 2504.5 -60 -1.5 0 20");
+		context.waitTicks(40);
+		server.runCommand("fill 2500 -61 -3 2508 -61 6 minecraft:stone");
+		server.runCommand("fill 2500 -60 5 2508 -57 5 minecraft:stone_bricks");
+		// A polished floor beside it for the prints.
+		server.runCommand("fill 2511 -61 -4 2515 -61 9 minecraft:polished_andesite");
+		context.waitTicks(20);
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+		int life = 20 * 600;
+
+		// A small drop: a mark, in whole pixels of the block.
+		String mark = context.computeOnClient(mc -> {
+			var blood = GoreSystems.blood();
+			blood.landOnFloor(mc.level, 2502.53, -60.0, 0.47, 0.0, -1.0, 0.0, 0.001F, 0x8A0303, life);
+			if (blood.decals().size() != 1) {
+				return "a small drop left " + blood.decals().size() + " marks";
+			}
+
+			if (blood.fluid().shows(2502.53, -60.0, 0.47)) {
+				return "four millilitres of blood show as a pool";
+			}
+
+			var d = blood.decals().decals().getFirst();
+			for (int texels : new int[]{16, 32, 64}) {
+				float[] pixels = dev.fluidgore.blood.MarkPixels.of(d, texels);
+				if (pixels.length == 0) {
+					return "no pixels at " + texels;
+				}
+
+				for (int i = 0; i < pixels.length; i += dev.fluidgore.blood.Decal.PIECE_STRIDE) {
+					for (int k = 0; k < 4; k++) {
+						double at = ((k & 1) == 0 ? d.centerA : d.centerB) + pixels[i + k];
+						if (Math.abs(at * texels - Math.round(at * texels)) > 1.0E-3) {
+							return "at " + texels + " to a block a corner of the mark lies off the pixel grid: " + at;
+						}
+					}
+				}
+			}
+
+			// Again on the same spot: its blood joins what is there, and there is still one mark.
+			blood.landOnFloor(mc.level, 2502.54, -60.0, 0.48, 0.0, -1.0, 0.0, 0.001F, 0x8A0303, life);
+			if (blood.decals().size() != 1) {
+				return "a second drop on the same spot left a second mark";
+			}
+
+			// A drop big enough to stand as a pool is drawn as the pool: no mark where it fell.
+			blood.landOnFloor(mc.level, 2506.5, -60.0, 0.5, 0.0, -1.0, 0.0, 0.06F, 0x8A0303, life);
+			if (!blood.fluid().shows(2506.5, -60.0, 0.5)) {
+				return "a quarter of a litre does not show as a pool";
+			}
+
+			for (var other : blood.decals().decals()) {
+				if (Math.abs(other.centerA - 2506.5) < 0.03 && Math.abs(other.centerB - 0.5) < 0.03) {
+					return "a drop that shows as a pool left a mark under itself too";
+				}
+			}
+
+			return "";
+		});
+		check(mark.isEmpty(), mark);
+
+		// Runs down the wall: one with blood for a block and a half, one with more than the wall is high.
+		boolean started = context.computeOnClient(mc -> {
+			var decals = GoreSystems.blood().decals();
+			return decals.run(mc.level, new net.minecraft.core.BlockPos(2503, -59, 5), net.minecraft.core.Direction.NORTH, 2503.5, -58.2, 0.004F, 0x8A0303, life) != null
+					&& decals.run(mc.level, new net.minecraft.core.BlockPos(2505, -59, 5), net.minecraft.core.Direction.NORTH, 2505.5, -58.2, 0.008F, 0x8A0303, life) != null;
+		});
+		check(started, "a run did not start on the wall");
+		context.waitTicks(12);
+		float early = context.computeOnClient(mc -> runLength(2503.5));
+		context.takeScreenshot("marks_01_runs_creeping");
+		context.waitTicks(300);
+		float[] ran = context.computeOnClient(mc -> {
+			float moving = 0.0F;
+			for (var d : GoreSystems.blood().decals().decals()) {
+				moving += d.carried;
+			}
+
+			var foot = GoreSystems.blood().fluid().cellAt(2505, -60, 4);
+			return new float[]{runLength(2503.5), runLength(2505.5), moving, foot == null ? 0.0F : foot.litres + foot.soaked};
+		});
+		System.out.println("[FluidGoreTest] runs down a wall: " + early + " blocks after 12 ticks; " + ran[0] + " and " + ran[1] + " blocks in the end, "
+				+ ran[3] + " L pooled at the foot of the second, " + ran[2] + " still moving");
+		check(early > 0.05F && early < 0.6F, "a run is " + early + " blocks long after 12 ticks: it should be creeping");
+		check(Math.abs(ran[0] - 1.6F) < 0.1F, "a run with blood for 1.6 blocks ran " + ran[0]);
+		check(Math.abs(ran[1] - 1.8F) < 0.05F, "a run with blood to spare did not stop at the foot of the wall: " + ran[1] + " blocks");
+		check(ran[2] == 0.0F, "the runs never stopped");
+		check(ran[3] > 0.008F, "what a run brought to the foot of the wall did not pool there: " + ran[3] + " L");
+		context.takeScreenshot("marks_02_runs");
+
+		// At the cap, marks go before a pool does.
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreConfig.get().maxBloodDecals = 60;
+			GoreSystems.blood().fluid().pour(mc.level, 2502.5, -60.0, -1.5, 5.0F, 0x8A0303, life);
+		});
+		context.waitTicks(60);
+		String capped = context.computeOnClient(mc -> {
+			var blood = GoreSystems.blood();
+			java.util.List<BloodCell> pool = new java.util.ArrayList<>(blood.fluid().cells());
+			float litres = blood.fluid().litres();
+			for (int i = 0; i < 225; i++) {
+				blood.landOnFloor(mc.level, 2505.05 + (i % 15) * 0.2, -60.0, 1.05 + (i / 15) * 0.2, 0.0, -1.0, 0.0, 0.0008F, 0x8A0303, life);
+			}
+
+			int all = blood.decals().size() + blood.fluid().size();
+			for (BloodCell cell : pool) {
+				if (blood.fluid().cellAt(cell.bx, cell.by, cell.bz) != cell) {
+					return "spatter pushed part of a pool out at the cap (" + pool.size() + " blocks of pool, " + blood.decals().size() + " marks kept)";
+				}
+			}
+
+			return all > 60 ? all + " marks and blocks of blood with the cap at 60" : blood.decals().size() < 20 ? "only " + blood.decals().size() + " marks kept under a cap of 60 beside "
+					+ pool.size() + " blocks of pool" : Math.abs(blood.fluid().litres() - litres - 225 * 0.0008F * 4.0F) > 0.05F ? "the pool changed: " + blood.fluid().litres() + " L of " + litres : "";
+		});
+		check(capped.isEmpty(), capped);
+		context.runOnClient(mc -> {
+			GoreConfig.get().maxBloodDecals = cap;
+			GoreSystems.blood().clear();
+		});
+
+		// Prints: the player's own, then a pig's.
+		server.runCommand("tp @a 2513.5 -60 -3.5 0 30");
+		context.waitTicks(20);
+		context.runOnClient(mc -> GoreSystems.blood().fluid().pour(mc.level, 2513.5, -60.0, -0.5, 9.0F, 0x8A0303, life));
+		context.waitTicks(80);
+		context.getInput().holdKeyFor(options -> options.keyUp, 34);
+		context.waitTicks(20);
+		int shoes = context.computeOnClient(mc -> prints(dev.fluidgore.blood.BloodTextures.FOOTPRINT));
+		server.runCommand("tp @a 2516.5 -57.5 2.0 90 60");
+		context.waitTicks(10);
+		context.takeScreenshot("marks_03_shoe_prints");
+		check(shoes >= 2, "walking out of a pool left " + shoes + " shoe prints");
+		server.runCommand("summon minecraft:pig 2513.5 -60 -0.5 {Silent:1b}");
+		context.waitTicks(20);
+		server.runCommand("execute as @p run damage @e[type=minecraft:pig,limit=1,sort=nearest] 1 minecraft:player_attack by @s");
+		int hooves = 0;
+		for (int i = 0; i < 20 && hooves < 2; i++) {
+			context.waitTicks(10);
+			hooves = context.computeOnClient(mc -> prints(dev.fluidgore.blood.BloodTextures.PRINT_CLOVEN));
+		}
+
+		context.takeScreenshot("marks_04_hoof_prints");
+		System.out.println("[FluidGoreTest] prints: " + shoes + " of a shoe, " + hooves + " of a cloven hoof");
+		check(hooves >= 2, "a pig that bolted out of a pool left " + hooves + " hoof prints");
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("gamerule send_command_feedback true");
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+			GoreConfig.get().goreLevel = before;
+			GoreConfig.get().bloodResolution = fine;
+		});
+	}
+
+	/** How far, blocks, the runs down the north face of the wall at z = 5 have got in the column at {@code x} (client thread). */
+	private static float runLength(double x) {
+		float length = 0.0F;
+		for (var d : GoreSystems.blood().decals().decals()) {
+			if (d.tile == dev.fluidgore.blood.BloodTextures.RUN && Math.abs(d.centerA - x) < 0.01) {
+				length -= d.pieces[1];
+			}
+		}
+
+		return length;
+	}
+
+	/** How many prints of {@code tile} lie about (client thread). */
+	private static int prints(int tile) {
+		int count = 0;
+		for (var d : GoreSystems.blood().decals().decals()) {
+			if (d.tile == tile) {
+				count++;
+			}
+		}
+
+		return count;
+	}
+
+	/**
+	 * Not in the full suite: blood up close in a big window, for looking at (-PonlyTests=bloodLook). The same scenes at
+	 * the game's own 16 pixels to a block and drawn smooth: a pig killed in front of a wall, a cow cut and killed on
+	 * turf, a walk through a pool, a pool drying, blood down a flight of stairs, a jet from an artery, and the first
+	 * pool again by torchlight.
+	 */
+	private static void bloodLook(ClientGameTestContext context, TestServerContext server) {
+		GoreLevel before = context.computeOnClient(mc -> GoreConfig.get().goreLevel);
+		dev.fluidgore.config.BloodResolution fine = context.computeOnClient(mc -> GoreConfig.get().bloodResolution);
+		context.getInput().resizeWindow(1600, 900);
+		context.runOnClient(mc -> GoreConfig.get().goreLevel = GoreLevel.EXTREME);
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("time set noon");
+		server.runCommand("weather clear");
+		server.runCommand("gamerule send_command_feedback false");
+		server.runCommand("gamerule show_death_messages false");
+		server.runCommand("gamerule advance_time false");
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:diamond_sword");
+		String only = System.getProperty("fluidgore.look", "");
+		for (dev.fluidgore.config.BloodResolution resolution : new dev.fluidgore.config.BloodResolution[]{dev.fluidgore.config.BloodResolution.X16,
+				dev.fluidgore.config.BloodResolution.SMOOTH}) {
+			String tag = "look_" + resolution.name().toLowerCase(java.util.Locale.ROOT);
+			if (!only.isEmpty() && !only.contains(resolution.name().toLowerCase(java.util.Locale.ROOT))) {
+				continue;
+			}
+
+			int x = resolution == dev.fluidgore.config.BloodResolution.X16 ? 2300 : 2400;
+			context.runOnClient(mc -> GoreConfig.get().bloodResolution = resolution);
+			int life = context.computeOnClient(mc -> GoreSystems.blood().decalLifetime());
+
+			// A pig killed in front of a wall, on a stone floor.
+			server.runCommand("tp @a " + (x + 4.5) + " -60 0.5 0 15");
+			context.waitTicks(40);
+			server.runCommand("fill " + x + " -61 -3 " + (x + 8) + " -61 6 minecraft:stone");
+			server.runCommand("fill " + x + " -60 5 " + (x + 8) + " -57 5 minecraft:stone_bricks");
+			context.waitTicks(10);
+			context.runOnClient(mc -> {
+				GoreSystems.blood().clear();
+				GoreSystems.dismemberment().clear();
+				GoreSystems.suffering().clear();
+			});
+			server.runCommand("summon minecraft:pig " + (x + 4.5) + " -60 3.5 {NoAI:1b,Silent:1b,Rotation:[90f,0f]}");
+			context.waitTicks(10);
+			server.runCommand("execute as @p run damage @e[type=minecraft:pig,limit=1,sort=nearest] 6 minecraft:player_attack by @s");
+			context.waitTicks(12);
+			server.runCommand("execute as @p run damage @e[type=minecraft:pig,limit=1,sort=nearest] 100 minecraft:player_attack by @s");
+			context.waitTicks(4);
+			context.takeScreenshot(tag + "_a1_burst");
+			context.waitTicks(40);
+			context.takeScreenshot(tag + "_a2_after");
+			context.waitTicks(200);
+			context.takeScreenshot(tag + "_a3_pool");
+			server.runCommand("tp @a " + (x + 4.5) + " -59.6 2.6 0 0");
+			context.waitTicks(10);
+			context.takeScreenshot(tag + "_a4_wall");
+			server.runCommand("tp @a " + (x + 4.5) + " -57.8 2.2 0 80");
+			context.waitTicks(10);
+			context.takeScreenshot(tag + "_a5_floor");
+			System.out.println("[FluidGoreTest] look " + tag + " after the pig: " + stats(context));
+
+			// A cow cut three times and then killed, on turf.
+			server.runCommand("tp @a " + (x + 4.5) + " -60 12.5 0 20");
+			context.waitTicks(20);
+			server.runCommand("summon minecraft:cow " + (x + 4.5) + " -60 15.5 {NoAI:1b,Silent:1b,Rotation:[90f,0f]}");
+			context.waitTicks(10);
+			for (int i = 0; i < 3; i++) {
+				server.runCommand("execute as @p run damage @e[type=minecraft:cow,limit=1,sort=nearest] 2 minecraft:player_attack by @s");
+				context.waitTicks(14);
+			}
+
+			context.takeScreenshot(tag + "_b1_cut");
+			server.runCommand("execute as @p run damage @e[type=minecraft:cow,limit=1,sort=nearest] 100 minecraft:player_attack by @s");
+			context.waitTicks(60);
+			context.takeScreenshot(tag + "_b2_killed");
+			context.waitTicks(200);
+			server.runCommand("tp @a " + (x + 4.5) + " -57.5 14.0 0 75");
+			context.waitTicks(10);
+			context.takeScreenshot(tag + "_b3_turf_above");
+			System.out.println("[FluidGoreTest] look " + tag + " after the cow: " + stats(context));
+
+			// A walk through a pool on polished stone and on across the clean floor.
+			server.runCommand("fill " + (x + 12) + " -61 -4 " + (x + 16) + " -61 9 minecraft:polished_andesite");
+			server.runCommand("tp @a " + (x + 14.5) + " -60 -3.5 0 30");
+			context.waitTicks(20);
+			context.runOnClient(mc -> GoreSystems.blood().fluid().pour(mc.level, x + 14.5, -60.0, -0.5, 9.0F, 0x8A0303, life));
+			context.waitTicks(80);
+			context.getInput().holdKeyFor(options -> options.keyUp, 34);
+			context.waitTicks(20);
+			server.runCommand("tp @a " + (x + 17.3) + " -58.2 4.0 105 48");
+			context.waitTicks(10);
+			context.takeScreenshot(tag + "_c1_footprints");
+			server.runCommand("tp @a " + (x + 14.5) + " -58.6 -3.2 0 55");
+			context.waitTicks(10);
+			context.takeScreenshot(tag + "_c2_pool_walked");
+
+			// A pool drying on smooth stone, from fresh to an old stain, seen from the same place.
+			server.runCommand("fill " + (x + 20) + " -61 -2 " + (x + 24) + " -61 2 minecraft:smooth_stone");
+			server.runCommand("tp @a " + (x + 22.5) + " -58.4 -2.6 0 52");
+			context.waitTicks(20);
+			context.runOnClient(mc -> GoreSystems.blood().fluid().pour(mc.level, x + 22.5, -60.0, 0.5, 4.0F, 0x8A0303, 900));
+			int at = 0;
+			for (int tick : new int[]{40, 200, 340, 480, 640, 840}) {
+				context.waitTicks(tick - at);
+				at = tick;
+				context.takeScreenshot(tag + "_d_drying_t" + tick);
+			}
+
+			// Down a flight of stairs.
+			server.runCommand("fill " + (x + 28) + " -60 2 " + (x + 30) + " -59 2 minecraft:stone");
+			server.runCommand("fill " + (x + 28) + " -60 3 " + (x + 30) + " -60 3 minecraft:stone");
+			server.runCommand("fill " + (x + 28) + " -59 3 " + (x + 30) + " -59 3 minecraft:stone_stairs[facing=north]");
+			server.runCommand("fill " + (x + 28) + " -60 4 " + (x + 30) + " -60 4 minecraft:stone_stairs[facing=north]");
+			server.runCommand("fill " + (x + 28) + " -61 5 " + (x + 30) + " -61 8 minecraft:stone");
+			// Walled in on three sides, so all of it goes down the steps.
+			server.runCommand("fill " + (x + 27) + " -60 1 " + (x + 31) + " -57 1 minecraft:stone");
+			server.runCommand("fill " + (x + 27) + " -60 2 " + (x + 27) + " -57 4 minecraft:stone");
+			server.runCommand("fill " + (x + 31) + " -60 2 " + (x + 31) + " -57 4 minecraft:stone");
+			server.runCommand("tp @a " + (x + 29.5) + " -57.4 8.6 180 28");
+			context.waitTicks(20);
+			context.runOnClient(mc -> GoreSystems.blood().fluid().pour(mc.level, x + 29.5, -58.0, 2.5, 60.0F, 0x8A0303, life));
+			context.waitTicks(50);
+			context.takeScreenshot(tag + "_e1_stairs_pouring");
+			context.waitTicks(150);
+			context.takeScreenshot(tag + "_e2_stairs");
+			System.out.println("[FluidGoreTest] look " + tag + " stairs: " + context.computeOnClient(mc -> {
+				java.util.TreeMap<String, Float> rows = new java.util.TreeMap<>();
+				for (BloodCell cell : GoreSystems.blood().fluid().cells()) {
+					if (cell.bx >= x + 27 && cell.bx <= x + 31 && cell.bz >= -1 && cell.bz <= 9) {
+						rows.merge("z" + cell.bz + "y" + cell.by, cell.litres + cell.soaked, Float::sum);
+					}
+				}
+
+				return rows.toString();
+			}));
+
+			// A jet from an artery, side on.
+			server.runCommand("tp @a " + (x + 36.5) + " -60 -3.5 0 5");
+			context.waitTicks(20);
+			context.runOnClient(mc -> GoreSystems.blood().spurts().start(() -> new net.minecraft.world.phys.Vec3(x + 35.0, -58.9, 0.5),
+					new net.minecraft.world.phys.Vec3(1.0, 0.7, 0.0), 0x8A0303, 60, 1.2F));
+			context.waitTicks(14);
+			context.takeScreenshot(tag + "_f1_jet");
+			context.waitTicks(80);
+			server.runCommand("tp @a " + (x + 37.0) + " -57.8 -1.2 0 70");
+			context.waitTicks(10);
+			context.takeScreenshot(tag + "_f2_jet_marks");
+
+			// The first pool by torchlight.
+			server.runCommand("time set midnight");
+			server.runCommand("setblock " + (x + 2) + " -60 2 minecraft:torch");
+			server.runCommand("tp @a " + (x + 4.5) + " -58.6 0.2 0 40");
+			context.waitTicks(30);
+			context.takeScreenshot(tag + "_g_torchlight");
+			System.out.println("[FluidGoreTest] look " + tag + " at the end: " + stats(context) + ", runs " + context.computeOnClient(mc -> GoreSystems.blood().decals().runs()));
+			server.runCommand("setblock " + (x + 2) + " -60 2 minecraft:air");
+			server.runCommand("time set noon");
+			server.runCommand("kill @e[type=!minecraft:player]");
+			context.waitTicks(10);
+		}
+
+		server.runCommand("gamerule advance_time true");
+		server.runCommand("gamerule send_command_feedback true");
+		server.runCommand("gamerule show_death_messages true");
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");
+		context.getInput().resizeWindow(854, 480);
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+			GoreConfig.get().goreLevel = before;
+			GoreConfig.get().bloodResolution = fine;
+		});
+	}
+
+	/**
+	 * A sheep's head takes its wool with it. A brown sheep's severed head has the brown undercoat and the brown fleece
+	 * over it; a white woolly sheep's has its fleece; a shorn white sheep's has neither.
+	 */
+	private static void dyedHead(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("gamerule send_command_feedback false");
+		server.runCommand("tp @a 2200.5 -59 -2.5 0 40");
+		context.waitTicks(40);
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+		server.runCommand("summon minecraft:sheep 2198.5 -60 1.5 {NoAI:1b,Silent:1b,Color:12b,UUID:[I;71,72,73,1],Rotation:[180f,0f]}");
+		server.runCommand("summon minecraft:sheep 2200.5 -60 1.5 {NoAI:1b,Silent:1b,Color:0b,UUID:[I;71,72,73,2],Rotation:[180f,0f]}");
+		server.runCommand("summon minecraft:sheep 2202.5 -60 1.5 {NoAI:1b,Silent:1b,Color:0b,Sheared:1b,UUID:[I;71,72,73,3],Rotation:[180f,0f]}");
+		context.waitTicks(20);
+		String[] kinds = {"brown", "white", "shorn white"};
+		int[][] found = new int[3][];
+		for (int i = 0; i < 3; i++) {
+			int id = awaitId(context, new java.util.UUID(71L << 32 | 72L, 73L << 32 | (i + 1)));
+			found[i] = context.computeOnClient(mc -> {
+				var sheep = (net.minecraft.world.entity.animal.sheep.Sheep) mc.level.getEntity(id);
+				int parts = GoreSystems.dismemberment().parts().parts().size();
+				GoreSystems.dismemberment().severPart(GoreSystems.blood(), mc.level, sheep, BodyPart.HEAD, sheep::position, sheep.yBodyRot, 0.0F, null);
+				var all = GoreSystems.dismemberment().parts().parts();
+				if (all.size() == parts) {
+					return new int[]{-1, 0, 0};
+				}
+
+				var worn = all.getLast().armor;
+				int layers = worn == null ? 0 : worn.size();
+				int color = layers == 0 ? 0 : worn.getFirst().color() & 0xFFFFFF;
+				return new int[]{layers, color, sheep.getColor().getId()};
+			});
+			System.out.println("[FluidGoreTest] severed head of a " + kinds[i] + " sheep: " + found[i][0] + " wool layers, colour "
+					+ Integer.toHexString(found[i][1]) + ", dye " + found[i][2]);
+		}
+
+		context.waitTicks(40);
+		context.takeScreenshot("dyed_head");
+		check(found[0][2] == 12, "the brown sheep is not brown: dye " + found[0][2]);
+		check(found[0][0] == 2, "a brown sheep's head came off with " + found[0][0] + " wool layers, not its undercoat and its fleece");
+		int r = found[0][1] >> 16 & 0xFF;
+		int b = found[0][1] & 0xFF;
+		check(r > b + 20 && r < 200, "a brown sheep's head came off with wool of colour " + Integer.toHexString(found[0][1]));
+		check(found[1][0] == 1, "a white sheep's head came off with " + found[1][0] + " wool layers, not its fleece");
+		check(found[2][0] == 0, "a shorn white sheep's head came off with " + found[2][0] + " wool layers");
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("gamerule send_command_feedback true");
+	}
+
+	/** Blood on the floors of blocks x0..x1, z0..z1 (x1 and z1 not included): litres liquid, litres soaked in, square metres wet, deepest mm. */
+	private static float[] fluidIn(ClientGameTestContext context, int x0, int z0, int x1, int z1) {
+		return context.computeOnClient(mc -> {
+			float liquid = 0.0F;
+			float soaked = 0.0F;
+			float deepest = 0.0F;
+			int wet = 0;
+			for (BloodCell cell : GoreSystems.blood().fluid().cells()) {
+				if (cell.bx < x0 || cell.bx >= x1 || cell.bz < z0 || cell.bz >= z1) {
+					continue;
+				}
+
+				liquid += cell.litres;
+				soaked += cell.soaked;
+				deepest = Math.max(deepest, cell.deepest());
+				for (int i = 0; i < BloodCell.COUNT; i++) {
+					if (cell.mm[i] + cell.soak[i] > 0.5F) {
+						wet++;
+					}
+				}
+			}
+
+			return new float[]{liquid, soaked, wet / (float) BloodCell.COUNT, deepest};
+		});
 	}
 
 	/**
@@ -9569,7 +10374,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 
 			int gore = context.computeOnClient(mc -> GoreSystems.suffering().corpses().size() + GoreSystems.dismemberment().parts().parts().size()
 					+ GoreSystems.dismemberment().giblets().count() + GoreSystems.blood().decals().decals().size()
-					+ GoreSystems.dismemberment().melting().count());
+					+ GoreSystems.blood().fluid().size() + GoreSystems.dismemberment().melting().count());
 			System.out.println("[FluidGoreTest] demo " + demo.name() + ": ran " + ticks + " ticks, gore left " + gore);
 			check(ticks < 2400, "demo " + demo.name() + " never finished");
 			check(gore > 0, "demo " + demo.name() + " left no gore");

@@ -2,7 +2,7 @@ package dev.fluidgore.ui;
 
 import com.mojang.serialization.Codec;
 import dev.fluidgore.config.BloodColor;
-import dev.fluidgore.config.BloodStyle;
+import dev.fluidgore.config.BloodResolution;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.config.GoreLevel;
 import java.util.Arrays;
@@ -60,7 +60,7 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 				enumCycle("fluidgore.option.monster_blood_color", BloodColor.values(), c.monsterBloodColor, BloodColor::translationKey, v -> c.monsterBloodColor = v));
 
 		section("fluidgore.header.blood",
-				enumCycle("fluidgore.option.blood_style", BloodStyle.values(), c.bloodStyle, BloodStyle::translationKey, v -> c.bloodStyle = v),
+				enumCycle("fluidgore.option.blood_resolution", BloodResolution.values(), c.bloodResolution, BloodResolution::translationKey, v -> c.bloodResolution = v),
 				toggle("fluidgore.option.gore_chunks", c.goreChunks, v -> c.goreChunks = v),
 				toggle("fluidgore.option.arterial_spurts", c.arterialSpurts, v -> c.arterialSpurts = v),
 				toggle("fluidgore.option.gore_sounds", c.goreSounds, v -> c.goreSounds = v),
@@ -72,6 +72,9 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 				toggle("fluidgore.option.footprints", c.footprints, v -> c.footprints = v),
 				toggle("fluidgore.option.rain_washes", c.rainWashesBlood, v -> c.rainWashesBlood = v),
 				toggle("fluidgore.option.cleaning", c.cleaning, v -> c.cleaning = v),
+				scaledSlider("fluidgore.option.slippery_blood", 0, 10, 10, c.slipperyBlood, "fluidgore.unit.percent", v -> c.slipperyBlood = v),
+				toggle("fluidgore.option.blood_buckets", c.bloodBuckets, v -> c.bloodBuckets = v),
+				scaledSlider("fluidgore.option.bucket_litres", 1, 100, 10, c.bucketLitres, "fluidgore.unit.litres", v -> c.bucketLitres = v),
 				toggle("fluidgore.option.bloody_wool", c.bloodyWool, v -> c.bloodyWool = v),
 				toggle("fluidgore.option.bloody_coats", c.bloodyCoats, v -> c.bloodyCoats = v),
 				toggle("fluidgore.option.blood_in_water", c.bloodInWater, v -> c.bloodInWater = v),

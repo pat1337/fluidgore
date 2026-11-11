@@ -16,6 +16,7 @@
 		"EntityRenderDispatcherMixin",
 		"GameRendererMixin",
 		"HumanoidArmorLayerAccessor",
+		"LivingEntityFrictionMixin",
 		"LivingEntityMixin",
 		"LivingEntityRendererAccessor",
 		"LivingEntityRendererMixin",

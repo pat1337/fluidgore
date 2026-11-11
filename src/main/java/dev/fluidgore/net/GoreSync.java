@@ -149,6 +149,9 @@ public final class GoreSync {
 					Cleaning.wash(level, action.at(), (int) action.partKey() & 0xFFFFFF);
 					yield true;
 				}
+				case GoreAction.SCOOP -> GoreConfig.get().bloodBuckets && dev.fluidgore.blood.Buckets.scoop(level, GoreSystems.blood(), action.at(), action.damage());
+				case GoreAction.POUR -> GoreConfig.get().bloodBuckets
+						&& dev.fluidgore.blood.Buckets.pour(level, GoreSystems.blood(), action.at(), Math.min(action.damage(), 1000.0F), (int) action.partKey() & 0xFFFFFF);
 				default -> false;
 			};
 		} finally {

@@ -630,7 +630,10 @@ public final class Dismemberment {
 		part.label = GorePart.named(part.owner, limbName(model, bodyPart));
 		part.wounds = pieceWounds;
 		part.coat = wool.piece(entity, bodyPart);
-		part.armor = ArmorPieces.of(entity, posed, bodyPart);
+		// What it wore over it: a sheep's wool in the sheep's colour under any armour.
+		List<ArmorPieces.Piece> worn = ArmorPieces.wool(posed, bodyPart);
+		worn.addAll(ArmorPieces.of(entity, posed, bodyPart));
+		part.armor = worn;
 		if (bodyPart == BodyPart.HEAD) {
 			part.section = section(entity, model, piece);
 		}

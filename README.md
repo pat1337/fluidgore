@@ -4,8 +4,8 @@
 blow weight and every animal a death of its own. Wounds open where you strike and deepen with each blow, limbs and
 heads come off, and blood sprays, pools and runs downhill. Animals scream, panic, grieve and remember.
 
-It is built from the game's own pieces: vanilla sounds and particles, pixel-art blood, and wounds, bones and organs
-drawn at the size of the model's own pixels. It should feel like part of the game, not a horror pack on top of it.
+It is built from the game's own pieces: vanilla sounds and particles, blood drawn in the same pixels as the blocks it
+lies on, and wounds, bones and organs drawn at the size of the model's own pixels. It should feel like part of the game, not a horror pack on top of it.
 
 > **Content note:** this mod shows graphic violence against animals, on purpose. At Extreme it shows plainly what a
 > kill costs the animal. The Gore Level and Suffering sliders scale it down to something mild, or switch it off.
@@ -27,6 +27,8 @@ What the server half changes in the world, and nothing else:
   (see [Multiplayer](#multiplayer)).
 - A sponge or brush used on blood gets stained (a model tint on that item), and a sponge washed clean becomes a wet
   sponge.
+- A bucket dipped in blood holds it. It is still the game's own bucket, but it is named Bucket of Blood, shows how
+  many litres it holds and does not stack until it is tipped out, when it is a plain bucket again.
 - An animal running on fire, or a body that died burning, can light vanilla fire. The
   `fire_spread_radius_around_player` game rule still applies (Burning Bodies Spread Fire, on by default).
 - With the separate Cobble Tank mod installed, the tank does real damage (see [Cobble Tank](#cobble-tank-separate-mod)).
@@ -126,15 +128,36 @@ All of this is pose, sound and particles. The animals' actual AI and behaviour a
 ![The aftermath](docs/images/aftermath.png)
 
 ### Blood
-- **It behaves like a fluid.** Droplets fly with gravity and splat on floors and walls. Puddles flow to lower ground,
-  pool in dips, run down stairs and drip off ledges. Arterial spurts pump in pulses.
-- **It shows what happened.** Blood that lands at a slant stretches into a teardrop pointing the way it flew. A
-  bleeding body that is dragged or shoved smears a trail.
+- **It is a liquid, measured in litres.** Blood on the ground is one body of fluid, not a mark on each block. It runs
+  to lower ground, spreads on the flat until the film is too thin to move, goes round walls, runs down steps and pours
+  off ledges. In a pit it stands as deep as there is blood, and it runs over the rim when the pit is full. None is
+  made or lost on the way: what lies on the floor and what has soaked into it add up to what came out of the animal.
+  A cow's 22 litres cover a few square metres of stone. A pit one block square takes 1,000.
+- **Every floor takes it differently.** On glass, ice, polished stone and metal it runs widest and thinnest and stays
+  wet longest. On plain stone and planks it stands a little deeper and stops sooner. Turf holds a deep film among the
+  grass and drinks it slowly. Sand and gravel drink it within seconds and keep a dark clump where it fell. Wool, hay
+  and snow soak it up.
+- **Wet blood on a smooth floor is slippery.** A fresh film on glass, ice, polished stone or metal is as slippery as
+  ice, and plain stone and planks are a little slippery. Turf and sand are not, and blood that has set is tacky, not
+  slick. Only your own footing changes (Slippery Blood, on by default).
+- **Buckets.** Use an empty bucket on standing blood and it takes up what lies within reach of its rim, by the litre.
+  Use a bucket that holds blood anywhere else and it is tipped out there, to run where blood runs; into water, it
+  clouds. A bucket takes what the game's buckets take, a whole block of liquid, which is 1,000 litres (264 gallons),
+  so one is filled from a pit or a cauldron, not from a film on a floor. Sneak to use the bucket as usual.
+- **You choose how finely it is drawn.** At 16x (the default) blood has 16 pixels to a block, on the same grid as the
+  block textures, so it looks like part of the block it lies on. 32x and 64x draw the same blood in smaller pixels,
+  and Smooth draws it with clean edges, soft shading and the sun's glint on it.
+- **It shows what happened.** Spatter is cut into the block's own pixels, so a fine drop is a pixel or two and a pool
+  and the spatter round it are one picture. Blood that lands at a slant is drawn out the way it flew. A drop that hits
+  a wall hard leaves a run that creeps down it and stops in a bead or pools at the foot. Whatever walks through blood
+  leaves the prints of its own feet: shoes, cloven hooves, a horse's hooves, paws or a bird's toes. A bleeding body
+  that is dragged or shoved smears a trail.
 - **It lies where it can.** Blood on a fence rail, a wall top or a pane leaves a thin line along it, and the rest runs
   off and drips to the ground below.
-- **It ages and washes away.** Blood lands bright scarlet, darkens to the deep red of standing blood, then dries
-  brown-black. A big bleed lies as one pool that stops spreading while still thick. Rain washes it away, and anything
-  walking through a puddle leaves footprints.
+- **It ages and washes away.** A thin film is scarlet, and a pool darkens to crimson the deeper it stands. Wet blood
+  catches the light and takes a sheen of the sky when you look across it. It thickens and sets, stops running, loses its shine
+  and dries to a brown-black stain that cracks. A film dries in minutes; a pool that stands deep stays wet many
+  times longer. Rain washes it away, and anything walking through it leaves footprints.
 - **It gets on the animals.** Every animal that bleeds carries blood on its coat, part by part. Its own wounds stain
   it, a blow spatters the animals standing near on the side that faced it (low on their legs, high on their heads),
   and a body blown apart spatters everything round it. Standing in a pool reddens the feet, walking through it
@@ -174,6 +197,11 @@ A body inside the bubble is torn apart, and its blood clouds out in the water. F
 the water much further than through air, but it passes through solid flesh and tears only what holds air: a body
 well beyond vanilla's blast range bleeds from the mouth from torn lungs. Shallow water weakens the shock more than deep
 water.
+
+Blood standing in the way of a blast is thrown by it. Close to the charge it goes up as a red mist; further out it
+is thrown as drops that land in streaks pointing back at the charge, and what the fireball reaches is seared onto the
+floor. A charge that goes off in the air over water tears a crown of spray off the surface. If it is close enough, a
+column of water goes up from under it a moment later, and the spray rains back down.
 
 Wet pieces smear the walls they hit, and some stick there before they peel off and drop. Players caught close enough
 are left deaf for a while, with ringing ears. Blast gore starts at the Medium gore level and covers players too when
@@ -326,18 +354,21 @@ bone. Off disables everything and clears existing blood and parts.
 
 | Setting | Default | What it does |
 |---|---|---|
-| Style | Redstone | **Redstone**: blocky pixel-art splats. **Realistic**: smooth round splats. **Mixed**. |
+| Resolution | 16x | How finely blood is drawn: **16x** like the game's own textures, **32x**, **64x**, or **Smooth**. |
 | Gore Chunks | On | Heavy hits and kills throw crumbs and bits of meat. |
 | Arterial Spurts | On | Bad wounds and stumps pump blood in pulsing jets. |
 | Gore Sounds | On | Wet crunches and weapon-specific impact sounds. |
-| Persistence | 180 s | How long blood stays at Medium before fading. |
-| Max Blood Decals | 1500 | Cap on splats and puddle cells; the oldest go first. |
+| Persistence | 180 s | How long a film of blood stays at Medium before fading. Deep pools last up to 21 times as long. |
+| Max Blood Decals | 1500 | Cap on splats and blocks of pooled blood; the oldest go first. |
 | Wall Splatter | On | Blood sticks to walls and runs down ledges. |
 | Directional Spatter | On | Blood landing at a slant stretches into a teardrop pointing the way it flew. |
 | Drag Trails | On | A bleeding body that slides or is shoved smears a trail. |
 | Bloody Footprints | On | Anything walking through a puddle leaves footprints. |
 | Rain Washes Blood | On | Rain fades blood much faster. |
 | Scrub Blood | On | Hold use with a sponge, wet sponge or brush to wipe blood away (see Cleaning up). |
+| Slippery Blood | 100% | How slippery wet blood makes a smooth floor for you. 0 turns it off. |
+| Buckets of Blood | On | An empty bucket takes up standing blood; a bucket holding blood can be tipped out. |
+| Bucket Holds | 1000 L | How much blood a bucket takes. On a server, the server's setting counts. |
 | Bloody Wool | On | Sheep wool soaks up blood from wounds, spatter and pools, and it climbs the wool. |
 | Bloody Coats | On | Blood gets on every animal that bleeds: spatter from blows and blasts, and up the legs from pools. |
 | Blood in Water | On | Blood that reaches water clouds out, sinks and thins away instead of vanishing. |
@@ -470,8 +501,11 @@ The Cobble Tank's own settings screen in Mod Menu shows the same options.
   works for any mob built from model parts, modded ones included.
 - **Wounds** are stored in each model part's own space and drawn right after the model, inside the same part
   transforms, so they follow the animation for free.
-- **Fluid.** Each puddle is a per-block cell holding a volume that flows to lower neighbours, within a fixed per-tick
-  budget. Decals are cut into pieces that sit on the real surface heights of stairs and slabs.
+- **Fluid.** Each block of space is cut into 8 by 8 sub-cells, each with its own floor height and its own depth of
+  blood in millimetres. A sub-cell passes blood to any neighbour whose surface is lower, within a fixed per-tick
+  budget, so the amount is always conserved. The outline is drawn between wet and dry sub-cells, in pixels on the
+  block-texture grid or as a clean line. Splats are cut into pieces that sit on the real surface heights of stairs
+  and slabs.
 - **Bodies** are small physics systems with gravity, block collision, toppling, springy joints and weight from body
   size. They keep going after the server has removed the entity.
 - **The server half** is kept small. The server keeps bodies, reports hits and relays what players did ("this player
@@ -514,7 +548,13 @@ generators.
   the body, so the skull inside it is a real skull in a head twice as large as it should be, and the muzzle is
   squashed harder than the braincase. The eyes inside the head lie on its sides where a sheep's are, further back than
   the eyes painted on the front of the vanilla face.
-- Where a large pool of blood meets dry floor, its edge can step along the block edges.
+- Blood pools and stains are not saved, and each player's game works out its own: two players see the same pool in
+  the same place, but not to the last pixel.
+- Only your own footing slips on blood. Mobs and other players are not slowed or moved by it.
+- On a server without Fluid Gore a bucket's blood is kept by your own game: the item does not show it and nobody
+  else sees it. A bucket holding blood is still a bucket: milk a cow with it, or fill it with lava, and the blood is
+  lost.
+- Blood under a low ceiling can rise through it if more is poured in than the space holds.
 - A body loaded from a save, or seen by a player who arrived after it died, keeps its normal colour: pallor is
   only seen by players who watched it bleed. The same goes for blood on coats.
 - Spatter on a coat is placed by which way the animal faces, not how it lies: a body on its side is spattered as if

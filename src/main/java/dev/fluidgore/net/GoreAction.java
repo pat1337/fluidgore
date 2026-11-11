@@ -15,13 +15,16 @@ import net.minecraft.world.phys.Vec3;
  * @param kind     what was done, see the constants
  * @param entityId the body (STRIKE, PLUCK, CLEAN, VAPORIZED, IGNITE), or -1
  * @param partKey  the loose piece (CUT), see {@code GorePart#key}; for SCRUB the tool's blood colour (high 32 bits)
- *                 and the lifted blood's (low); for WASH the tool's blood colour; or 0
- * @param x        the eye (STRIKE, PLUCK, CUT), the scrubbed point (SCRUB) or the water (WASH)
+ *                 and the lifted blood's (low); for WASH the tool's blood colour; for SCOOP and POUR the blood's
+ *                 colour; or 0
+ * @param x        the eye (STRIKE, PLUCK, CUT), the scrubbed point (SCRUB), the water (WASH), the place a bucket is
+ *                 dipped (SCOOP) or tipped out (POUR)
  * @param dx       the view direction; for SCRUB the stroke's direction (dx, dz; 0 for a dab) and how bloody the tool
  *                 was (dy, 0..1)
  * @param weapon   ordinal of the {@code Weapon} held (STRIKE), 1 for a fire charge (IGNITE), the face (SCRUB)
  * @param damage   the attack damage of the held item (STRIKE), blood lifted in litres (SCRUB), positive for a body
- *                 wiped away by hand (CLEAN), zero for automatic removal (VAPORIZED)
+ *                 wiped away by hand (CLEAN), zero for automatic removal (VAPORIZED), the litres taken up (SCOOP) or
+ *                 tipped out (POUR)
  */
 public record GoreAction(byte kind, int entityId, long partKey, float x, float y, float z, float dx, float dy, float dz, byte weapon,
 		float damage) implements CustomPacketPayload {
@@ -44,6 +47,15 @@ public record GoreAction(byte kind, int entityId, long partKey, float x, float y
 	public static final byte WASH = 6;
 	/** A kept body torn or butchered apart: reported for automatic removal, not manual cleaning or tool soak. */
 	public static final byte VAPORIZED = 7;
+	/**
+	 * A bucket dipped into standing blood: {@code x} where, {@code damage} the litres it took up, {@code partKey} their
+	 * colour. The server puts no more into the bucket than it has room for and passes that on.
+	 */
+	public static final byte SCOOP = 8;
+	/**
+	 * A bucket of blood tipped out at {@code x}. The server empties the bucket and passes on what was really in it.
+	 */
+	public static final byte POUR = 9;
 
 	public static final Type<GoreAction> TYPE = new Type<>(Identifier.fromNamespaceAndPath(FluidGore.MOD_ID, "action"));
 	public static final StreamCodec<ByteBuf, GoreAction> CODEC = StreamCodec.of((buf, a) -> {

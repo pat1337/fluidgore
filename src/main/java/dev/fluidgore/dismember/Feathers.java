@@ -293,8 +293,8 @@ public final class Feathers {
 
 	/** Lying in a pool of blood, it drinks it up. */
 	private void soak(BloodWorld world, int i) {
-		BloodCell cell = world.fluid().cellAt(Mth.floor(x[i]), SurfaceProbe.airBlockY(y[i] - 0.01), Mth.floor(z[i]));
-		if (cell != null && cell.volume > 0.02F) {
+		BloodCell cell = world.fluid().at(x[i], y[i] - 0.01, z[i]);
+		if (cell != null && cell.depthAt(x[i], z[i]) > 0.4F) {
 			if (blood[i] < 0.05F) {
 				bloodRgb[i] = cell.rgb;
 			}

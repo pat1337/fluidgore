@@ -29,8 +29,8 @@ public final class GoreConfig {
 	public boolean affectPlayers = true;
 	public boolean affectMobs = true;
 	public boolean affectAnimals = true;
-	/** Look of splats, puddles and droplets. */
-	public BloodStyle bloodStyle = BloodStyle.REDSTONE;
+	/** How finely blood is drawn: 16 pixels to a block like the game's own textures, finer, or smooth. */
+	public BloodResolution bloodResolution = BloodResolution.X16;
 	/** Flying chunks (redstone-block crumbs and meat bits) on heavy hits and kills. */
 	public boolean goreChunks = true;
 	/** Arterial spurts: pulsing jets of blood from bad wounds. */
@@ -283,6 +283,19 @@ public final class GoreConfig {
 	public boolean playWithParts = true;
 	/** How hard the killing blow throws a body in the direction it was struck, in percent. 0 turns it off. */
 	public int deathLaunchPercent = 100;
+	/**
+	 * Wet blood on a smooth floor is slippery underfoot, in percent: 100 makes a film of fresh blood on glass, ice,
+	 * polished stone or metal as slippery as ice, and plain stone and planks a little slippery. Only your own footing,
+	 * in your own game. 0 turns it off.
+	 */
+	public int slipperyBlood = 100;
+	/**
+	 * An empty bucket used on standing blood takes it up, and a bucket holding blood can be tipped out again. Sneak to
+	 * use the bucket as usual.
+	 */
+	public boolean bloodBuckets = true;
+	/** Litres a bucket takes. The game's buckets take a whole block of liquid, which is 1000 litres (264 gallons). */
+	public int bucketLitres = 1000;
 	/** Hold a cleaning item and use it on a surface to scrub blood off. */
 	public boolean cleaning = true;
 	/** Item ids that scrub blood away when used (sneak to use them normally). */
@@ -447,7 +460,7 @@ public final class GoreConfig {
 
 		configVersion = CONFIG_VERSION;
 		if (goreLevel == null) goreLevel = GoreLevel.MEDIUM;
-		if (bloodStyle == null) bloodStyle = BloodStyle.REDSTONE;
+		if (bloodResolution == null) bloodResolution = BloodResolution.X16;
 		if (bloodColor == null) bloodColor = BloodColor.RED;
 		if (monsterBloodColor == null) monsterBloodColor = BloodColor.RED;
 		persistenceSeconds = clamp(persistenceSeconds, 10, 1800);
@@ -456,6 +469,8 @@ public final class GoreConfig {
 		maxDroplets = clamp(maxDroplets, 50, 5000);
 		partLifetimeSeconds = clamp(partLifetimeSeconds, 5, 3600);
 		woundClotSeconds = clamp(woundClotSeconds, 5, 600);
+		slipperyBlood = clamp(slipperyBlood, 0, 100);
+		bucketLitres = clamp(bucketLitres, 1, 1000);
 		staggerPercent = clamp(staggerPercent, 0, 200);
 		vesselLitres = clamp(vesselLitres, 10, 1000);
 		vesselPsi = clamp(vesselPsi, 500, 20_000);

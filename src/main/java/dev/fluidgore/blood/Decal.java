@@ -11,6 +11,11 @@ import net.minecraft.core.Direction;
 public final class Decal {
 	/** Floats per piece: a0, b0, a1, b1 (tangent-plane rectangle) and h (plane coordinate along the normal). */
 	public static final int PIECE_STRIDE = 5;
+	/**
+	 * The share of its life in which a mark dries. A mark is a film a fraction of a millimetre thick: it has gone dark
+	 * and dull while the pool beside it is still wet.
+	 */
+	private static final float DRIES_IN = 0.2F;
 
 	public final long serial;
 	public final Direction face;
@@ -18,6 +23,7 @@ public final class Decal {
 	public final double centerA;
 	public final double centerB;
 	public final float half;
+	/** The shape: a tile of blood.png, or {@link BloodTextures#RUN}. */
 	public final int tile;
 	/** 0-7: bit 0 flips U, bit 1 flips V, bit 2 swaps U/V. Gives 8 orientations without UVs leaving the tile. */
 	public final int orient;
@@ -31,6 +37,16 @@ public final class Decal {
 	public final int lifetime;
 	public int age;
 	public int light;
+	/** True on a floor that drinks blood (turf, sand, wool): the mark is a stain in it, not a film on it. */
+	public boolean porous;
+	/**
+	 * A run down a wall that is still creeping: the blood it still has to lay down, pool units. Nothing once it has
+	 * stopped, and for every mark that is not a run.
+	 */
+	public float carried;
+	/** The mark cut into pixels (see {@link MarkPixels}) at {@link #pixelsFor} to a block; null until asked for. */
+	float[] pixels;
+	int pixelsFor;
 
 	public Decal(long serial, Direction face, double centerA, double centerB, float half, int tile, int orient, int rgb,
 			boolean dries, float[] pieces, BlockPos anchor, double plane, int lifetime, int light) {
@@ -66,8 +82,14 @@ public final class Decal {
 		return t * t * (3.0F - 2.0F * t);
 	}
 
-	/** Drying factor 0 (fresh) to 1 (dry) over the first half of life. */
+	/** Drying factor 0 (fresh) to 1 (dry), over the first part of its life. */
 	public float dryness() {
-		return dries ? Math.min(1.0F, age / (lifetime * 0.5F)) : 0.0F;
+		return dries ? Math.min(1.0F, age / (lifetime * DRIES_IN)) : 0.0F;
+	}
+
+	/** New pieces for the mark: what was cut from the old ones is thrown away. */
+	void reshape(float[] pieces) {
+		this.pieces = pieces;
+		this.pixels = null;
 	}
 }

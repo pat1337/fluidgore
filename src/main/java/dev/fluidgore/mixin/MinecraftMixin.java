@@ -37,7 +37,8 @@ public abstract class MinecraftMixin {
 		Minecraft self = (Minecraft) (Object) this;
 		if (GoreSystems.dismemberment().interaction().onUse(self) || GoreSystems.dismemberment().butchery().onUse(self)
 				|| GoreSystems.dismemberment().cremation().onUse(self)
-				|| Cleaning.onUse(self, GoreSystems.blood())) {
+				|| Cleaning.onUse(self, GoreSystems.blood())
+				|| dev.fluidgore.blood.Buckets.onUse(self, GoreSystems.blood())) {
 			ci.cancel();
 		}
 	}

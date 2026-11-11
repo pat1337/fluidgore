@@ -328,8 +328,9 @@ public final class Decay {
 		}
 
 		removeStain(blood, body);
-		body.stain = blood.decals().addFloor(level, centre.x, surface, centre.z, half, BloodTextures.POOL, (int) (body.rot.seed & 7), STAIN, false,
-				Integer.MAX_VALUE / 2);
+		// A blot with an edge of its own, not a square; its tile is laid half as big again, since the blot does not fill it.
+		body.stain = blood.decals().addFloor(level, centre.x, surface, centre.z, half * 1.5F, BloodTextures.SPLAT_0 + (int) (body.rot.seed & 3),
+				(int) (body.rot.seed >> 2 & 7), STAIN, false, Integer.MAX_VALUE / 2);
 		body.stainHalf = half;
 	}
 

@@ -597,14 +597,15 @@ public final class BloodyWool {
 			Corpse corpse = GoreSystems.suffering().corpse(entity.getId());
 			Vec3 at = corpse != null ? corpse.position() : entity.position();
 			BloodCell cell = under(fluid, living, at);
-			if (cell == null || cell.volume < 0.01F) {
+			if (cell == null || cell.litres < 0.04F) {
 				// Out of the pool, blood still climbs a fleece a little way as it wicks.
 				climb(living, kind, false);
 				continue;
 			}
 
 			float scale = Math.max(0.3F, living.getScale() * (living.isBaby() ? 0.5F : 1.0F));
-			float depth = cell.volume * BloodSupply.LITRES_PER_UNIT / (MM_PER_PIXEL * scale);
+			// How deep it stands in it: where it stands, or the cell's blood spread over its floor if that is more.
+			float depth = Math.max(cell.depthAt(at.x, at.z), cell.litres) / (MM_PER_PIXEL * scale);
 			Coat coat = coats.computeIfAbsent(entity.getId(), id -> new Coat());
 			boolean lying = corpse != null && corpse.age > 20;
 			float before = coat.overall();
@@ -632,7 +633,7 @@ public final class BloodyWool {
 			climb(living, kind, true);
 			// A coat that drinks takes the blood out of the pool as it fills.
 			if (coat.overall() < kind.most && kind.drinks > 0.0F) {
-				fluid.drain(cell, Math.min(cell.volume, kind.drinks * POOL_EVERY * (lying ? 3.0F : 1.0F) * config.goreLevel.puddles));
+				fluid.drain(cell, Math.min(cell.volume(), kind.drinks * POOL_EVERY * (lying ? 3.0F : 1.0F) * config.goreLevel.puddles));
 			}
 
 			if (coat.overall() > before) {
@@ -668,7 +669,7 @@ public final class BloodyWool {
 			int bz = Mth.floor(at.z + spot[1]);
 			for (int dy = 0; dy >= -1; dy--) {
 				BloodCell cell = fluid.cellAt(bx, by + dy, bz);
-				if (cell != null && Math.abs(cell.surfaceY - at.y) < 0.35 && (best == null || cell.volume > best.volume)) {
+				if (cell != null && Math.abs(cell.surfaceY - at.y) < 0.35 && cell.litres > 0.0F && (best == null || cell.litres > best.litres)) {
 					best = cell;
 				}
 			}

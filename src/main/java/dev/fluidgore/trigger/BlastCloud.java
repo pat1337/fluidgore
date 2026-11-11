@@ -61,6 +61,9 @@ public final class BlastCloud {
 			frost(level, blood, centre, radius, particles);
 		}
 
+		spill(level, blood, centre, hot ? radius : 0.0F, tntKg, psi, particles);
+		SurfaceBursts.start(level, centre, tntKg, psi);
+
 		dismemberment.giblets().blast(level, blood, centre, tntKg, psi);
 		dismemberment.parts().blast(level, centre, tntKg, psi);
 		if (!hot) {
@@ -83,7 +86,59 @@ public final class BlastCloud {
 		}
 	}
 
-	/** The flash of a charge: flame thrown out to the fireball's edge, embers, a column of smoke, black scorch under it. */
+/** Overpressure, kPa, out to which a blast moves standing blood at all. */
+private static final float SPILL_KPA = 12.0F;
+/** The dice for where thrown blood goes: it lands and lies, so every screen must throw it alike. */
+private static final RandomSource THROWN = dev.fluidgore.trigger.Fate.stream("thrown");
+
+/**
+ * Standing blood in the way of the wave. The wind behind a blast front is far faster than any liquid film can hold
+ * against: close in it tears the blood off the floor as a red mist that hangs and drifts, further out it throws it
+ * as drops, low and outwards, that land in streaks pointing back at the charge. What a fireball reaches of what is
+ * left is cooked onto the floor.
+ */
+private static void spill(ClientLevel level, BloodWorld blood, Vec3 c, float fireball, double tntKg, double psi, float particles) {
+	double reach = Math.min(24.0, dev.fluidgore.physics.Blast.reach(tntKg, psi, SPILL_KPA));
+	dev.fluidgore.blood.BloodSupply.as(-1, () -> blood.fluid().blast(c.x, c.y, c.z, reach, d -> dev.fluidgore.physics.Blast.overpressure(d, tntKg, psi), fireball,
+			thrown -> {
+				// The harder the wind, the more of it goes as mist rather than drops.
+				float mist = net.minecraft.util.Mth.clamp(thrown.kPa() / 250.0F, 0.15F, 0.8F);
+				double dx = thrown.x() - c.x;
+				double dz = thrown.z() - c.z;
+				double flat = Math.sqrt(dx * dx + dz * dz);
+				if (flat < 0.3) {
+					double a = THROWN.nextDouble() * Math.PI * 2.0;
+					dx = Math.cos(a);
+					dz = Math.sin(a);
+				} else {
+					dx /= flat;
+					dz /= flat;
+				}
+
+				int puffs = Math.min(10, Math.round(thrown.litres() * mist * 6.0F * particles) + 1);
+				for (int i = 0; i < puffs; i++) {
+					int color = blood.vary(thrown.rgb(), 0.25F);
+					int dark = (color >> 16 & 0xFF) * 2 / 5 << 16 | (color >> 8 & 0xFF) * 2 / 5 << 8 | (color & 0xFF) * 2 / 5;
+					level.addParticle(new net.minecraft.core.particles.DustColorTransitionOptions(color, dark, 0.7F + FX.nextFloat() * 1.1F),
+							thrown.x() + FX.nextGaussian() * 0.4, thrown.y() + 0.15 + FX.nextDouble() * 0.5, thrown.z() + FX.nextGaussian() * 0.4,
+							dx * 0.06 + FX.nextGaussian() * 0.03, 0.02 + FX.nextDouble() * 0.05, dz * 0.06 + FX.nextGaussian() * 0.03);
+				}
+
+				float units = thrown.litres() * (1.0F - mist * 0.5F) / dev.fluidgore.blood.BloodSupply.LITRES_PER_UNIT;
+				int drops = net.minecraft.util.Mth.clamp(Math.round(thrown.litres() * 5.0F), 1, 8);
+				double speed = net.minecraft.util.Mth.clamp(0.25 + thrown.kPa() / 200.0, 0.3, 1.4);
+				for (int i = 0; i < drops; i++) {
+					double turn = THROWN.nextGaussian() * 0.35;
+					double vx = dx * Math.cos(turn) - dz * Math.sin(turn);
+					double vz = dz * Math.cos(turn) + dx * Math.sin(turn);
+					double v = speed * (0.45 + THROWN.nextDouble() * 0.55);
+					blood.droplets().spawn(thrown.x() + THROWN.nextGaussian() * 0.25, thrown.y() + 0.08, thrown.z() + THROWN.nextGaussian() * 0.25, vx * v,
+							0.12 + THROWN.nextDouble() * 0.3 * v, vz * v, units / drops, blood.vary(thrown.rgb(), 0.15F), 0.03F + THROWN.nextFloat() * 0.04F);
+				}
+			}));
+}
+
+/** The flash of a charge: flame thrown out to the fireball's edge, embers, a column of smoke, black scorch under it. */
 	private static void fireball(ClientLevel level, BloodWorld blood, Vec3 c, float radius, float particles) {
 		int flames = Math.round(90 * radius * particles);
 		for (int i = 0; i < flames; i++) {

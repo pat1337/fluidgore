@@ -4,6 +4,7 @@ import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.trigger.Fate;
 import java.util.ArrayList;
 import java.util.List;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
@@ -16,10 +17,10 @@ import org.jspecify.annotations.Nullable;
  * tracking. Everything here is cosmetic and local; nothing is sent to or read from the server.
  */
 public final class BloodWorld {
-	/** Smallest amount of blood that starts a new puddle on its own. */
-	private static final float MIN_POOL_VOLUME = 0.02F;
 	/** Sine of the impact angle below which a drop stretches (about 50 degrees from the floor). */
 	private static final double SLANT = 0.77;
+	/** The most blood, pool units, that goes into one run down a wall: enough for three blocks of it. */
+	private static final float MOST_RUN = 0.0075F;
 
 	private final DecalManager decals = new DecalManager(this);
 	private final BloodFluidSim fluid = new BloodFluidSim(this);
@@ -27,6 +28,7 @@ public final class BloodWorld {
 	private final Footprints footprints = new Footprints(this);
 	private final Spurts spurts = new Spurts(this);
 	private final WaterClouds clouds = new WaterClouds();
+	private final Pours pours = new Pours(this);
 	private final RandomSource random = Fate.stream("world");
 	private long serial;
 
@@ -49,6 +51,11 @@ public final class BloodWorld {
 	/** Blood in water. */
 	public WaterClouds clouds() {
 		return clouds;
+	}
+
+	/** Blood being tipped out of buckets. */
+	Pours pours() {
+		return pours;
 	}
 
 	long nextSerial() {
@@ -86,10 +93,67 @@ public final class BloodWorld {
 			float f = blots == 1 ? 0.0F : i / (float) (blots - 1);
 			float r = radius * (1.0F - 0.55F * f) * (0.9F + random.nextFloat() * 0.2F);
 			double along = (length - radius) * f;
-			int tile = i == blots - 1 && blots > 1 ? BloodTextures.droplet() : BloodTextures.smallSplat(random);
+			int tile = i == blots - 1 && blots > 1 ? BloodTextures.DROPLET : BloodTextures.SMALL_SPLAT;
 			decals.addFloor(level, x + dx * along, surfaceY, z + dz * along, Math.max(0.04F, r), tile, random.nextInt(8), rgb, true,
 					lifetime);
 		}
+	}
+
+	/**
+	 * The same on the side of a block: a stain drawn out across the face of {@code block} from (a, b) along
+	 * ({@code da}, {@code db}), where a runs along the wall and b is height.
+	 */
+	private void drawnOutWall(Level level, BlockPos block, Direction face, double a, double b, double da, double db, float radius, float length,
+			int rgb, int lifetime) {
+		drawn++;
+		int blots = Mth.clamp(Math.round(length / Math.max(0.02F, radius)), 1, 4);
+		for (int i = 0; i < blots; i++) {
+			float f = blots == 1 ? 0.0F : i / (float) (blots - 1);
+			float r = radius * (1.0F - 0.55F * f) * (0.9F + random.nextFloat() * 0.2F);
+			double along = (length - radius) * f;
+			int tile = i == blots - 1 && blots > 1 ? BloodTextures.DROPLET : BloodTextures.SMALL_SPLAT;
+			decals.addWall(level, block, face, a + da * along, b + db * along, Math.max(0.04F, r), tile, random.nextInt(8), rgb, lifetime);
+		}
+	}
+
+	/**
+	 * A drop hitting the side of a block at {@code at}, flying at (vx, vy, vz). It leaves a stain where it hit: round if
+	 * it came straight at the wall, drawn out the way it was going if it came across it. From a drop with more blood than
+	 * a stain holds some runs on down the wall, further the more there was. Returns the blood, in pool units, that stays
+	 * on the wall: the rest falls down it at once.
+	 */
+	public float landOnWall(Level level, BlockPos block, Direction face, Vec3 at, double vx, double vy, double vz, float volume, int rgb, int lifetime) {
+		boolean xNormal = face.getAxis() == Direction.Axis.X;
+		double a = xNormal ? at.z : at.x;
+		double va = xNormal ? vz : vx;
+		double into = xNormal ? vx : vz;
+		double across = Math.sqrt(va * va + vy * vy);
+		double sine = Math.abs(into) / Math.max(1.0E-6, Math.sqrt(across * across + into * into));
+		float width = Mth.clamp((0.04F + (float) Math.min(0.2, Math.sqrt(volume) * 0.7)) * lognormal(0.35F), 0.04F, 0.36F);
+		int shade = vary(rgb, 0.18F);
+		double plane = xNormal ? block.getX() + (face == Direction.EAST ? 1.0 : 0.0) : block.getZ() + (face == Direction.SOUTH ? 1.0 : 0.0);
+		if (decals.covered(face, plane, a, at.y)) {
+			// On a stain already: it adds nothing to see there, but it may still run.
+		} else if (sine < SLANT && across > 1.0E-4 && GoreConfig.get().directionalSpatter) {
+			float half = Math.min(0.5F, width / (float) Math.max(0.33, sine) * 0.5F);
+			drawnOutWall(level, block, face, a, at.y, va / across, vy / across, width * 0.5F, half * 2.0F, shade, lifetime);
+		} else {
+			decals.addWall(level, block, face, a, at.y, width, volume < 0.006F ? BloodTextures.SMALL_SPLAT : BloodTextures.splat(random),
+					random.nextInt(8), shade, lifetime);
+		}
+
+		// What the stain itself holds: a film over it. A drop no bigger than that stays where it hit.
+		float held = Math.min(volume, width * width * 0.006F);
+		float over = volume - held;
+		// Of the rest, most falls down the wall at once. Some of it creeps: more often, and further, the more there was.
+		if (over > 0.0005F && random.nextFloat() < Mth.clamp(over * 60.0F, 0.12F, 0.7F)) {
+			float runs = Math.min(over * 0.35F, MOST_RUN) * (0.4F + random.nextFloat() * 0.6F);
+			if (decals.run(level, block, face, a, at.y - width * 0.25, runs, rgb, lifetime) != null) {
+				held += runs;
+			}
+		}
+
+		return held;
 	}
 
 	/**
@@ -104,46 +168,41 @@ public final class BloodWorld {
 			return;
 		}
 
+		// All of it joins the blood on the ground (see BloodFluidSim). Where that is enough to be seen it is drawn as part
+		// of the pool; a drop too small for that is drawn as a mark of its own, and its blood is the stain under the mark.
+		fluid.addVolume(level, x, y, z, volume, rgb, lifetime);
 		double across = Math.sqrt(vx * vx + vz * vz);
 		double sine = Math.abs(vy) / Math.max(1.0E-6, Math.sqrt(across * across + vy * vy));
-		if (sine < SLANT && across > 1.0E-4 && volume < MIN_POOL_VOLUME && GoreConfig.get().directionalSpatter) {
+		if (fluid.shows(x, y, z) || decals.covered(Direction.UP, y, x, z)) {
+			// Nothing of its own to draw.
+		} else if (sine < SLANT && across > 1.0E-4 && GoreConfig.get().directionalSpatter) {
 			float width = (0.05F + (float) Math.min(0.3, Math.sqrt(volume) * 0.9)) * lognormal(0.3F);
 			float half = Math.min(0.6F, width / (float) Math.max(0.33, sine) * 0.5F);
 			double dx = vx / across;
 			double dz = vz / across;
 			// The drop where it hit, drawn out the way it flew.
 			drawnOut(level, x, y, z, dx, dz, width * 0.5F, half * 2.0F, vary(rgb, 0.18F), lifetime);
-			return;
-		}
-
-		// Small drops only leave a splat; they join the fluid simulation when they land in an existing puddle
-		// or carry enough blood to start one. This keeps a spray from turning into dozens of tiny puddles.
-		boolean pooled = volume >= MIN_POOL_VOLUME
-				|| fluid.cellAt(net.minecraft.util.Mth.floor(x), SurfaceProbe.airBlockY(y), net.minecraft.util.Mth.floor(z)) != null;
-		if (pooled) {
-			fluid.addVolume(level, x, y, z, volume, rgb, lifetime);
-		}
-
-		if (!pooled || random.nextFloat() < 0.55F) {
-			// Heavy-tailed size: mostly modest splats, now and then a big one.
-			float half = (0.07F + (float) Math.min(0.45, Math.sqrt(volume) * 1.1)) * lognormal(0.35F);
-			half = Math.min(0.75F, Math.max(0.05F, half));
-			int tile = volume < 0.006F ? BloodTextures.smallSplat(random) : BloodTextures.splat(random);
+		} else {
+			// A drop leaves a splat. Heavy-tailed size: mostly modest, now and then a big one.
+			float half = (0.05F + (float) Math.min(0.3, Math.sqrt(volume) * 0.8)) * lognormal(0.35F);
+			half = Math.min(0.5F, Math.max(0.04F, half));
+			int tile = volume < 0.006F ? BloodTextures.SMALL_SPLAT : BloodTextures.splat(random);
 			decals.addFloor(level, x, y, z, half, tile, random.nextInt(8), vary(rgb, 0.18F), true, lifetime);
+		}
 
-			// Secondary spatter: little splashes thrown out around the impact.
-			if (volume > 0.004F && random.nextFloat() < 0.3F) {
-				int extra = 1 + random.nextInt(3);
-				for (int i = 0; i < extra; i++) {
-					double angle = random.nextDouble() * Math.PI * 2.0;
-					double dist = half + 0.1 + random.nextDouble() * 0.5;
-					double sx = x + Math.cos(angle) * dist;
-					double sz = z + Math.sin(angle) * dist;
-					double surface = SurfaceProbe.surfaceBelow(level, sx, y + 0.5, y - 0.6, sz);
-					if (!Double.isNaN(surface)) {
-						decals.addFloor(level, sx, surface, sz, 0.04F + random.nextFloat() * 0.08F, BloodTextures.smallSplat(random),
-								random.nextInt(8), vary(rgb, 0.2F), true, lifetime);
-					}
+		// Secondary spatter: little splashes thrown out round where a good deal of blood came down.
+		if (volume > 0.004F && random.nextFloat() < 0.3F) {
+			float reach = 0.1F + (float) Math.min(0.5, Math.sqrt(volume) * 0.9);
+			int extra = 1 + random.nextInt(3);
+			for (int i = 0; i < extra; i++) {
+				double angle = random.nextDouble() * Math.PI * 2.0;
+				double dist = reach + 0.1 + random.nextDouble() * 0.5;
+				double sx = x + Math.cos(angle) * dist;
+				double sz = z + Math.sin(angle) * dist;
+				double surface = SurfaceProbe.surfaceBelow(level, sx, y + 0.5, y - 0.6, sz);
+				if (!Double.isNaN(surface) && !fluid.shows(sx, surface, sz) && !decals.covered(Direction.UP, surface, sx, sz)) {
+					decals.addFloor(level, sx, surface, sz, 0.04F + random.nextFloat() * 0.08F, BloodTextures.SMALL_SPLAT, random.nextInt(8),
+							vary(rgb, 0.2F), true, lifetime);
 				}
 			}
 		}
@@ -158,7 +217,7 @@ public final class BloodWorld {
 	 */
 	private void onRail(Level level, double x, double y, double z, net.minecraft.world.phys.AABB top, float volume, int rgb, int lifetime) {
 		float half = Math.min(0.3F, Math.max(0.05F, (0.06F + (float) Math.sqrt(volume * RAIL_HOLDS)) * lognormal(0.3F)));
-		decals.addFloor(level, x, y, z, half, BloodTextures.smallSplat(random), random.nextInt(8), vary(rgb, 0.18F), true, lifetime);
+		decals.addFloor(level, x, y, z, half, BloodTextures.SMALL_SPLAT, random.nextInt(8), vary(rgb, 0.18F), true, lifetime);
 		float rest = volume * (1.0F - RAIL_HOLDS);
 		if (rest < 0.002F) {
 			return;
@@ -199,6 +258,7 @@ public final class BloodWorld {
 
 	public void tick(Level level, int tickCount) {
 		spurts.tick();
+		pours.tick(level);
 		droplets.tick(level);
 		fluid.tick(level, tickCount);
 		decals.tick(level, tickCount);
@@ -256,20 +316,17 @@ public final class BloodWorld {
 		}
 
 		if (face == Direction.UP) {
-			for (BloodCell cell : fluid.cells()) {
-				double dx = cell.bx + 0.5 - at.x;
-				double dz = cell.bz + 0.5 - at.z;
-				if (Math.abs(cell.surfaceY - at.y) >= 0.6 || dx * dx + dz * dz > sq(radius + 0.5F) || cell.volume <= 0.0F) {
-					continue;
-				}
-
+			BloodCell cell = fluid.at(at.x, at.y, at.z);
+			// Most of the liquid within reach, and a good part of what has dried on; a porous floor keeps what it drank.
+			float taken = fluid.lift(at.x, at.y, at.z, radius, 0.8F * lift);
+			float scoured = fluid.scrubStain(at.x, at.y, at.z, radius, (cell != null && cell.surface.porous() ? 0.25F : 0.7F) * lift);
+			float units = (taken + scoured) / BloodSupply.LITRES_PER_UNIT;
+			if (units > 0.0F) {
+				int rgb = cell != null ? cell.rgb : 0x8A0303;
 				touched++;
-				float taken = Math.min(cell.volume, (cell.volume * 0.75F + 0.05F) * lift);
-				lifted += taken;
-				weigh(colour, cell.rgb, taken);
-				int rgb = cell.rgb;
-				fluid.drain(cell, taken);
-				if (stroke != null && lift < 0.9F && smear(level, at.x + stroke.x * 0.4, cell.surfaceY, at.z + stroke.z * 0.4, stroke,
+				lifted += units;
+				weigh(colour, rgb, units);
+				if (stroke != null && lift < 0.9F && taken > 0.0F && smear(level, at.x + stroke.x * 0.4, at.y, at.z + stroke.z * 0.4, stroke,
 						0.2F + 0.25F * (1.0F - lift), rgb)) {
 					// What it could not take up, it pushes on through the pool.
 					smeared++;
@@ -315,7 +372,7 @@ public final class BloodWorld {
 		for (BloodCell cell : fluid.cells()) {
 			double dx = cell.bx + 0.5 - at.x;
 			double dz = cell.bz + 0.5 - at.z;
-			if (cell.volume > 0.01F && Math.abs(cell.surfaceY - at.y) < 1.0 && dx * dx + dz * dz <= sq(radius)) {
+			if (!cell.empty() && Math.abs(cell.surfaceY - at.y) < 1.0 && dx * dx + dz * dz <= sq(radius + 0.5F)) {
 				return true;
 			}
 		}
@@ -352,11 +409,15 @@ public final class BloodWorld {
 		return v * v;
 	}
 
-	/** Keeps decals + puddle cells under {@link GoreConfig#maxBloodDecals}, removing the oldest first. */
+	/**
+	 * Keeps marks and the blocks of floor that hold blood under {@link GoreConfig#maxBloodDecals} together. The oldest mark
+	 * goes first, and blood on the ground only when there are no marks left to go: a mark is one drop, and what lies on a
+	 * block of floor may be a pool that spatter falling somewhere else should not take away.
+	 */
 	void enforceCap() {
 		int max = GoreConfig.get().maxBloodDecals;
 		while (decals.size() + fluid.size() > max) {
-			if (decals.oldestSerial() <= fluid.oldestSerial()) {
+			if (decals.size() > 0) {
 				decals.removeOldest();
 			} else {
 				fluid.removeOldest();
@@ -377,6 +438,7 @@ public final class BloodWorld {
 		droplets.removeIn(box);
 		clouds.removeIn(box);
 		spurts.removeIn(box);
+		pours.removeIn(box);
 	}
 
 	public void clear() {
@@ -386,5 +448,6 @@ public final class BloodWorld {
 		spurts.clear();
 		footprints.clear();
 		clouds.clear();
+		pours.clear();
 	}
 }

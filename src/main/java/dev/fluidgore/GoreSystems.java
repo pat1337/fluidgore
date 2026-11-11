@@ -104,6 +104,7 @@ public final class GoreSystems {
 		TRACKER.tick(level, BLOOD, DISMEMBERMENT, SUFFERING);
 		if (gore) {
 			dev.fluidgore.trigger.GasBubbles.tick(level);
+			dev.fluidgore.trigger.SurfaceBursts.tick(level);
 			BLOOD.tick(level, tickCount);
 			DISMEMBERMENT.tick(level, BLOOD);
 			DECAY.tick(level, BLOOD);
@@ -171,11 +172,13 @@ public final class GoreSystems {
 		dev.fluidgore.fragment.FragmentEffects.clear();
 		dev.fluidgore.event.Events.clear();
 		dev.fluidgore.trigger.GasBubbles.clear();
+		dev.fluidgore.trigger.SurfaceBursts.clear();
 		GoreSync.clear();
 		Evidence.clear();
 		Gush.clear();
 		BloodSupply.clear();
 		ToolSoak.clear();
+		dev.fluidgore.blood.Buckets.clear();
 		BrokenBlocks.clear();
 		ModelParts.clearDrawn();
 		INJURIES.clear();

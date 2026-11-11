@@ -1,12 +1,10 @@
 package dev.fluidgore.blood;
 
 import dev.fluidgore.config.GoreConfig;
-import dev.fluidgore.trigger.Fate;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
@@ -14,7 +12,7 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Ballistic blood droplets. They fly under gravity and drag, ray-cast against block collision shapes each tick,
- * and turn into a floor splat + puddle volume or a wall splat when they hit something.
+ * and turn into blood on the floor or a stain on a wall when they hit something.
  */
 public final class DropletSystem {
 	private static final double GRAVITY = 0.045;
@@ -25,7 +23,7 @@ public final class DropletSystem {
 		public double x, y, z;
 		public double prevX, prevY, prevZ;
 		double vx, vy, vz;
-		final float volume;
+		float volume;
 		public final int rgb;
 		public final float size;
 		public int light;
@@ -47,7 +45,6 @@ public final class DropletSystem {
 
 	private final BloodWorld world;
 	private final List<Droplet> droplets = new ArrayList<>();
-	private final RandomSource random = Fate.stream("droplets");
 
 	DropletSystem(BloodWorld world) {
 		this.world = world;
@@ -164,22 +161,19 @@ public final class DropletSystem {
 		}
 
 		// Side face.
-		if (config.wallSplatter && !d.slid) {
-			boolean xNormal = face.getAxis() == Direction.Axis.X;
-			double a = xNormal ? at.z : at.x;
-			float half = 0.08F + (float) Math.min(0.25, Math.sqrt(d.volume) * 0.9);
-			world.decals().addWall(level, hit.getBlockPos(), face, a, at.y, half,
-					BloodTextures.splat(random), random.nextInt(4), d.rgb, lifetime);
-			if (d.volume > 0.012F && random.nextFloat() < 0.35F) {
-				world.decals().addWall(level, hit.getBlockPos(), face, a, at.y - 0.25, 0.22F, BloodTextures.STREAK, 0, d.rgb, lifetime);
-			}
-		}
-
 		if (d.slid) {
 			return false;
 		}
 
-		// The rest of the drop slides down the wall.
+		if (config.wallSplatter) {
+			// A stain where it hit, and perhaps a run down from it: what they hold stays on the wall.
+			d.volume -= world.landOnWall(level, hit.getBlockPos(), face, at, d.vx, d.vy, d.vz, d.volume, d.rgb, lifetime);
+			if (d.volume <= 1.0E-5F) {
+				return false;
+			}
+		}
+
+		// The rest of the drop falls down the wall.
 		d.slid = true;
 		d.vx = face.getStepX() * 0.01;
 		d.vz = face.getStepZ() * 0.01;

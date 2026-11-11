@@ -32,6 +32,10 @@ import org.jspecify.annotations.Nullable;
 public final class Demos {
 	/** Fluid Gore's own demos. */
 	private static final List<Demo> OWN = List.of(
+			new Demo("spatter", "4.1.0", "Spatter and prints: a pig killed with a sword in front of a stone wall. The drops that flew straight at the wall leave round stains and the ones that came across it stains drawn out the way they flew; from the bigger ones blood runs on down the wall and stops in a bead, or reaches the floor and pools there. Then a pig standing in a pool is struck and bolts, leaving the prints of its cloven hooves, each fainter than the last. Walk through the pool to leave your own", true, Demos::spatter),
+			new Demo("poolblast", "4.1.0", "Blasts over blood and over water: a block of TNT beside a pool of blood throws the pool, close in as a red mist and further out as drops that land in streaks pointing back at the charge; then one in the air over a pond tears a crown of spray off the water, a column goes up from under it, and it rains back down", true, Demos::poolBlast),
+			new Demo("bucket", "4.1.0", "Blood by the bucket: a pit one block square holds 300 litres. A bucket dipped in it takes most of it, the rest runs together in the bottom, and tipped out on the floor it pours in a stream and runs where blood runs. With an empty bucket in your own hand, use it on standing blood to take it up and anywhere else to tip it out", true, Demos::bucket),
+			new Demo("floors", "4.1.0", "Blood on four floors: ten litres poured on polished stone, plain stone, turf and sand. It runs widest and thinnest on the polished stone and stays wet and slippery there; on plain stone it stands a little deeper; turf holds it among the grass and drinks a third of it; sand drinks all of it within seconds and keeps a dark clump", true, Demos::floors),
 			new Demo("tumble", "4.1.0", "Bodies down a brick pyramid: a pig and then a sheep killed on the edge of its top step. With Ragdoll Physics on, each carries its weight as the animal does, most of it in the trunk: it goes over the edge trunk first, legs swinging loose, and tumbles on down the steps until it lies on its side. With the mod on the server, everyone finds it where it came to rest", true, Demos::tumble),
 			new Demo("windows", "4.1.0", "Wounds that open into the body: two shorn ewes. The nearer is cut with a sword in the left flank, three times in the same place; each cut shows what lies under it at the depth it has reached, from the table of her anatomy: the belly wall's layers, then the wall of the rumen behind them, which spills cud. The other takes three cuts over the left ribs, which reach a lung, and the blood at the wound froths with air; killed, she dies of the chest wound, bleeding from the mouth and nose. Look close at each cut", false, Demos::windows),
 			new Demo("sheepblast", "4.1.0", "A sheep blown apart: a block of TNT under a sheep. It comes apart as the body it is: its hide torn in patches with the white fat under it, its muscles (the eye of the loin in chunks, the chump, the leg muscles, the cheek), its legs down to the cannon bones and hooves, and from its head the skin of the face, the eyes, the skull in plates, the brain and tufts of wool, besides its organs and bones. Look at any piece to see what it is", true, Demos::sheepBlast),
@@ -468,6 +472,96 @@ public final class Demos {
 		s.pause(20).say("In the rain the feathers go dark and slick, and the birds look half their size").pause(140);
 		s.cmd("weather clear");
 		s.say("Feathers lie where they fell, the bloody ones clumped. Walk through them and the dry ones lift").pause(80);
+	}
+
+	/** Ordinary red, for blood the demos pour themselves. */
+	private static final int RED = 0x8A0303;
+
+	/** Pours {@code litres} of blood on the floor at a stage spot. */
+	private static void pour(Minecraft mc, Stage st, double right, double up, double forward, float litres) {
+		Vec3 at = st.at(right, up, forward);
+		GoreSystems.blood().fluid().pour(mc.level, at.x, at.y, at.z, litres, RED, GoreSystems.blood().decalLifetime());
+	}
+
+	/** 4.1: ten litres of blood on four floors. From the game test {@code bloodFluid}. */
+	private static void floors(Script s, Stage st) {
+		String[] floors = {"minecraft:polished_andesite", "minecraft:stone", "minecraft:grass_block", "minecraft:sand"};
+		s.say("Four floors side by side: polished stone, plain stone, turf and sand");
+		for (int i = 0; i < floors.length; i++) {
+			s.cmd("fill " + st.block(-8 + i * 4, -1, 2) + " " + st.block(-6 + i * 4, -1, 4) + " " + floors[i]);
+		}
+
+		s.pause(30).say("Ten litres of blood poured on each");
+		for (int i = 0; i < floors.length; i++) {
+			int right = -7 + i * 4;
+			s.client(mc -> pour(mc, st, right, 0, 3, 10.0F));
+		}
+
+		s.pause(60).say("On the polished stone it runs widest and thinnest, and stays wet: walk on it and you slide").pause(80);
+		s.say("On plain stone it stands a little deeper and stops sooner").pause(60);
+		s.say("Turf holds it among the grass and drinks it slowly").pause(60);
+		s.say("Sand has drunk all of it already: a dark clump where it fell").pause(80);
+		s.say("What lies on each floor and what has soaked into it is still the ten litres that were poured").pause(60);
+	}
+
+	/** 4.1: a pit of blood, a bucket dipped in it and tipped out. From the game test {@code bloodUses}. */
+	private static void bucket(Script s, Stage st) {
+		s.say("A pit one block square in a stone floor");
+		s.cmd("fill " + st.block(-2, -2, 2) + " " + st.block(2, -1, 6) + " minecraft:stone");
+		s.cmd("setblock " + st.block(0, -1, 3) + " minecraft:air");
+		s.pause(20).say("300 litres of blood poured into it: it stands 30 cm deep");
+		s.client(mc -> pour(mc, st, 0, -1, 3, 300.0F));
+		s.pause(80).say("A bucket dipped in it takes up what is within reach of its rim");
+		s.client(mc -> dev.fluidgore.blood.Buckets.scoop(mc.level, GoreSystems.blood(), st.at(0, -1, 3), 250.0F));
+		s.pause(60).say("What is left runs together in the bottom").pause(40);
+		s.say("Tipped out on the floor, it pours in a stream and runs where blood runs");
+		s.client(mc -> dev.fluidgore.blood.Buckets.pour(mc.level, GoreSystems.blood(), st.at(0, 0, 5), 250.0F, RED));
+		s.pause(140);
+		s.say("With an empty bucket in your hand: use it on blood to take it up, anywhere else to tip it out. Sneak to use it as usual").pause(100);
+	}
+
+	/** 4.1: TNT beside a pool of blood, then over a pond. From the game test {@code bloodUses}. */
+	private static void poolBlast(Script s, Stage st) {
+		s.say("A pool of blood on an obsidian floor");
+		s.cmd("fill " + st.block(-4, -1, 4) + " " + st.block(4, -1, 12) + " minecraft:obsidian");
+		s.pause(20);
+		s.client(mc -> pour(mc, st, 0, 0, 8, 150.0F));
+		s.pause(100).say("A block of TNT beside it");
+		s.cmd("summon minecraft:tnt " + st.pos(1.5, 0, 9) + " {fuse:40}");
+		s.pause(46).say("The wind behind the blast tears the pool off the floor: a red mist close in, drops thrown low and wide").pause(70);
+		s.say("They land in streaks that point back at the charge").pause(80);
+		s.say("A pond, and a block of TNT hung in the air just over it");
+		s.cmd("fill " + st.block(8, -4, 4) + " " + st.block(16, -1, 12) + " minecraft:stone");
+		s.cmd("fill " + st.block(9, -3, 5) + " " + st.block(15, -1, 11) + " minecraft:water");
+		s.pause(40);
+		s.cmd("summon minecraft:tnt " + st.pos(12, 0.6, 8) + " {fuse:40,NoGravity:1b}");
+		s.pause(44).say("Hardly any of the wave goes into the water: it tears a crown of spray off the top of it").pause(12);
+		s.say("The hollow under the charge closes and a column goes up").pause(30);
+		s.say("and what went up rains back down").pause(80);
+	}
+
+	/**
+	 * 4.1: spatter on a wall and prints on a floor. A pig killed in front of a stone wall, then one that walks out of
+	 * blood. From the game test {@code bloodMarks}.
+	 */
+	private static void spatter(Script s, Stage st) {
+		s.say("A stone floor and a wall behind it");
+		s.cmd("fill " + st.block(-4, -1, 1) + " " + st.block(4, -1, 7) + " minecraft:stone");
+		s.cmd("fill " + st.block(-4, 0, 6) + " " + st.block(4, 3, 6) + " minecraft:stone_bricks");
+		s.summon(st, "pig", "fgd_spatter_pig", 0, 0, 4.5, 90.0F, "");
+		s.pause(30).hold("minecraft:iron_sword").say("A pig in front of the wall, killed with a sword");
+		s.client(mc -> aim(mc, st.find(mc.level, EntityTypes.PIG, 0, 0, 4.5), null));
+		s.hit("fgd_spatter_pig", 100.0F).pause(50);
+		s.say("Drops that flew straight at the wall left round stains; the ones that came across it are drawn out the way they flew").pause(90);
+		s.say("Where more hit than a stain holds it runs on down, and stops in a bead or pools at the foot of the wall").pause(90);
+		s.say("On the floor a drop is a mark of its own until enough has fallen there to stand as a pool").pause(70);
+		s.say("A pool on the floor to the left, and a second pig standing in it");
+		s.client(mc -> pour(mc, st, -2.5, 0, 3, 6.0F));
+		s.pause(40);
+		s.cmd("summon minecraft:pig " + st.pos(-2.5, 0, 3) + " {Tags:[\"" + Script.TAG + "\",\"fgd_spatter_walker\"]}");
+		s.pause(30).hold("minecraft:air").say("Struck with a fist, it bolts: it leaves the prints of its cloven hooves, each fainter than the last");
+		s.hit("fgd_spatter_walker", 1.0F).pause(120);
+		s.say("Walk through the pool yourself: your prints are a shoe's. A cow's, a horse's, a wolf's and a chicken's are their own too").pause(100);
 	}
 
 	/**

@@ -110,7 +110,54 @@ public final class ArmorPieces {
 		return dye != 0 ? dye : dyeable.get().colorWhenUndyed().map(ARGB::opaque).orElse(0);
 	}
 
-	/** True if the piece has armour to draw. */
+private static final Identifier SHEEP_WOOL = Identifier.withDefaultNamespace("textures/entity/sheep/sheep_wool.png");
+private static final Identifier SHEEP_BABY_WOOL = Identifier.withDefaultNamespace("textures/entity/sheep/sheep_wool_baby.png");
+private static final Identifier SHEEP_UNDERCOAT = Identifier.withDefaultNamespace("textures/entity/sheep/sheep_wool_undercoat.png");
+/** The game's wool models, baked once from the model set they were baked from (a resource reload brings a new set). */
+private static net.minecraft.client.model.geom.@Nullable EntityModelSet woolFrom;
+private static final Model<?>[] WOOL = new Model<?>[3];
+
+/**
+ * A sheep's wool over {@code bodyPart}, ready to draw on the severed copy. The game draws a sheep in layers: the
+ * body itself, an undercoat in the sheep's colour on any sheep that is not white, and the fleece in that colour on
+ * one that has not been sheared. A part cut off takes its share of each with it, in the sheep's own colour: a brown
+ * sheep's head comes off brown. A fleece that fire has charred away is gone from the part too.
+ */
+public static List<Piece> wool(ModelParts.Posed posed, BodyPart bodyPart) {
+	List<Piece> pieces = new ArrayList<>();
+	if (!(posed.state() instanceof net.minecraft.client.renderer.entity.state.SheepRenderState sheep) || sheep.isInvisible) {
+		return pieces;
+	}
+
+	net.minecraft.client.model.geom.EntityModelSet models = Minecraft.getInstance().getEntityModels();
+	if (models != woolFrom) {
+		woolFrom = models;
+		WOOL[0] = new net.minecraft.client.model.animal.sheep.SheepFurModel(models.bakeLayer(net.minecraft.client.model.geom.ModelLayers.SHEEP_WOOL_UNDERCOAT));
+		WOOL[1] = new net.minecraft.client.model.animal.sheep.SheepFurModel(models.bakeLayer(net.minecraft.client.model.geom.ModelLayers.SHEEP_WOOL));
+		WOOL[2] = new net.minecraft.client.model.animal.sheep.SheepFurModel(models.bakeLayer(net.minecraft.client.model.geom.ModelLayers.SHEEP_BABY_WOOL));
+	}
+
+	int color = ARGB.opaque(sheep.getWoolColor());
+	if ((sheep.isJebSheep || sheep.woolColor != net.minecraft.world.item.DyeColor.WHITE) && !sheep.isBaby) {
+		layer(pieces, WOOL[0], bodyPart, SHEEP_UNDERCOAT, color);
+	}
+
+	dev.fluidgore.wound.Cremation.Charred charred = sheep.getData(dev.fluidgore.wound.Cremation.KEY);
+	if (!sheep.isSheared && (charred == null || !charred.shorn())) {
+		layer(pieces, WOOL[sheep.isBaby ? 2 : 1], bodyPart, sheep.isBaby ? SHEEP_BABY_WOOL : SHEEP_WOOL, color);
+	}
+
+	return pieces;
+}
+
+private static void layer(List<Piece> pieces, Model<?> model, BodyPart bodyPart, Identifier texture, int color) {
+	ModelPart source = ModelParts.index(model)[bodyPart.ordinal()];
+	if (source != null) {
+		pieces.add(new Piece(ModelParts.copy(source), texture, color, false));
+	}
+}
+
+/** True if the piece has armour to draw. */
 	public static boolean any(@Nullable List<Piece> pieces) {
 		return pieces != null && !pieces.isEmpty();
 	}
