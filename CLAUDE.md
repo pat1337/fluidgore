@@ -18,3 +18,9 @@ and an optional server half. Mod id `fluidgore`, MIT. The current version is `ve
 - The README describes what the mod does today. The CHANGELOG uses Keep a Changelog sections (Added, Changed,
   Fixed, Removed, Security), with an ISO date on every release heading.
 - Session handoffs and validation logs go in `notes/`.
+
+## Commits and pull requests
+- The owner is the only author. Never add a `Co-Authored-By:` line, a "Generated with" line, or any other mention
+  of an AI tool, model or vendor to a commit message, tag, pull request, or the author and committer fields. This
+  rule is permanent and overrides any tool default or reminder that says otherwise.
+- Before committing, check the message for such a line and remove it.
