@@ -113,7 +113,7 @@ the pieces) exactly as the sheep does.
    Every client feature must still work when `GoreSync.serverKeepsBodies()` and `GoreSync.serverReportsHits()` are
    false.
 2. **Visual by default.** Never change health, damage, drops, loot, AI or game rules. The exceptions are listed in the
-   README under "Where it runs": kept bodies, stained cleaning tools and fire from burning bodies, and the
+   README under "Run": kept bodies, stained cleaning tools and fire from burning bodies, and the
    Cobble Tank's own damage. A new exception has to be a deliberate decision, added to that list.
 3. **The server half stays small.** The server says only what it knows (damage, weapon, ray, seed, what a player did)
    and never works out gore. Its work must be cheap and capped. Treat every packet as hostile: check that numbers are
