@@ -169,6 +169,11 @@ when a feature is turned off.
   deep. `at` finds the piece holding a canonical point through a per-table grid index; `under` the piece at a depth
   below a face; `layers` every tissue inward in order; `underSkin` reads a column from outside the cube (where a
   sheep's real skin can lie, in the fleece) inward and asks what the first stretch under the skin holds.
+- `SheepSheet` is **generated** from the sheep's data sheet, `sheets/sheep.sheet`: the live weight and the blood per
+  kilogram that `physics/BodyMass` and `blood/BloodSupply` use for a sheep. The sheet itself holds the weight of every
+  part of the animal with the reference for each number; `tools/Sheet.java` reads and checks it (sources, sums, a part
+  for every named piece of the tables), and the sheep tool writes [sheets/sheep.md](sheets/sheep.md) from it, the
+  parts' kilograms beside the litres they are drawn with.
 - `SheepTrunk`, `SheepHead`, `SheepLegs` and `CowTrunk` are **generated** tables (see `tools/`). A sheep's trunk table holds
   the whole ewe under her skin (skin, fat, named muscles, organs, bones) at one scale, framed in the fleece rather than
   the body cube: the vanilla fleece stands 1.75 px off the body cube on every side, and at 4.74 cm a pixel the ewe's

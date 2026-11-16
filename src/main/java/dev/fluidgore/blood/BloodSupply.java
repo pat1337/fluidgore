@@ -1,6 +1,7 @@
 package dev.fluidgore.blood;
 
 import dev.fluidgore.GoreSystems;
+import dev.fluidgore.anatomy.SheepSheet;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.trigger.EntityFilter;
 import dev.fluidgore.wound.Cremation;
@@ -17,7 +18,8 @@ import org.jspecify.annotations.Nullable;
  * dessert-spoon or two a chicken really bleeds, and a cow empties a bucket and more onto the floor, then stops.
  * <ul>
  * <li>Blood volume: body weight ({@link Cremation#kilograms}) times the species' blood per kilogram (veterinary
- *     reference values: cattle 57 ml/kg, horse 76, pig 65, sheep 60, goat 70, chicken 70, dog 86, cat 55, people 70).</li>
+ *     reference values: cattle 57 ml/kg, horse 76, pig 65, goat 70, chicken 70, dog 86, cat 55, people 70; the sheep's
+ *     is its data sheet's, {@link SheepSheet#BLOOD_ML_PER_KG}, the one that names its source so far).</li>
  * <li>What can come out: a living body loses about a third before it dies of it (class IV haemorrhage, 35-40%), so
  *     that is as much as a survivor can bleed; vanilla decides when it dies. A dead body drains to about 60%, as a
  *     carcass does when it is bled at slaughter (the rest stays in the tissue). A body torn apart by a blast lets go of
@@ -37,7 +39,7 @@ public final class BloodSupply {
 			Map.entry("cow", 57.0F), Map.entry("mooshroom", 57.0F), Map.entry("horse", 76.0F), Map.entry("donkey", 70.0F),
 			Map.entry("mule", 72.0F), Map.entry("zombie_horse", 76.0F), Map.entry("skeleton_horse", 76.0F), Map.entry("camel", 65.0F),
 			Map.entry("llama", 65.0F), Map.entry("trader_llama", 65.0F), Map.entry("pig", 65.0F), Map.entry("hoglin", 65.0F),
-			Map.entry("sheep", 60.0F), Map.entry("goat", 70.0F), Map.entry("chicken", 70.0F), Map.entry("parrot", 80.0F),
+			Map.entry("sheep", SheepSheet.BLOOD_ML_PER_KG), Map.entry("goat", 70.0F), Map.entry("chicken", 70.0F), Map.entry("parrot", 80.0F),
 			Map.entry("rabbit", 57.0F), Map.entry("wolf", 86.0F), Map.entry("fox", 80.0F), Map.entry("cat", 55.0F),
 			Map.entry("ocelot", 60.0F), Map.entry("polar_bear", 70.0F), Map.entry("panda", 70.0F), Map.entry("dolphin", 70.0F),
 			Map.entry("turtle", 50.0F), Map.entry("frog", 50.0F), Map.entry("axolotl", 50.0F), Map.entry("squid", 40.0F),

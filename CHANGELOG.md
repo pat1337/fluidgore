@@ -7,6 +7,12 @@ All notable changes to Fluid Gore are listed here. The format follows
 ## [Unreleased]
 
 ### Added
+- The sheep's data sheet, `sheets/sheep.sheet`: its live weight, its blood, and the weight of each part of it (the
+  muscles and bones by name, the fat depots, the organs, the stomachs and what is in them, the hide, the head), every
+  number with the reference it was read from. [docs/sheets/sheep.md](docs/sheets/sheep.md) sets each part's kilograms
+  beside the litres it is drawn with in the game, so it can be seen where the picture is larger or smaller than the
+  animal. The anatomy tool refuses a sheet whose parts do not add up to the live weight, and one that leaves a named
+  piece of the anatomy without a part.
 - Blood on the ground is a liquid measured in litres. It runs to lower ground, spreads on the flat until the film is
   too thin to move, goes round walls, runs down steps, pours off ledges, fills a pit from the bottom and runs over its
   rim. None is made or lost on the way: what lies on the floor and what has soaked into it add up to what came out of
@@ -58,6 +64,10 @@ All notable changes to Fluid Gore are listed here. The format follows
   small animals leave smaller prints.
 
 ### Changed
+- A sheep is now one measured animal: a mature Merino ewe of 49 kg, holding 2.9 litres of blood (59 ml a kilogram).
+  It used to be 70 kg with 4.2 litres, from no named source, so a sheep now leaves about a third less blood and burns
+  a little sooner. The weight is the mean of sixteen ewes weighed and dissected for Butterfield's *New Concepts of
+  Sheep Growth* (1988), and the blood volume is Hansard's measurement on yearling sheep (1956).
 - Spatter is drawn in the same pixels as the block it lies on. At 16x a drop is a single pixel or a small cluster on
   the block's own grid, the same grid the pools use, instead of a smooth splat laid over the texture. Drops thrown
   across a surface still land drawn out the way they flew. A second drop on the same spot no longer stacks a second

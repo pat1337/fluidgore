@@ -17,6 +17,8 @@ jobs:
           distribution: temurin
           java-version: 25
           cache: gradle
+      - name: Check the data sheets
+        run: java tools/Sheet.java sheets/sheep.sheet
       - name: Build
         run: ./gradlew build
       - uses: actions/upload-artifact@v7

@@ -1,0 +1,264 @@
+# The sheep's data sheet: one measured animal.
+#
+# What a sheep weighs, how much blood it holds and what each part of it weighs, each number with the reference it was
+# read from. `java tools/SheepAnatomyModels.java art/sheep_anatomy` reads this file, checks it (every number has a
+# source, the parts add up to the live weight, every named piece of the anatomy tables belongs to a part) and writes
+# `anatomy/SheepSheet.java` for the mod and `docs/sheets/sheep.md` for people. `java tools/Sheet.java sheets/sheep.sheet`
+# runs the checks alone.
+#
+# Columns are separated by `|`. Lines starting with `#` and empty lines are skipped.
+
+[animal]
+id      | minecraft:sheep
+subject | A mature Australian Merino ewe, shorn, weighed straight from feed: the mean of 16 ewes fed as much as they would eat until they stopped growing, then dissected (Thompson 1983, as tabulated by Butterfield 1988, chapter 4).
+
+[sources]
+B88 | Butterfield, R. M. (1988). New Concepts of Sheep Growth. Department of Veterinary Anatomy, University of Sydney. ISBN 0 7316 1180 2. Open access: https://hdl.handle.net/1813/2095. Its tables of mature Merino ewes are from Thompson, J. M. (1983), PhD thesis, University of Sydney; Thompson, Butterfield and Perry (1985), Animal Production 40:71-84; and Perry, Thompson and Butterfield (1987). Its mature Merino rams are from Butterfield et al. (1983), Animal Production 36:29-37, 36:165-174, 36:461-470 and 37:423-431; its Dorset Horn rams and wethers from Butterfield et al. (1984), Animal Production 39:251-258.
+H56 | Hansard, S. L. (1956). Residual organ blood volume of cattle, sheep and swine. Proceedings of the Society for Experimental Biology and Medicine 91:31-34. doi:10.3181/00379727-91-22160.
+
+# key | value | source | where in the source, and what it was measured on
+[body]
+live_kg         | 49.0 | B88 | Table 4.b.1, p. 81: liveweight of mature Merino ewes, N = 16 (shorn full liveweight, Table 4.b.2).
+blood_ml_per_kg | 59   | H56 | Table I: total blood volume of yearling sheep, 5.9 ml per 100 g body weight, N = 8, mean 118 lb, by red cells labelled with phosphorus-32.
+
+# The parts of the live weight. Each row is a part, the part it is a share of (`live` for the whole animal), a rule,
+# the rule's number, its source and where the number stands in it.
+#   kg       the weight itself, in kilograms; `a/b*c` is worked out
+#   percent  that many hundredths of the parent's weight
+#   share    `a/b` of the parent's weight
+#   rest     what is left of the parent once its other parts are taken off; the number is the most it may be, as a
+#            percentage of the parent, and the check fails if it is negative or greater
+#   outside  not part of the live weight; no number
+# key | parent | rule | number | source | where in the source
+[parts]
+
+# Measured on the ewes themselves.
+muscle | live | kg | 11.76 | B88 | Table 4.b.1: muscle of the whole carcase, ewes N = 16. The muscles of the head are not in it (Appendix 2, p. 134).
+bone   | live | kg | 2.74  | B88 | Table 4.b.1: bone of the whole carcase, ewes N = 16: "all the bones included in the commercial carcase" (Appendix 1c), so not the skull, nor the bones below the knee and the hock.
+fat_subcutaneous  | live | kg | 6.14 | B88 | Table 4.e.1, p. 94: subcutaneous fat, ewes N = 16.
+fat_intermuscular | live | kg | 4.84 | B88 | Table 4.e.1: intermuscular fat, ewes N = 16.
+fat_kidney        | live | kg | 2.79 | B88 | Table 4.e.1: kidney fat, ewes N = 16.
+fat_omental       | live | kg | 3.16 | B88 | Table 4.e.1: omental fat, ewes N = 16.
+fat_mesenteric    | live | kg | 1.30 | B88 | Table 4.e.1: mesenteric fat, ewes N = 16.
+fat_udder         | live | kg | 0.37 | B88 | Table 4.e.1: udder fat ("Scrotal/Udder"), ewes N = 16.
+
+# The named muscles. The ewes' muscles were weighed in nine groups (Table 4.c.1, p. 89, N = 15). Within a group a muscle
+# takes the share it has in the mature rams of the small Merino strain (Appendix 5 Table 2, pp. 146-147, N = 6, grams
+# in the half carcase): muscle / its group * the ewes' group in kilograms.
+m_biceps_femoris   | muscle | kg | 447.0/2515.5*3.43  | B88 | Group 1, proximal hind limb: biceps femoris.
+m_gluteus_medius   | muscle | kg | 282.2/2515.5*3.43  | B88 | Group 1: gluteus medius.
+m_semimembranosus  | muscle | kg | 397.6/2515.5*3.43  | B88 | Group 1: semimembranosus.
+m_semitendinosus   | muscle | kg | 188.2/2515.5*3.43  | B88 | Group 1: semitendinosus.
+m_adductor         | muscle | kg | 145.8/2515.5*3.43  | B88 | Group 1: adductor femoris.
+m_quadriceps       | muscle | kg | 587.2/2515.5*3.43  | B88 | Group 1: rectus femoris 209.1 + vastus lateralis 216.0 + vastus medialis 78.0 + vastus intermedius 84.1.
+m_gastrocnemius    | muscle | kg | 142.0/436.4*0.57   | B88 | Group 2, distal hind limb: gastrocnemius et soleus.
+m_shank_extensors  | muscle | kg | 71.6/436.4*0.57    | B88 | Group 2: "Mm. extensors".
+m_longissimus      | muscle | kg | 901.2/1570.9*1.94  | B88 | Group 3, surrounding the spinal column: longissimus thoracis et lumborum.
+m_psoas            | muscle | kg | 170.7/1570.9*1.94  | B88 | Group 3: psoas major 119.4 + psoas minor 51.3.
+m_spinalis         | muscle | kg | 220.5/1570.9*1.94  | B88 | Group 3: spinalis cervicis et thoracis.
+m_cutaneus_trunci  | muscle | kg | 270.5/1111.97*1.12 | B88 | Group 4, abdominal wall: cutaneus trunci.
+m_external_oblique | muscle | kg | 204.6/1111.97*1.12 | B88 | Group 4: obliquus externus abdominis.
+m_internal_oblique | muscle | kg | 132.8/1111.97*1.12 | B88 | Group 4: obliquus internus abdominis.
+m_transversus_abdominis | muscle | kg | 181.3/1111.97*1.12 | B88 | Group 4: transversus abdominis.
+m_rectus_abdominis | muscle | kg | 267.1/1111.97*1.12 | B88 | Group 4: rectus abdominis.
+m_infraspinatus    | muscle | kg | 187.2/1114.2*1.31  | B88 | Group 5, proximal forelimb: infraspinatus.
+m_supraspinatus    | muscle | kg | 197.3/1114.2*1.31  | B88 | Group 5: supraspinatus.
+m_subscapularis    | muscle | kg | 100.5/1114.2*1.31  | B88 | Group 5: subscapularis.
+m_triceps          | muscle | kg | 347.3/1114.2*1.31  | B88 | Group 5: triceps brachii, caput longum 249.7 + caput laterale 76.9 + caput mediale 20.7.
+m_forearm_extensors | muscle | kg | 107.2/293.2*0.33  | B88 | Group 6, distal forelimb: extensor carpi radialis 73.0 + extensor digitorum tertii 11.1 + communis 10.1 + lateralis 10.7 + abductor pollicis longus 2.3.
+m_forearm_flexors  | muscle | kg | 170.9/293.2*0.33   | B88 | Group 6: flexor digitorum profundus 72.6 + ulnaris lateralis 31.9 + flexor digitorum sublimis 27.4 + flexor carpi ulnaris 26.5 + flexor carpi radialis 12.5.
+m_latissimus_dorsi | muscle | kg | 161.1/889.8*0.72   | B88 | Group 7, thorax to forelimb: latissimus dorsi.
+m_serratus_ventralis | muscle | kg | 205.8/889.8*0.72 | B88 | Group 7: serratus ventralis thoracis.
+m_deep_pectoral    | muscle | kg | 325.1/889.8*0.72   | B88 | Group 7: pectoralis profundus.
+m_superficial_pectoral | muscle | kg | 133.3/889.8*0.72 | B88 | Group 7: pectoralis superficialis.
+m_brachiocephalicus | muscle | kg | 156.4/794.0*0.88  | B88 | Group 8, neck to forelimb: brachiocephalicus.
+m_intercostals     | muscle | kg | 434.8/1340.2*1.12  | B88 | Group 9, neck and thorax: intercostales externi et interni.
+muscle_other       | muscle | rest | 100 | B88 | Every muscle of the carcase the anatomy does not name.
+
+# The bones: each row of the ewes' table as a percentage of their total bone (Table 4.d.2, p. 91, N = 16).
+bone_femur       | bone | percent | 9.1  | B88 | Femur.
+bone_patella     | bone | percent | 0.6  | B88 | Patella.
+bone_tibia       | bone | percent | 7.8  | B88 | Tibia.
+bone_tarsus      | bone | percent | 2.9  | B88 | Tarsus.
+bone_pelvis      | bone | percent | 12.5 | B88 | Pelvis + sacrum.
+bone_lumbar      | bone | percent | 6.2  | B88 | Lumbar vertebrae.
+bone_thoracic    | bone | percent | 43.8 | B88 | Thoracic vertebrae + ribs. The ewes' table has no row for the cervical vertebrae or the sternum and still sums to 100; in the same book's rams, thoracic vertebrae + ribs, cervical vertebrae and sternum together are 44.9 and 47.1 (Table 2.d.2), so this row is read as holding all three.
+bone_scapula     | bone | percent | 4.8  | B88 | Scapula.
+bone_humerus     | bone | percent | 6.7  | B88 | Humerus.
+bone_radius_ulna | bone | percent | 5.6  | B88 | Radius and ulna. The ewes' table has no row for the carpus, which is a bone of the carcase; it is read as weighed here.
+
+# Not tabulated for the ewes: each is the share of shorn full liveweight it has in the book's mature 100 kg Merino ram
+# (Table 1.f.1, p. 28, grams in 100 kg), taken as the same share of the ewe.
+oesophagus       | live | percent | 0.075 | B88 | Table 1.f.1: oesophagus, emptied.
+rumino_reticulum | live | percent | 0.91  | B88 | Table 1.f.1: rumino-reticulum, emptied.
+omasum           | live | percent | 0.10  | B88 | Table 1.f.1: omasum, emptied.
+abomasum         | live | percent | 0.22  | B88 | Table 1.f.1: abomasum, emptied.
+small_intestine  | live | percent | 0.47  | B88 | Table 1.f.1: small intestine, emptied.
+large_intestine  | live | percent | 0.49  | B88 | Table 1.f.1: large intestine, emptied.
+content_rumino_reticulum | live | percent | 4.24  | B88 | Table 1.f.1: rumino-reticular content, on a pelleted ration.
+content_omasum           | live | percent | 0.145 | B88 | Table 1.f.1: omasum content.
+content_abomasum         | live | percent | 0.34  | B88 | Table 1.f.1: abomasum content.
+content_small_intestine  | live | percent | 0.57  | B88 | Table 1.f.1: small intestine content.
+content_large_intestine  | live | percent | 0.81  | B88 | Table 1.f.1: large intestine content.
+liver    | live | percent | 1.01 | B88 | Table 1.f.1: liver.
+kidneys  | live | percent | 0.19 | B88 | Table 1.f.1: kidneys.
+spleen   | live | percent | 0.11 | B88 | Table 1.f.1: spleen.
+heart    | live | percent | 0.29 | B88 | Table 1.f.1: heart.
+trachea  | live | percent | 0.07 | B88 | Table 1.f.1: trachea.
+lungs    | live | percent | 0.47 | B88 | Table 1.f.1: lungs.
+thyroid  | live | percent | 0.02 | B88 | Table 1.f.1: thyroid. The book's Dorset Horn rams gave 7 g against this 20 g, and it calls the figure in doubt.
+pancreas | live | percent | 0.06 | B88 | Table 1.f.1: pancreas.
+blood_let | live | percent | 3.42 | B88 | Table 1.f.1: blood, as collected at slaughter. It is less than the blood the body holds (its blood volume is given with the animal, above): the rest stays in the carcase and the organs and is weighed with them.
+hide     | live | percent | 8.98 | B88 | Table 1.f.1: hide, shorn.
+distal_limbs | live | percent | 1.49 | B88 | Table 1.f.1: distal limbs, cut at the joints below the knee and the hock.
+
+# The head. The rams' heads carry horns that "dominate the head weight" (p. 76), so the ewe's is the share a head has
+# in the book's mature Dorset Horn wethers.
+head | live | share | 3.36/95.89 | B88 | Table 3.f.5: head of wethers, 3.36 kg, N = 7; Table 3.c.1: their shorn full liveweight, 95.89 kg.
+
+# Taken as weighed, not scaled: a brain and an eye do not follow the weight of the body (the Dorset Horn rams and wethers
+# of Table 3.f.3, about 96 to 100 kg, gave 93 and 98 g of brain and 31 g of eyes).
+brain | live | kg | 0.100 | B88 | Table 1.f.1: brain of a mature Merino ram, 100 g.
+eyes  | live | kg | 0.030 | B88 | Table 1.f.1: both eyes of a mature Merino ram, 30 g.
+
+# What the book does not list. Its own 100 kg ram leaves 5.76 kg in 100 unlisted (Tables 1.b.1, 1.e.1 and 1.f.1 sum to
+# 94.24 kg), so the ewe may leave no more than 6 in 100.
+unitemised | live | rest | 6 | B88 | The tail, the bladder and the urine in it, the reproductive tract, the diaphragm, the thymus and adrenal glands, the great vessels, the spinal cord, and whatever else the tables do not name.
+
+fleece | live | outside | | B88 | The live weight is shorn (Table 4.b.2), so the wool is not in it. No reference weighed these ewes' fleeces.
+space  | live | outside | | B88 | A cavity: air, not tissue.
+ram    | live | outside | | B88 | A ram's own organs. The sheet's animal is the ewe; the ram is not weighed yet.
+
+# Which part each named piece of the anatomy tables belongs to. `head/` before a name is that name in the head's table
+# only, and `head/*` is every other name in it; a name with no row of its own there falls to `head/*`.
+# name | part | note
+[objects]
+other_muscle        | muscle_other |
+sternocephalicus    | muscle_other | Not among the muscles the book weighed singly.
+neck_extensors      | muscle_other | Several muscles drawn as one.
+biceps_femoris      | m_biceps_femoris |
+gluteus_medius      | m_gluteus_medius |
+semimembranosus     | m_semimembranosus |
+semitendinosus      | m_semitendinosus |
+adductor            | m_adductor |
+quadriceps          | m_quadriceps |
+gastrocnemius       | m_gastrocnemius |
+achilles_tendon     | m_gastrocnemius | The tendon of the gastrocnemius.
+shank_extensors     | m_shank_extensors |
+longissimus         | m_longissimus |
+psoas               | m_psoas |
+spinalis            | m_spinalis |
+cutaneous_trunci    | m_cutaneus_trunci |
+external_oblique    | m_external_oblique |
+internal_oblique    | m_internal_oblique |
+transversus_abdominis | m_transversus_abdominis |
+rectus_abdominis    | m_rectus_abdominis |
+infraspinatus       | m_infraspinatus |
+supraspinatus       | m_supraspinatus |
+subscapularis       | m_subscapularis |
+triceps             | m_triceps |
+forearm_extensors   | m_forearm_extensors |
+forearm_flexors     | m_forearm_flexors |
+latissimus_dorsi    | m_latissimus_dorsi |
+serratus_ventralis  | m_serratus_ventralis |
+deep_pectoral       | m_deep_pectoral |
+superficial_pectoral | m_superficial_pectoral |
+brachiocephalicus   | m_brachiocephalicus |
+intercostals        | m_intercostals |
+
+femur               | bone_femur |
+kneecap             | bone_patella |
+tibia               | bone_tibia |
+hock_tarsus         | bone_tarsus |
+point_of_hock       | bone_tarsus | The calcaneus, a bone of the tarsus.
+hip_bone            | bone_pelvis |
+pin_bone            | bone_pelvis |
+pubic_bone          | bone_pelvis |
+hip_socket          | bone_pelvis |
+sacrum              | bone_pelvis |
+lumbar_spine        | bone_lumbar |
+thoracic_spine      | bone_thoracic |
+withers             | bone_thoracic | The spines of the first thoracic vertebrae.
+rib                 | bone_thoracic | The ribs with their cartilages.
+breastbone          | bone_thoracic |
+xiphoid             | bone_thoracic | The cartilage at the end of the sternum.
+neck_spine          | bone_thoracic |
+shoulder_blade      | bone_scapula |
+shoulder_joint      | bone_scapula | The socket of the scapula.
+humerus             | bone_humerus |
+radius              | bone_radius_ulna |
+ulna                | bone_radius_ulna |
+point_of_elbow      | bone_radius_ulna | The olecranon of the ulna.
+knee_carpus         | bone_radius_ulna |
+
+subcutaneous_fat    | fat_subcutaneous |
+brisket_fat         | fat_subcutaneous |
+tailhead_fat        | fat_subcutaneous |
+kidney_fat          | fat_kidney |
+omentum             | fat_omental |
+mesentery           | fat_mesenteric |
+udder               | fat_udder | The book weighs the udder of a dry ewe as a depot of fat.
+
+esophagus           | oesophagus |
+rumen               | rumino_reticulum |
+reticulum           | rumino_reticulum |
+omasum              | omasum |
+abomasum            | abomasum |
+small_intestine     | small_intestine |
+caecum              | large_intestine |
+colon               | large_intestine |
+spiral_colon        | large_intestine |
+liver               | liver | With its gallbladder and the veins drawn in it.
+kidney              | kidneys | With the vessels drawn at their hila.
+spleen              | spleen |
+heart               | heart | With the roots of the great vessels and the fat drawn on it.
+windpipe            | trachea |
+lung                | lungs |
+pancreas            | pancreas |
+skin                | hide | The skin of the legs below the knee and the hock is weighed with the distal limbs; it is not drawn apart.
+teat                | hide |
+vulva               | hide |
+
+cannon_bone         | distal_limbs |
+fetlock             | distal_limbs |
+pastern             | distal_limbs |
+sesamoid            | distal_limbs |
+dewclaws            | distal_limbs |
+hoof                | distal_limbs |
+flexor_tendon       | distal_limbs |
+
+diaphragm           | unitemised |
+thymus              | unitemised |
+adrenal_gland       | unitemised |
+aorta               | unitemised |
+vena_cava           | unitemised |
+spinal_cord         | unitemised |
+tail_vertebrae      | unitemised |
+bladder             | unitemised |
+ureter              | unitemised |
+urethra             | unitemised |
+uterus              | unitemised |
+cervix              | unitemised |
+vagina              | unitemised |
+ovary               | unitemised |
+oviduct             | unitemised |
+
+testis              | ram |
+epididymis          | ram |
+vas_deferens        | ram |
+spermatic_cord      | ram |
+vesicular_gland     | ram |
+scrotum             | ram |
+penis               | ram |
+prepuce             | ram |
+
+head/cerebrum       | brain |
+head/cerebellum     | brain |
+head/brainstem      | brain |
+head/eye            | eyes |
+head/thyroid        | thyroid |
+head/thymus         | unitemised | A lamb's thymus reaches up the neck.
+head/wool           | fleece |
+head/nasal_cavity   | space |
+head/pharynx        | space |
+head/*              | head | The head as cut off at the joint with the first vertebra: skull, jaw, teeth, tongue, the muscles of chewing, its skin and fat. The book does not weigh them singly.

@@ -236,6 +236,9 @@ the blast kills them.
   its named muscles (the eye of the loin, the fillet, the chump, the shoulder, the leg and the cheek, the flank in
   its layers), and its legs carry their own bones, tendons, muscles and hooves. Pigs and cows have their own, simpler
   anatomy.
+- **A measured sheep.** A sheep weighs what a mature Merino ewe weighs, 49 kg, and holds her 2.9 litres of blood.
+  Both numbers, and the weight of each of her parts, are in the sheep's data sheet with the reference each was read
+  from: [docs/sheets/sheep.md](docs/sheets/sheep.md).
 - **Cut faces.** A blade through an organ shows its inside: a liver's parenchyma, a lung's sponge, a heart's
   chambers, a kidney's cortex and medulla.
 - **Organs are objects.** A sheep's or cow's liver, lungs and kidneys come out whole. You can carry, throw, punch,
@@ -548,6 +551,11 @@ generators.
 - A sheep's insides keep the real animal's proportions, which are taller and a little longer than the vanilla body:
   the top of its back, the floor of its belly, its brisket and its rump lie inside the wool. A shorn sheep is a thinner
   animal than its insides, so those parts are not drawn in place on it; a blast still throws them.
+- A sheep is drawn larger than it weighs. Its pieces together fill 142 litres, and the ewe they are weighed from is
+  49 kg: her anatomy was laid out on the frame of a ewe of about 65 kg, and nothing can be drawn thinner than half a
+  pixel. The hide takes 25 litres for its 4.4 kg and the fat under it 22 litres for 6.1 kg, while the fat round the
+  kidneys is a tenth of a litre for 2.8 kg. The sheep's data sheet lists every part.
+- A sheep's weight and blood are a ewe's. A ram weighs the same, a lamb 15% of it, and the fleece is not weighed.
 - A sheep's head is at its own scale, about half the body's centimetres to a pixel: the vanilla head is drawn big for
   the body, so the skull inside it is a real skull in a head twice as large as it should be, and the muzzle is
   squashed harder than the braincase. The eyes inside the head lie on its sides where a sheep's are, further back than

@@ -209,6 +209,8 @@ public final class SheepAnatomyModels extends Quadruped {
 
 	public static void main(String[] args) throws IOException {
 		Path out = Path.of(args.length > 0 ? args[0] : "art/sheep_anatomy");
+		// The data sheet first: a sheet that does not hold together stops the run before anything is written.
+		Sheet sheet = Sheet.read(Path.of("sheets/sheep.sheet"));
 		Files.createDirectories(out.resolve("textures"));
 		Files.createDirectories(out.resolve("previews"));
 		build();
@@ -287,16 +289,102 @@ public final class SheepAnatomyModels extends Quadruped {
 		LAMB = false;
 		MALE = false;
 
+		String trunkText = trunkJava(tables, mixed, ram, lambs.get(0), lambs.get(1));
+		Path legArt = art.resolve("sheep_anatomy_legs_" + MOD_RES + "x");
+		List<String> fore = legTable(legArt, true, MOD_RES);
+		List<String> hind = legTable(legArt, false, MOD_RES);
+		String legsText = legsJava(fore, hind);
+		String headText = headJava();
+		// Every named piece must have its part of the sheet before a table is written.
+		Map<String, Double> drawn = new LinkedHashMap<>();
+		Map<String, Set<String>> pieces = new LinkedHashMap<>();
+		Set<String> named = new java.util.TreeSet<>();
+		place(sheet, "trunk", trunkText, named);
+		place(sheet, "leg", legsText, named);
+		place(sheet, "head", headText, named);
+		sheet.used(named);
+		// What the grown ewe is drawn with: her trunk, her head and her four legs (the tables hold the right legs).
+		double px = FLEECE_CM * FLEECE_CM * FLEECE_CM / 1.25 * 0.75;
+		draw(sheet, "trunk", mixed, c -> (c[3] - c[0]) * (c[4] - c[1]) * (c[5] - c[2]) * px, drawn, pieces);
+		double leg = 2 * LEG_CM[0] * LEG_CM[1] * LEG_CM[2];
+		draw(sheet, "leg", fore, c -> (c[3] - c[0]) * (c[4] - c[1]) * (c[5] - c[2]) * leg, drawn, pieces);
+		draw(sheet, "leg", hind, c -> (c[3] - c[0]) * (c[4] - c[1]) * (c[5] - c[2]) * leg, drawn, pieces);
+		draw(sheet, "head", HEAD_EWE, SheepAnatomyModels::headCubeCm, drawn, pieces);
+
 		Path java = Path.of("src/main/java/dev/fluidgore/anatomy/SheepTrunk.java");
-		Files.writeString(java, trunkJava(tables, mixed, ram, lambs.get(0), lambs.get(1)), StandardCharsets.UTF_8);
+		Files.writeString(java, trunkText, StandardCharsets.UTF_8);
 		System.out.println("Wrote " + java.toAbsolutePath());
 		Path legs = Path.of("src/main/java/dev/fluidgore/anatomy/SheepLegs.java");
-		Path legArt = art.resolve("sheep_anatomy_legs_" + MOD_RES + "x");
-		Files.writeString(legs, legsJava(legTable(legArt, true, MOD_RES), legTable(legArt, false, MOD_RES)), StandardCharsets.UTF_8);
+		Files.writeString(legs, legsText, StandardCharsets.UTF_8);
 		System.out.println("Wrote " + legs.toAbsolutePath());
 		Path headJava = Path.of("src/main/java/dev/fluidgore/anatomy/SheepHead.java");
-		Files.writeString(headJava, headJava(), StandardCharsets.UTF_8);
+		Files.writeString(headJava, headText, StandardCharsets.UTF_8);
 		System.out.println("Wrote " + headJava.toAbsolutePath());
+		String tool = "tools/SheepAnatomyModels.java";
+		Path sheetJava = Path.of("src/main/java/dev/fluidgore/anatomy/SheepSheet.java");
+		Files.writeString(sheetJava, sheet.java(tool), StandardCharsets.UTF_8);
+		System.out.println("Wrote " + sheetJava.toAbsolutePath());
+		Path page = Path.of("docs/sheets/sheep.md");
+		Files.createDirectories(page.getParent());
+		Files.writeString(page, sheet.markdown(tool, drawn, pieces), StandardCharsets.UTF_8);
+		System.out.println("Wrote " + page.toAbsolutePath());
+	}
+
+	/** A table line's cube and name: {@code p(Kind.X, x0, y0, z0, x1, y1, z1, ... "name"}. */
+	static final java.util.regex.Pattern PIECE = java.util.regex.Pattern
+			.compile("p\\(Kind\\.[A-Z_]+, (-?[0-9.]+)F, (-?[0-9.]+)F, (-?[0-9.]+)F, (-?[0-9.]+)F, (-?[0-9.]+)F, (-?[0-9.]+)F,[^\"]*\"([a-z_0-9]+)\"");
+
+	/**
+	 * Checks that the sheet places every piece a generated table names (all its tables: the grains, the ram, the lambs),
+	 * and notes each name, plain and as {@code table/name}, in {@code named}.
+	 */
+	static void place(Sheet sheet, String table, String java, Set<String> named) {
+		Set<String> names = new java.util.TreeSet<>();
+		java.util.regex.Matcher m = PIECE.matcher(java);
+		while (m.find()) {
+			names.add(m.group(7));
+		}
+
+		if (names.isEmpty()) {
+			throw new IllegalStateException("no pieces read from the " + table + " table");
+		}
+
+		sheet.cover(table, names);
+		for (String name : names) {
+			named.add(name);
+			named.add(table + "/" + name);
+		}
+	}
+
+	/**
+	 * Adds up what a table's lines are drawn with, part of the sheet by part: {@code cm3} gives a cube's cubic centimetres
+	 * at the table's own scale from its {x0, y0, z0, x1, y1, z1}; {@code drawn} takes the litres and {@code pieces} the names.
+	 */
+	static void draw(Sheet sheet, String table, List<String> lines, java.util.function.ToDoubleFunction<double[]> cm3, Map<String, Double> drawn,
+			Map<String, Set<String>> pieces) {
+		for (String line : lines) {
+			java.util.regex.Matcher m = PIECE.matcher(line);
+			if (!m.lookingAt()) {
+				throw new IllegalStateException("not a table line: " + line);
+			}
+
+			double[] c = new double[6];
+			for (int i = 0; i < 6; i++) {
+				c[i] = Double.parseDouble(m.group(i + 1));
+			}
+
+			String part = sheet.partOf(table, m.group(7)).key;
+			drawn.merge(part, Math.abs(cm3.applyAsDouble(c)) / 1000.0, Double::sum);
+			pieces.computeIfAbsent(part, k -> new java.util.TreeSet<>()).add(m.group(7));
+		}
+	}
+
+	/** The cubic centimetres of a head table cube, back through {@link #headLine} and the head's warp ({@link #headGrid}). */
+	static double headCubeCm(double[] c) {
+		double across = HEAD_CM_ACROSS * (c[3] - c[0]) * 3 / 4;
+		double up = stretch((4 - c[1]) * 3 / 4, HEAD_UP) - stretch((4 - c[4]) * 3 / 4, HEAD_UP);
+		double along = stretch(c[5], HEAD_ALONG) - stretch(c[2], HEAD_ALONG);
+		return across * up * along;
 	}
 
 	/**
@@ -826,6 +914,12 @@ public final class SheepAnatomyModels extends Quadruped {
 	/** The side of a patch the head's skin, fat, filler muscle and wool tear into, in canonical pixels. */
 	static final double HEAD_PATCH = 3.0;
 
+	/** The grown head's table lines, kept by {@link #headJava} for the data sheet's page. */
+	static List<String> HEAD_EWE;
+
+	/** A canonical pixel of the leg tables in the ewe's centimetres (across, down, along), set by {@link #legTable}. */
+	static double[] LEG_CM;
+
 	/** {@code anatomy/SheepHead.java}: the mixed head, half pixels with {@link #HEAD_HERO} at quarter pixels. */
 	static String headJava() {
 		SMALL_BOXES = n -> PATCHES.contains(n) || n.equals("wool");
@@ -833,6 +927,7 @@ public final class SheepAnatomyModels extends Quadruped {
 		Grid c = headGrid(MOD_RES, keys);
 		Grid f = headGrid(MOD_RES * 2, keys);
 		List<String> lines = mixed(c, keys.get(MOD_RES), f, keys.get(MOD_RES * 2), HEAD_HERO, SheepAnatomyModels::headLine);
+		HEAD_EWE = lines;
 		LAMB = true;
 		Map<Integer, String[][]> lambKeys = new LinkedHashMap<>();
 		Grid lc = headGrid(MOD_RES, lambKeys);
@@ -956,7 +1051,8 @@ public final class SheepAnatomyModels extends Quadruped {
 		double centreX = fore ? 7.8 : 8.2;
 		double centreZ = fore ? -32.0 : 30.9;
 		// 1.5 cm a pixel across and along (a sheep's cannon is about 3 cm thick, its forearm 5), 3 cm a pixel down.
-		SCALE = new double[] {-1.5, -(top - ground) / 12, 1.5};
+		LEG_CM = new double[] {1.5, (top - ground) / 12, 1.5};
+		SCALE = new double[] {-LEG_CM[0], -LEG_CM[1], LEG_CM[2]};
 		SHIFT = new double[] {centreX, top, centreZ};
 		CLIP_LO = new double[] {-2, 0, -2};
 		CLIP_HI = new double[] {2, 12, 2};

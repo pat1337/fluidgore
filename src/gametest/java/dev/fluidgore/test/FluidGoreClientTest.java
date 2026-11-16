@@ -165,6 +165,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			tankOverhaul(context, singleplayer.getServer());
 			fragmentContacts(context, singleplayer.getServer());
 			bloodVolumes(context, singleplayer.getServer());
+			sheepSheet(context, singleplayer.getServer());
 			bloodFluid(context, singleplayer.getServer());
 			bloodUses(context, singleplayer.getServer());
 			bloodMarks(context, singleplayer.getServer());
@@ -228,6 +229,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			case "pigPit" -> pigPit(context, server);
 			case "pressureVessel" -> pressureVessel(context, server);
 			case "bloodVolumes" -> bloodVolumes(context, server);
+			case "sheepSheet" -> sheepSheet(context, server);
 			case "bloodFluid" -> bloodFluid(context, server);
 			case "bloodUses" -> bloodUses(context, server);
 			case "bloodMarks" -> bloodMarks(context, server);
@@ -9966,6 +9968,76 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		check(lost[2] > lost[0] * 20.0F, "the cow bled no more than twenty chickens: " + lost[2] + " vs " + lost[0]);
 		context.runOnClient(mc -> GoreConfig.get().goreLevel = before);
 		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("tp @a 100.5 -60 -15.5 0 30");
+		context.waitTicks(40);
+	}
+
+	/**
+	 * The sheep is its data sheet's animal ({@code sheets/sheep.sheet}): a grown sheep weighs the sheet's live weight and
+	 * holds the sheet's blood for that weight, a lamb the young's share of both. The grown one is then cut down and left
+	 * to bleed out: it must bleed, and no more than a dead body drains (60%) of what the sheet gives it.
+	 */
+	private static void sheepSheet(ClientGameTestContext context, TestServerContext server) {
+		GoreLevel before = context.computeOnClient(mc -> GoreConfig.get().goreLevel);
+		context.runOnClient(mc -> GoreConfig.get().goreLevel = GoreLevel.EXTREME);
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("fill 136 -60 -2 144 -57 6 minecraft:air");
+		server.runCommand("fill 136 -61 -2 144 -61 6 minecraft:smooth_stone");
+		server.runCommand("tp @a 140.5 -60 -1.5 0 30");
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:diamond_sword");
+		context.waitTicks(30);
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
+		server.runCommand("summon minecraft:sheep 139.5 -60 3.5 {NoAI:1b,Tags:[\"sheet\"]}");
+		server.runCommand("summon minecraft:sheep 142.5 -60 3.5 {NoAI:1b,Age:-24000,Tags:[\"sheet\"]}");
+		context.waitTicks(20);
+		// {grown kg, grown litres, grown id, lamb kg, lamb litres}
+		float[] found = context.computeOnClient(mc -> {
+			float[] f = new float[5];
+			for (Entity e : mc.level.entitiesForRendering()) {
+				if (e instanceof net.minecraft.world.entity.animal.sheep.Sheep sheep) {
+					int at = sheep.isBaby() ? 3 : 0;
+					f[at] = dev.fluidgore.physics.BodyMass.kilograms(sheep);
+					f[at + 1] = dev.fluidgore.blood.BloodSupply.litres(sheep);
+					if (!sheep.isBaby()) {
+						f[2] = sheep.getId();
+					}
+				}
+			}
+
+			return f;
+		});
+		float kg = dev.fluidgore.anatomy.SheepSheet.LIVE_KG;
+		float litres = kg * dev.fluidgore.anatomy.SheepSheet.BLOOD_ML_PER_KG / 1000.0F;
+		System.out.printf(java.util.Locale.ROOT, "[FluidGoreTest] sheet: a sheep weighs %.1f kg and holds %.3f L, a lamb %.2f kg and %.3f L%n", found[0],
+				found[1], found[3], found[4]);
+		check(found[0] == kg, "a grown sheep weighs " + found[0] + " kg, its sheet says " + kg);
+		check(Math.abs(found[1] - litres) < 1.0E-4F, "a grown sheep holds " + found[1] + " L of blood, its sheet gives " + litres);
+		check(Math.abs(found[3] - kg * 0.15F) < 1.0E-4F, "a lamb weighs " + found[3] + " kg, not the young's share of " + kg);
+		check(Math.abs(found[4] - litres * 0.15F) < 1.0E-4F, "a lamb holds " + found[4] + " L of blood, not the young's share of " + litres);
+		// A cut, then the killing one.
+		String grown = "@e[type=minecraft:sheep,tag=sheet,nbt={Age:0},limit=1]";
+		server.runCommand("execute as @p run damage " + grown + " 2 minecraft:player_attack by @s");
+		context.waitTicks(20);
+		server.runCommand("execute as @p run damage " + grown + " 100 minecraft:player_attack by @s");
+		context.waitTicks(400);
+		int id = (int) found[2];
+		float lost = context.computeOnClient(mc -> dev.fluidgore.blood.BloodSupply.lost(id));
+		context.takeScreenshot("sheep_sheet");
+		System.out.printf(java.util.Locale.ROOT, "[FluidGoreTest] sheet: the sheep lost %.2f L of its %.2f L (%.0f%%)%n", lost, litres, 100.0F * lost / litres);
+		check(lost > 0.0F, "the sheep did not bleed at all");
+		check(lost <= litres * 0.6F + 0.01F, "the sheep lost more blood than a body can: " + lost + " of " + litres);
+		context.runOnClient(mc -> GoreConfig.get().goreLevel = before);
+		server.runCommand("kill @e[type=!minecraft:player]");
+		// Leave nothing of the sheep for the next test to count.
+		context.runOnClient(mc -> {
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+		});
 		server.runCommand("tp @a 100.5 -60 -15.5 0 30");
 		context.waitTicks(40);
 	}

@@ -1,5 +1,6 @@
 package dev.fluidgore.physics;
 
+import dev.fluidgore.anatomy.SheepSheet;
 import dev.fluidgore.config.GoreConfig;
 import java.util.Map;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -15,12 +16,13 @@ public final class BodyMass {
 	public static final float SECONDS = 12.0F;
 	/**
 	 * What animals weigh, roughly, grown: what decides how long they burn and how much smoke they make. A mob not
-	 * listed is weighed by its size.
+	 * listed is weighed by its size. The sheep's weight is its data sheet's ({@link SheepSheet}), the one animal whose
+	 * weight names its source so far.
 	 */
 	private static final Map<String, Float> KILOGRAMS = Map.ofEntries(
 			Map.entry("chicken", 2.5F), Map.entry("rabbit", 2.0F), Map.entry("parrot", 0.4F), Map.entry("bat", 0.05F), Map.entry("frog", 0.5F),
 			Map.entry("axolotl", 0.3F), Map.entry("cat", 4.5F), Map.entry("ocelot", 12.0F), Map.entry("fox", 7.0F), Map.entry("armadillo", 5.0F),
-			Map.entry("wolf", 40.0F), Map.entry("goat", 60.0F), Map.entry("sheep", 70.0F), Map.entry("pig", 110.0F), Map.entry("panda", 110.0F),
+			Map.entry("wolf", 40.0F), Map.entry("goat", 60.0F), Map.entry("sheep", SheepSheet.LIVE_KG), Map.entry("pig", 110.0F), Map.entry("panda", 110.0F),
 			Map.entry("turtle", 150.0F), Map.entry("llama", 150.0F), Map.entry("trader_llama", 150.0F), Map.entry("dolphin", 150.0F),
 			Map.entry("donkey", 250.0F), Map.entry("hoglin", 250.0F), Map.entry("mule", 350.0F), Map.entry("polar_bear", 400.0F),
 			Map.entry("zombie_horse", 450.0F), Map.entry("horse", 500.0F), Map.entry("camel", 550.0F), Map.entry("cow", 650.0F),

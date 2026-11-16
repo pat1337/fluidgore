@@ -42,7 +42,9 @@ Generators (plain single-file Java programs, run with the JDK):
 ```
 java tools/GenerateTextures.java src/main/resources/assets/fluidgore              # every PNG
 java tools/VerifyTextures.java check src/main/resources/assets/fluidgore tools/texture-manifest.txt
-java tools/SheepAnatomyModels.java art/sheep_anatomy                               # sheep art + anatomy/SheepTrunk, SheepHead, SheepLegs
+java tools/SheepAnatomyModels.java art/sheep_anatomy                               # sheep art + anatomy/SheepTrunk, SheepHead, SheepLegs,
+                                                                                   # SheepSheet and docs/sheets/sheep.md, from sheets/sheep.sheet
+java tools/Sheet.java sheets/sheep.sheet                                           # check the sheep's data sheet alone
 java tools/CowAnatomyModels.java art/cow_anatomy                                   # cow art and piece tables, then:
 powershell -File tools/ExportCowAnatomy.ps1                                        # anatomy/CowTrunk.java from them
 ```
@@ -50,6 +52,13 @@ The anatomy tools write Blockbench models to `art/` (open them in Blockbench to 
 Java tables the mod uses. Both anatomy tools pull in `tools/AnatomyKit.java` and `tools/Quadruped.java` (the
 shared modelling kit and four-legged body plan); a new species extends `Quadruped` and gives its own `Body`. After a
 change to the shared files, re-run both and check that `git status` shows only the changes you meant.
+
+The sheep's data sheet is `sheets/sheep.sheet`: its live weight, its blood, and the weight of every part of it, each
+with the reference the number was read from and where it stands there. The sheep tool stops with an error if a
+number has no source, if the parts do not add up to the live weight, or if a named piece of the anatomy tables belongs
+to no part. A number goes into the sheet only when it has been read in its source; a value remembered or estimated
+does not. [docs/sheets/sheep.md](docs/sheets/sheep.md) is the sheet as a page, with the litres each part is drawn with
+beside the kilograms it weighs.
 
 ## What the mod is for
 Fluid Gore shows farm animals the way they are: the work of a farm and a butcher's yard (slaughter, jointing, the
@@ -82,13 +91,16 @@ that another mod can bring its own animal and use the engine (the blood, the que
 the pieces) exactly as the sheep does.
 
 **Not there yet.** Shorten this list as it comes true.
-- The sheet is not one file: a sheep's weight, blood and anatomy live in `physics/BodyMass`, `blood/BloodSupply`
-  and the generator, and do not all agree. Until it exists, add no new place that tests for a species by name; put a
-  number or a table beside the others of its kind.
+- The sheep has its sheet (`sheets/sheep.sheet`), and its weight and blood are read from it. No other animal has
+  one: theirs are still rows of `physics/BodyMass` and `blood/BloodSupply`. `ragdoll/Weights` still has its own
+  shares for a sheep's head and legs. Add no new place that tests for a species by name; put a number or a table
+  beside the others of its kind.
+- The sheet's animal is the ewe. The ram and the lamb have no weights of their own (a lamb is 15% of the ewe), and
+  a third of the ewe's muscle and what the reference leaves unlisted are weighed together, not piece by piece.
 - Only a sheep's wounds are read from its anatomy. Other animals show a stock picture of fat, meat and bone.
-- Blood is drawn from each body's real volume and is conserved on the ground. Weight is not: pieces carry no mass,
-  and the anatomy tables are drawn, not weighed.
-- The weights and blood volumes name no source in the code.
+- Blood is drawn from each body's real volume and is conserved on the ground. Weight is not: pieces carry no mass.
+  The sheep's tables are drawn, not weighed, and `docs/sheets/sheep.md` gives the size of the difference part by part.
+- Only the sheep's weight and blood volume name their source.
 
 ### What also holds
 - **Shown, not scored.** The core changes how things look and sound, never how the game plays (rule 2 below).
@@ -136,7 +148,8 @@ the pieces) exactly as the sheep does.
    never `kill @e` without `tag=fluidgore_demo`, and never `item replace` (use `Script.hold`). A demo that changes
    terrain sets `destructive = true`. The `demos` game test plays every demo.
 9. **Generated files are never edited by hand.** This covers every PNG in `assets/fluidgore/textures`,
-   `anatomy/SheepTrunk.java`, `anatomy/SheepHead.java`, `anatomy/SheepLegs.java` and `anatomy/CowTrunk.java`, and the READMEs in `art/`. Change the generator and re-run
+   `anatomy/SheepTrunk.java`, `anatomy/SheepHead.java`, `anatomy/SheepLegs.java`, `anatomy/SheepSheet.java` and
+   `anatomy/CowTrunk.java`, `docs/sheets/sheep.md`, and the READMEs in `art/`. Change the generator and re-run
    it. After a texture generator change, run `VerifyTextures check`: existing PNGs and anatomy tiles must not change
    unless that is the point (then re-record the manifest with `write`).
 
