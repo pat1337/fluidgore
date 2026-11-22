@@ -420,7 +420,7 @@ public final class GoreConfig {
 	}
 
 	/** Repairs values that a hand-edited file may have broken (missing enums, negative caps, null lists). */
-	private static final int CONFIG_VERSION = 9;
+	private static final int CONFIG_VERSION = 10;
 
 	private void sanitize() {
 		if (configVersion < 2) {
@@ -457,6 +457,12 @@ public final class GoreConfig {
 			// 3.3: the 2x2 TNT vessel is experimental and off by default; the crafted tank is the real vessel. It was on by
 			// default before, so an old file's true is that default, not a choice.
 			pressureVessel = false;
+		}
+
+		if (configVersion < 10) {
+			// 4.1: the Gore Level only decides what is drawn, and its default is the top level, Full (Extreme before).
+			// Medium was the default before, so an old file's Medium is that default, not a choice.
+			if (goreLevel == GoreLevel.MEDIUM) goreLevel = GoreLevel.EXTREME;
 		}
 
 		configVersion = CONFIG_VERSION;

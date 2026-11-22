@@ -10,11 +10,11 @@ package dev.fluidgore.config;
  * Suffering has its own level of the same five steps and reads only {@link #duration} from it.
  */
 public enum GoreLevel {
-	OFF(0.0F, 0.0F, 0.0F, 1.0F, 0.0F),
-	LOW(0.4F, 0.5F, 0.5F, 1.0F, 0.45F),
-	MEDIUM(1.0F, 1.0F, 1.0F, 1.0F, 0.7F),
-	HIGH(1.0F, 1.2F, 1.6F, 1.5F, 1.0F),
-	EXTREME(1.0F, 1.3F, 2.5F, 2.5F, 1.0F);
+	OFF(0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F),
+	LOW(0.4F, 0.5F, 0.5F, 1.0F, 0.45F, 0.12F),
+	MEDIUM(1.0F, 1.0F, 1.0F, 1.0F, 0.7F, 0.22F),
+	HIGH(1.0F, 1.2F, 1.6F, 1.5F, 1.0F, 0.34F),
+	EXTREME(1.0F, 1.3F, 2.5F, 2.5F, 1.0F, 1.0F);
 
 	/** Multiplier for how many droplets, mist particles and loose scraps are drawn: 1 draws them all. */
 	public final float particles;
@@ -32,13 +32,20 @@ public enum GoreLevel {
 	 * bone and the organs. The wound itself is as deep as the blows made it (see {@link #drawn}).
 	 */
 	public final float woundDrawn;
+	/**
+	 * The deepest a living body's burn is drawn, in the burn's own 0..1: Low draws reddened, blistered skin, Medium
+	 * charred skin, High burnt through to the fat, and the top level as deep as the fire got. The burn itself is as
+	 * deep as the fire took it (see {@link #drawnBurn}).
+	 */
+	public final float burnDrawn;
 
-	GoreLevel(float particles, float duration, float bloodDuration, float linger, float woundDrawn) {
+	GoreLevel(float particles, float duration, float bloodDuration, float linger, float woundDrawn, float burnDrawn) {
 		this.particles = particles;
 		this.duration = duration;
 		this.bloodDuration = bloodDuration;
 		this.linger = linger;
 		this.woundDrawn = woundDrawn;
+		this.burnDrawn = burnDrawn;
 	}
 
 	public boolean enabled() {
@@ -53,6 +60,25 @@ public enum GoreLevel {
 	/** How deep a wound of {@code severity} is drawn at this level. */
 	public float drawn(float severity) {
 		return Math.min(severity, woundDrawn);
+	}
+
+	/** How deep a living body's burn of {@code bare} is drawn at this level. */
+	public float drawnBurn(float bare) {
+		return Math.min(bare, burnDrawn);
+	}
+
+	/**
+	 * How deep a body that burnt alive is drawn burning on after death, when it died burnt {@code handed} deep and has
+	 * burnt to {@code bare} since. It goes on from where the living burn was drawn ({@link #drawnBurn}) and reaches the
+	 * bone when the real burn does, so nothing jumps at the moment of death.
+	 */
+	public float drawnBurn(float bare, float handed) {
+		float from = drawnBurn(handed);
+		if (from >= handed || handed >= 1.0F) {
+			return bare;
+		}
+
+		return bare <= handed ? Math.min(bare, from) : from + (bare - handed) * (1.0F - from) / (1.0F - handed);
 	}
 
 	/**

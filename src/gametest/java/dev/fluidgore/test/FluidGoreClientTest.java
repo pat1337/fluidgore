@@ -1674,6 +1674,37 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		check(!low.drawn().equals(full.drawn()), "gore levels: Low draws the wounds as deep as the top level: " + low.drawn());
 		check(full.drawn().equals(full.wounds().replaceAll("/\\S+", "")), "gore levels: the top level does not draw the wounds at their depth: " + full.drawn()
 				+ " of " + full.wounds());
+
+		// A burn is as deep on every level, and a lower level draws it less deep. A body that burnt alive goes on burning
+		// from where it was drawn, and reaches the bone when the real burn does.
+		String burns = context.computeOnClient(mc -> {
+			var melting = GoreSystems.dismemberment().melting();
+			melting.set(mc.player, 0.45F);
+			StringBuilder out = new StringBuilder();
+			for (GoreLevel level : GoreLevel.values()) {
+				GoreConfig.get().goreLevel = level;
+				var melt = melting.look(mc.player);
+				out.append(level.name()).append('=').append(melt == null ? "none" : String.format(java.util.Locale.ROOT, "%.2f", melt.bare()))
+						.append('/').append(String.format(java.util.Locale.ROOT, "%.2f", melting.bare(mc.player.getId()))).append(' ');
+			}
+
+			GoreConfig.get().goreLevel = before;
+			melting.set(mc.player, 0.0F);
+			return out.toString().trim();
+		});
+		System.out.println("[FluidGoreTest] gore levels, a living burn 0.45 deep (drawn/real): " + burns);
+		check(burns.equals("OFF=none/0.45 LOW=0.12/0.45 MEDIUM=0.22/0.45 HIGH=0.34/0.45 EXTREME=0.45/0.45"),
+				"gore levels: a living burn is not drawn to each level's depth, or its real depth changed: " + burns);
+		for (GoreLevel level : GoreLevel.values()) {
+			if (!level.enabled()) continue;
+			float handed = 0.45F;
+			check(Math.abs(level.drawnBurn(handed, handed) - level.drawnBurn(handed)) < 1.0E-4F,
+					"gore levels: a body that burnt alive jumps at death on " + level + ": " + level.drawnBurn(handed) + " to " + level.drawnBurn(handed, handed));
+			check(Math.abs(level.drawnBurn(1.0F, handed) - 1.0F) < 1.0E-4F, "gore levels: a body that burnt alive never reaches the bone on " + level);
+			check(level.drawnBurn(0.7F, handed) > level.drawnBurn(handed, handed) && level.drawnBurn(0.7F, handed) < level.drawnBurn(0.9F, handed),
+					"gore levels: a body that burnt alive does not burn on steadily on " + level);
+		}
+
 		server.runCommand("kill @e[type=!minecraft:player]");
 		System.out.println("[FluidGoreTest] goreLevels passed");
 	}

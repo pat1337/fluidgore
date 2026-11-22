@@ -220,7 +220,8 @@ are left deaf for a while, with ringing ears. Blast gore covers players too when
 - **Burning People.** Players have an inside, built at the skin's own pixel size: a layer of fat, the muscles, a
   full skeleton and the organs where they lie. Catch fire and it burns down through them pixel by pixel. Clothes and
   hair go first, then the skin blisters, chars and splits onto fat, muscle and bone. How deep it goes depends on how
-  close the fire has brought you to death, and burns heal as health comes back. Die on fire and
+  close the fire has brought you to death, and burns heal as health comes back. A lower Gore Level draws a burn on
+  the living less deep than it is. Die on fire and
   the body stays and burns on to a skeleton, even after you respawn. Zombies and other humanoid mobs can burn the same
   way (Burning Mobs Too, off by default, because zombies burn every dawn).
 - **Burning Animals.** Sheep, pigs and cows burn through their own anatomy: a sheep's hard white suet over dark
@@ -351,8 +352,10 @@ Listed in the order of the settings screen. Hover over any option in game for a 
 never what happens to a body: a blow goes as deep, the same parts come off, the same blood is lost and the animal dies
 the same way at every level, so players on different levels see the same body. Full draws everything. Lower levels
 draw fewer drops and scraps, keep blood, pieces and bodies for less time, and draw a wound less deep than it is: Low
-as a gash, Medium as open meat, High to the bone and the organs. Rot is drawn on Full only. Off disables everything
-and clears existing blood and parts. Demo: `levels`.
+as a gash, Medium as open meat, High to the bone and the organs. A burn on the living is drawn the same way: Low as
+reddened, blistered skin, Medium charred, High burnt through to the fat. A body that burnt alive burns on after death
+from where it was drawn, to the bone. Rot is drawn on Full only. Off disables everything and clears existing blood
+and parts. Demo: `levels`.
 
 **Who Bleeds**
 

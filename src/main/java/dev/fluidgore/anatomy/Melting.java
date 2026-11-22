@@ -5,6 +5,7 @@ import dev.fluidgore.blood.BloodTextures;
 import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.blood.SurfaceProbe;
 import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.config.GoreLevel;
 import dev.fluidgore.demo.DemoPlayer;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.suffer.Corpse;
@@ -32,7 +33,8 @@ import org.jspecify.annotations.Nullable;
  * People burning alive, drawn layer by layer by {@link MeltRenderer}. Every tick a player spends on fire the fire gets
  * a little further into them, four times as fast in lava, and how far it can get goes with how near death the burns
  * have brought them (their health): a healthy player on fire reddens, blisters and chars, one about to die of it has
- * the skin burnt through to fat running and dripping, and the muscle under it. Burns heal as health comes back.
+ * the skin burnt through to fat running and dripping, and the muscle under it. Burns heal as health comes back. The
+ * burn is as deep on every Gore Level; a lower one draws it less deep ({@link GoreLevel#drawnBurn}).
  *
  * <p>Dying on fire, the body stays where it fell and goes on burning on its own fat ({@link Cremation} takes over from
  * how far it got here, see {@link #handOver}): the skin and fat go, the muscle cooks off, the organs shrivel, and it
@@ -133,12 +135,24 @@ public final class Melting {
 		int id = entity.getId();
 		Body body = bodies.get(id);
 		float alive = body == null ? 0.0F : body.bare;
+		GoreLevel level = GoreConfig.get().goreLevel;
 		Corpse corpse = GoreSystems.suffering().corpse(id);
 		if (corpse != null) {
+			// The Gore Level draws a living burn less deep than it is; a body that burnt alive goes on from there.
 			Cremation cremation = GoreSystems.dismemberment().cremation();
+			float handed = cremation.handed(id);
 			float bare = Math.max(cremation.bare(id), alive);
-			return bare <= 0.004F ? null : new Melt(bare, Math.max(cremation.burn(id), alive),
-					Math.max(cremation.bone(id), BurntBone.ownFire(alive)), cremation.burning(id), true, seed(entity), EntityFilter.isRotten(entity),
+			float burn = Math.max(cremation.burn(id), alive);
+			if (handed > 0.0F) {
+				bare = level.drawnBurn(bare, handed);
+				burn = level.drawnBurn(burn, handed);
+			} else if (alive > 0.0F) {
+				bare = level.drawnBurn(bare);
+				burn = level.drawnBurn(burn);
+			}
+
+			return bare <= 0.004F ? null : new Melt(bare, burn,
+					Math.max(cremation.bone(id), BurntBone.ownFire(level.drawnBurn(alive))), cremation.burning(id), true, seed(entity), EntityFilter.isRotten(entity),
 					Anatomy.Beast.of(entity.getType()), fleece(entity), alive > 0.0F || cremation.burntAlive(id), Anatomy.Detail.MIXED,
 					Anatomy.male(entity.getUUID()), entity.isBaby());
 		}
@@ -148,7 +162,8 @@ public final class Melting {
 					body.detail, Anatomy.male(entity.getUUID()), entity.isBaby());
 		}
 
-		return alive <= 0.004F ? null : new Melt(alive, alive, BurntBone.ownFire(alive), entity.isOnFire(), false, body.seed, EntityFilter.isRotten(entity),
+		float drawn = level.drawnBurn(alive);
+		return drawn <= 0.004F ? null : new Melt(drawn, drawn, BurntBone.ownFire(drawn), entity.isOnFire(), false, body.seed, EntityFilter.isRotten(entity),
 				Anatomy.Beast.of(entity.getType()), fleece(entity), true, Anatomy.Detail.MIXED, Anatomy.male(entity.getUUID()), entity.isBaby());
 	}
 

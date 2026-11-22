@@ -163,6 +163,8 @@ public final class Cremation {
 		boolean doused;
 		/** It was burning before it died (it came here from Melting): its burns have the redness of a living body's. */
 		boolean alive;
+		/** How deep it was burnt when it died, 0 if it was not burning alive: where the drawn burn goes on from. */
+		float handed;
 		/** Ticks since it went out. */
 		int out = SMOULDER;
 		/** Blows on the bare bones. */
@@ -207,6 +209,12 @@ public final class Cremation {
 	public boolean burntAlive(int entityId) {
 		Fire fire = fires.get(entityId);
 		return fire != null && fire.alive;
+	}
+
+	/** How deep the body was burnt when it died, 0 if it was not burning alive (see {@code GoreLevel.drawnBurn}). */
+	public float handed(int entityId) {
+		Fire fire = fires.get(entityId);
+		return fire == null ? 0.0F : fire.handed;
 	}
 
 	/** How long it has burnt, 0..1 (1: to the bone). */
@@ -348,6 +356,7 @@ public final class Cremation {
 				fire.burn = melted;
 				fire.bone = BurntBone.ownFire(melted);
 				fire.alive = melted > 0.0F;
+				fire.handed = melted;
 				fire.doused = melted > 0.0F && heat == 0;
 				fires.put(id, fire);
 			}

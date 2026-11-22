@@ -36,7 +36,8 @@ when a feature is turned off.
   checked in `sanitize()`. `configVersion` migrates old files when a default changes.
 - `GoreLevel`: Off to Full (the constant is `EXTREME`; Suffering uses the same steps and calls its top one Extreme).
   **A level decides how much is drawn, never what happens to a body.** Its factors are how many particles and scraps
-  are drawn, how long pieces, blood and bodies stay, and the deepest a wound is drawn (`woundDrawn`). How deep a blow
+  are drawn, how long pieces, blood and bodies stay, the deepest a wound is drawn (`woundDrawn`) and the deepest a
+  living burn is drawn (`burnDrawn`; a body that burnt alive goes on from there, `drawnBurn(bare, handed)`). How deep a blow
   goes, what it reaches, whether a part comes off, how much blood leaves and how a body rots are the same at every
   level but Off; the tuned numbers behind them are constants beside the code that uses them (`Wounds.WOUND_RATE`,
   `BloodEmitter.RUN`, `Dismemberment.MAX_PARTS_PER_HIT`, `CorpseStrike.BLIND_CUT`). The `goreLevels` game test puts
@@ -218,7 +219,7 @@ when a feature is turned off.
   immutable shape. `MIDLINE_OWNERS` and `Piece.owner` decide which side a midline or disconnected lobe belongs to,
   by ownership rather than distance.
 - `Melting`: burns on living people and beasts (depth from fire time and health lost, healing with health), handed to
-  `Cremation` when the body dies. `MeltRenderer`: cuts every face into skin-texel cells with per-cell thresholds,
+  `Cremation` when the body dies, which keeps the depth it was handed (`handed`) for drawing. `MeltRenderer`: cuts every face into skin-texel cells with per-cell thresholds,
   seeded by UUID so every screen agrees, and draws the skin, the fat and muscle shells, the walls of holes, drips, and
   the fitted organs and bones inside. It draws in two passes, because a feature renderer can hold only one vertex
   builder at a time.

@@ -72,14 +72,16 @@ All notable changes to Fluid Gore are listed here. The format follows
   wound could not reach the rib, lung or rumen under it, and whether a part came off was a dice roll scaled by the
   level. Demo: `levels`.
 - The top Gore Level is called Full and is the default. It draws everything that is there and nothing more: the
-  drops, mist and scraps that the old Extreme multiplied by 2.6 are drawn once. A level already chosen in the
-  settings is kept, with Extreme now shown as Full.
+  drops, mist and scraps that the old Extreme multiplied by 2.6 are drawn once. A settings file from before moves
+  from Medium, the old default, to Full; any other level chosen there is kept, with Extreme now shown as Full.
 - A blade through a wound already cut as deep as it goes takes the part off every time; a blade that kills, or lands
   heavily, takes off the part it struck. Neither depends on the Gore Level or on luck any more.
 - Blast gore (bodies torn or shredded by a blast) and the extra parts a Brutal PvP kill takes are no longer held back
   on the lower Gore Levels.
 - A living body on fire burns as deep on every Gore Level; how deep depends only on how near death the fire has
-  brought it.
+  brought it. A lower level draws the burn less deep: Low as reddened, blistered skin, Medium charred, High burnt
+  through to the fat. A body that burnt alive burns on after death from where it was drawn, and reaches the bone
+  when the real burn does.
 - Rot is counted at every Gore Level and drawn on Full. A body bloated with rot floats on every level.
 - A spray of blood carries the same amount however many drops it is drawn with.
 - A sheep is now one measured animal: a mature Merino ewe of 49 kg, holding 2.9 litres of blood (59 ml a kilogram).
