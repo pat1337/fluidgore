@@ -60,7 +60,7 @@ full of air and a stomach is hollow, so they take more room than their tissue we
 | – thoracic | 1.200 | 2.45 | 43.8% of bone | B88: Thoracic vertebrae + ribs. The ewes' table has no row for the cervical vertebrae or the sternum and still sums to 100; in the same book's rams, thoracic vertebrae + ribs, cervical vertebrae and sternum together are 44.9 and 47.1 (Table 2.d.2), so this row is read as holding all three. | 3.14 | 2.61 |
 | – scapula | 0.132 | 0.27 | 4.8% of bone | B88: Scapula. | 0.74 | 5.66 |
 | – humerus | 0.184 | 0.37 | 6.7% of bone | B88: Humerus. | 0.22 | 1.19 |
-| – radius ulna | 0.153 | 0.31 | 5.6% of bone | B88: Radius and ulna. The ewes' table has no row for the carpus, which is a bone of the carcase; it is read as weighed here. | 0.18 | 1.18 |
+| – radius ulna | 0.153 | 0.31 | 5.6% of bone | B88: Radius and ulna. The ewes' table has no row for the carpus, which is a bone of the carcase. It is probably not weighed at all: the same table's rams have radius and ulna at 5.1, while the rams of Table 2.d.2 have radius and ulna alone at 5.2 and 5.6 and the carpus apart at 0.9 and 1.0 (different rams, so not certain; about 1 in 100 of bone). | 0.18 | 1.18 |
 | subcutaneous fat | 6.140 | 12.53 | as weighed | B88: Table 4.e.1, p. 94: subcutaneous fat, ewes N = 16. | 22.04 | 3.59 |
 | intermuscular fat | 4.840 | 9.88 | as weighed | B88: Table 4.e.1: intermuscular fat, ewes N = 16. | not drawn |  |
 | kidney fat | 2.790 | 5.69 | as weighed | B88: Table 4.e.1: kidney fat, ewes N = 16. | 0.10 | 0.04 |
@@ -84,7 +84,7 @@ full of air and a stomach is hollow, so they take more room than their tissue we
 | heart | 0.142 | 0.29 | 0.29% of live weight | B88: Table 1.f.1: heart. | 0.64 | 4.49 |
 | trachea | 0.034 | 0.07 | 0.07% of live weight | B88: Table 1.f.1: trachea. | 0.12 | 3.49 |
 | lungs | 0.230 | 0.47 | 0.47% of live weight | B88: Table 1.f.1: lungs. | 4.68 | 20.31 |
-| thyroid | 0.010 | 0.02 | 0.02% of live weight | B88: Table 1.f.1: thyroid. The book's Dorset Horn rams gave 7 g against this 20 g, and it calls the figure in doubt. | 0.00 | 0.19 |
+| thyroid | 0.010 | 0.02 | 0.02% of live weight | B88: Table 1.f.1: thyroid. The book's Dorset Horn rams and wethers both gave 7 g against this 20 g (Table 3.f.3). | 0.00 | 0.19 |
 | pancreas | 0.029 | 0.06 | 0.06% of live weight | B88: Table 1.f.1: pancreas. | 0.06 | 1.98 |
 | blood let | 1.676 | 3.42 | 3.42% of live weight | B88: Table 1.f.1: blood, as collected at slaughter. It is less than the blood the body holds (its blood volume is given with the animal, above): the rest stays in the carcase and the organs and is weighed with them. | not drawn |  |
 | hide | 4.400 | 8.98 | 8.98% of live weight | B88: Table 1.f.1: hide, shorn. | 25.14 | 5.71 |

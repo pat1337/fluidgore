@@ -85,7 +85,7 @@ bone_lumbar      | bone | percent | 6.2  | B88 | Lumbar vertebrae.
 bone_thoracic    | bone | percent | 43.8 | B88 | Thoracic vertebrae + ribs. The ewes' table has no row for the cervical vertebrae or the sternum and still sums to 100; in the same book's rams, thoracic vertebrae + ribs, cervical vertebrae and sternum together are 44.9 and 47.1 (Table 2.d.2), so this row is read as holding all three.
 bone_scapula     | bone | percent | 4.8  | B88 | Scapula.
 bone_humerus     | bone | percent | 6.7  | B88 | Humerus.
-bone_radius_ulna | bone | percent | 5.6  | B88 | Radius and ulna. The ewes' table has no row for the carpus, which is a bone of the carcase; it is read as weighed here.
+bone_radius_ulna | bone | percent | 5.6  | B88 | Radius and ulna. The ewes' table has no row for the carpus, which is a bone of the carcase. It is probably not weighed at all: the same table's rams have radius and ulna at 5.1, while the rams of Table 2.d.2 have radius and ulna alone at 5.2 and 5.6 and the carpus apart at 0.9 and 1.0 (different rams, so not certain; about 1 in 100 of bone).
 
 # Not tabulated for the ewes: each is the share of shorn full liveweight it has in the book's mature 100 kg Merino ram
 # (Table 1.f.1, p. 28, grams in 100 kg), taken as the same share of the ewe.
@@ -106,14 +106,15 @@ spleen   | live | percent | 0.11 | B88 | Table 1.f.1: spleen.
 heart    | live | percent | 0.29 | B88 | Table 1.f.1: heart.
 trachea  | live | percent | 0.07 | B88 | Table 1.f.1: trachea.
 lungs    | live | percent | 0.47 | B88 | Table 1.f.1: lungs.
-thyroid  | live | percent | 0.02 | B88 | Table 1.f.1: thyroid. The book's Dorset Horn rams gave 7 g against this 20 g, and it calls the figure in doubt.
+thyroid  | live | percent | 0.02 | B88 | Table 1.f.1: thyroid. The book's Dorset Horn rams and wethers both gave 7 g against this 20 g (Table 3.f.3).
 pancreas | live | percent | 0.06 | B88 | Table 1.f.1: pancreas.
 blood_let | live | percent | 3.42 | B88 | Table 1.f.1: blood, as collected at slaughter. It is less than the blood the body holds (its blood volume is given with the animal, above): the rest stays in the carcase and the organs and is weighed with them.
 hide     | live | percent | 8.98 | B88 | Table 1.f.1: hide, shorn.
 distal_limbs | live | percent | 1.49 | B88 | Table 1.f.1: distal limbs, cut at the joints below the knee and the hock.
 
-# The head. The rams' heads carry horns that "dominate the head weight" (p. 76), so the ewe's is the share a head has
-# in the book's mature Dorset Horn wethers.
+# The head. "The only data for head weight comes from Dorset Horns", whose "massive horns ... dominate the head weight
+# of rams" (p. 75): Table 1.f.1's ram head, 6.23 kg, is the Dorset Horn rams' of Table 3.f.5. So the ewe's is the share
+# a head has in the book's mature Dorset Horn wethers, whose heads weigh 3.36 kg against the rams' 6.23.
 head | live | share | 3.36/95.89 | B88 | Table 3.f.5: head of wethers, 3.36 kg, N = 7; Table 3.c.1: their shorn full liveweight, 95.89 kg.
 
 # Taken as weighed, not scaled: a brain and an eye do not follow the weight of the body (the Dorset Horn rams and wethers

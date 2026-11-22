@@ -35,7 +35,8 @@ Game test options:
 
 A run passes when Gradle exits with 0, the log shows `[FluidGoreTest]` lines and there is no `AssertionError`.
 Screenshots go to `build/run/clientGameTest/screenshots/`. Look at them after any visual change. The full suite is
-long, so while you work on one feature, run just that feature's tests. Run the full suite before a release.
+long, so while you work on one feature, run just that feature's tests. Before a jar is released or installed in a
+game, run the full suite ten times: every run must pass every test (see "Docs and releases").
 The test's dedicated server uses port 25599.
 
 Generators (plain single-file Java programs, run with the JDK):
@@ -166,4 +167,9 @@ are listed in the fabric-api 0.162.0+26.3 POM.
 - Update `README.md` for anything a player sees, `CHANGELOG.md` for every release (Keep a Changelog headings:
   Added, Changed, Fixed, Removed, Security), and `docs/ARCHITECTURE.md` when you add or move a system.
 - The version is in `gradle.properties`. A release is a git tag `vX.Y.Z`. Built jars go in `releases/` (git-ignored).
+- **The jar gate.** No jar is released, put in `releases/`, or installed in a game (`installMod`) until the full
+  game-test suite (`./gradlew runClientGameTest`, no `-PonlyTests`) has passed ten runs on the commit it is built
+  from, every run 5/5: Gradle exits with 0, the log has its `[FluidGoreTest]` lines, there is no `AssertionError`, the
+  dedicated-server half ran, and the screenshots of what changed have been looked at. One failure starts the count
+  again after the fix.
 - `notes/` is git-ignored and holds private working notes; nothing in the public docs should depend on it.
