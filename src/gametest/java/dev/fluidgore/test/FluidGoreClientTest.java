@@ -28,7 +28,15 @@ import net.minecraft.world.entity.monster.zombie.Husk;
  */
 public class FluidGoreClientTest implements FabricClientGameTest {
 	@Override
-	public void runTest(ClientGameTestContext context) {
+	public void runTest(ClientGameTestContext test) {
+		// Every screenshot gets its facts beside it (Lens), for tools/Lens.java.
+		ClientGameTestContext context = Lens.watch(test);
+		if (Boolean.getBoolean("fluidgore.live")) {
+			// -Plive: no tests, a world kept open for tools/Live.java.
+			Live.run(context);
+			return;
+		}
+
 		String only = System.getProperty("fluidgore.only");
 		if ("tankDedicated".equals(only) || "fragmentsDedicated".equals(only)) {
 			java.util.Properties properties = new java.util.Properties();
@@ -286,6 +294,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			case "burnLook" -> burnLook(context, server);
 			case "bugLook" -> bugLook(context, server);
 			case "bloodLook" -> bloodLook(context, server);
+			case "lens" -> lens(context, server);
 			case "fireSpread" -> fireSpread(context, server);
 			case "decay" -> decay(context, server);
 			case "rotHistory" -> rotHistory(context, server);
@@ -10577,6 +10586,72 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		String[] p = pig.split(" ");
 		check(Integer.parseInt(p[1]) >= 1000, "on Extreme a beaten body does not lie long enough to be seen: " + p[1] + " ticks");
 		check(Integer.parseInt(p[2]) >= 20 * 60 * 5, "on Extreme blood does not stay five minutes: " + p[2] + " ticks");
+	}
+
+	/**
+	 * The screenshot facts ({@link Lens}) agree with the picture: a sheep the camera looks straight at is listed as seen,
+	 * with the middle of the screen inside its box, and once cut it is listed with its wounds and the blood it has lost.
+	 * Takes a filmstrip of it bleeding and four views round it, for {@code tools/Lens.java sheet}. Not in the full suite:
+	 * every screenshot there gets its facts anyway.
+	 */
+	private static void lens(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("gamerule send_command_feedback false");
+		server.runCommand("kill @e[tag=fg_lens]");
+		Vec3 middle = new Vec3(1000.5, -59.35, 1000.5);
+		server.runCommand("tp @a 1000.5 -60 996.5");
+		context.waitTicks(40);
+		context.waitFor(mc -> mc.levelRenderer.hasRenderedAllSections());
+		// A fixed UUID: the dice of every hit are seeded from it, so two runs of the same code draw the same blood (Lens diff).
+		server.runCommand("summon minecraft:sheep 1000.5 -60 1000.5 {NoAI:1b,Rotation:[90f,0f],Tags:[\"fg_lens\"],UUID:[I;1818585203,0,0,1]}");
+		context.waitTicks(20);
+		context.runOnClient(mc -> Lens.aim(mc, middle));
+		context.waitTicks(2);
+		com.google.gson.JsonObject sheep = lensSheep(context.takeScreenshot("lens_01_sheep"));
+		check(sheep != null, "lens: the sheep in front of the camera is not in the facts");
+		var box = sheep.getAsJsonArray("box");
+		System.out.println("[FluidGoreTest] lens: sheep on screen at " + box + ", seen " + sheep.get("seen"));
+		check(sheep.get("seen").getAsBoolean(), "lens: the sheep in plain view is listed as hidden");
+		check(box.get(0).getAsDouble() < 0.5 && box.get(2).getAsDouble() > 0.5 && box.get(1).getAsDouble() < 0.5 && box.get(3).getAsDouble() > 0.5,
+				"lens: the middle of the screen is not inside the box of the sheep it looks at: " + box);
+		check(box.get(2).getAsDouble() - box.get(0).getAsDouble() < 0.6, "lens: the sheep's box is far wider than the sheep: " + box);
+
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:iron_sword");
+		for (int i = 0; i < 2; i++) {
+			server.runCommand("execute as @p run damage @e[tag=fg_lens,limit=1] 3 minecraft:player_attack by @s");
+			context.waitTicks(15);
+		}
+
+		java.util.List<java.nio.file.Path> film = Lens.frames(context, "lens_02_bleeding", 4, 20);
+		sheep = lensSheep(film.getLast());
+		check(sheep != null && sheep.has("wounds"), "lens: the cut sheep is listed without wounds: " + sheep);
+		check(sheep.getAsJsonObject("blood").get("lostL").getAsDouble() > 0.0, "lens: the cut sheep is listed as not bleeding: " + sheep);
+		System.out.println("[FluidGoreTest] lens: cut sheep " + sheep.getAsJsonObject("wounds") + ", blood " + sheep.getAsJsonObject("blood"));
+		try {
+			System.out.println("[FluidGoreTest] lens: blood in the world " + Lens.read(film.getLast()).getAsJsonObject("blood"));
+		} catch (java.io.IOException e) {
+			throw new java.io.UncheckedIOException(e);
+		}
+
+		Lens.orbit(context, server, "lens_03_orbit", middle, 2.5, 1.0);
+		server.runCommand("kill @e[tag=fg_lens]");
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:air");
+		context.waitTicks(5);
+	}
+
+	/** The first sheep in the facts of the screenshot {@code png}, or null. */
+	private static com.google.gson.JsonObject lensSheep(java.nio.file.Path png) {
+		try {
+			for (var s : Lens.read(png).getAsJsonArray("subjects")) {
+				var subject = s.getAsJsonObject();
+				if ("body".equals(subject.get("kind").getAsString()) && "sheep".equals(subject.get("type").getAsString())) {
+					return subject;
+				}
+			}
+		} catch (java.io.IOException e) {
+			throw new java.io.UncheckedIOException(e);
+		}
+
+		return null;
 	}
 
 	/**

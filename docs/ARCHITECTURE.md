@@ -397,3 +397,10 @@ humanoid. `GameRendererMixin` adds stagger and the limp hitch to the camera.
 in singleplayer and then against a dedicated server: kills, wounds, severing, deaths, kept bodies, rot, fire,
 explosions, the Cobble Tank, the settings screens and every demo. It loads both mods. Each feature has a named test that can be run
 on its own (see CONTRIBUTING.md).
+
+`Lens` wraps the test's context so that every screenshot is followed by the facts of that frame, read from the client
+state (`GoreSystems`, `BloodSupply`, the wound sets, the corpses and pieces) and placed on the screen with
+`GameRenderer.projectPointToScreen`. It only reads, and a frame whose facts fail is logged, not failed.
+`tools/Lens.java` turns the pictures and facts into marked pictures, crops, contact sheets and run-to-run differences.
+`Live` (only with `-Plive`) runs no tests: it opens a world and answers commands from `tools/Live.java` over a local
+socket, one per connection, using the same context, so its screenshots get facts too.

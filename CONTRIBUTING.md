@@ -32,12 +32,50 @@ Game test options:
 | `-PragdollOn` | Run the picked tests with Ragdoll Physics on. |
 | `-PextraMods=<dir>` | Load the jars in `<dir>` too, for compatibility checks (add `--no-configuration-cache`). |
 | `-Pshaders=<zip>` | With Iris in `-PextraMods`: switch that shader pack on in `bugLook` (close-ups of reported glitches). |
+| `-PshotScale=<n>` | Draw every screenshot at n times the window's size (854x480): more detail, the same framing. |
+| `-PhideHud` | Leave the hotbar, hearts and hand out of every screenshot taken in the world. |
 
 A run passes when Gradle exits with 0, the log shows `[FluidGoreTest]` lines and there is no `AssertionError`.
 Screenshots go to `build/run/clientGameTest/screenshots/`. Look at them after any visual change. The full suite is
 long, so while you work on one feature, run just that feature's tests. Before a jar is released or installed in a
 game, run the full suite ten times: every run must pass every test (see "Docs and releases").
 The test's dedicated server uses port 25599.
+
+Every screenshot gets a JSON file of the same name beside it: the camera, each body and loose piece in the picture
+(where it is on the screen, whether a block hides it, the blood it holds and has lost, its wounds and what they reach,
+pallor, burns, missing parts) and the blood in the world in litres, on the ground and in view. `tools/Lens.java` reads
+them back:
+```
+java tools/Lens.java look build/run/clientGameTest/screenshots stuck_pig   # lens/<picture>/: marked.png (each subject
+                                                                         # boxed and numbered, the facts under it), a
+                                                                         # full-size crop of each subject, facts.txt
+java tools/Lens.java sheet lens/orbit.png build/run/clientGameTest/screenshots orbit   # tile pictures into one
+java tools/Lens.java diff <saved screenshots> build/run/clientGameTest/screenshots     # what changed since a run
+```
+A run wipes the screenshots folder, so copy it first to compare against it with `diff`, which lists each picture by
+how much of it changed, writes before, after and where it changed side by side, and prints the facts that changed.
+Every hit's dice are seeded from the animal's UUID, so two runs of the same code draw the same blood only when the
+animals have the same UUIDs: summon them with a fixed one (`UUID:[I;a,b,c,d]`) in a test you compare across runs.
+In a test, `Lens.orbit` photographs a spot from four sides and `Lens.frames` takes a filmstrip; `-PonlyTests=lens`
+checks the facts against a picture.
+
+A live session keeps the test's world open, frozen between commands, to look at a change while it is being made:
+```
+./gradlew runClientGameTest -Plive          # leave it running (another terminal, or in the background)
+java tools/Live.java wait                   # until it answers (the world takes a while to open)
+java tools/Live.java help                   # cmd, client, tick, tp, look, where, shot, facts, orbit, frames, hit,
+                                            # set scale|hud, config, clear, quit
+java tools/Live.java cmd summon minecraft:sheep ~ ~ ~4    # a server command as the player, and what it said
+java tools/Live.java shot                   # a screenshot with its facts, marked and cropped by tools/Lens.java
+java tools/Live.java swap                   # compile the sources changed since the session began, swap them in
+java tools/Live.java quit                   # end it (the game test then passes)
+```
+Run the tool from the project folder. Commands go over a socket on this machine only, with a random token the
+session writes to `build/run/clientGameTest/live.json`. Time stands still between commands: `tick 20` lets a second
+pass. `config pallor false` changes a setting for the session only. `swap` replaces the code of loaded classes in the
+running game through a debugger port on this machine (5006; `-PdebugPort=<port>` if that is taken). The JVM only
+takes new method bodies: a new or changed field, method or lambda, and any mixin, needs `quit` and a new session, and
+`swap` names each one.
 
 Generators (plain single-file Java programs, run with the JDK):
 ```
