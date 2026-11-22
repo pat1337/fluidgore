@@ -42,6 +42,8 @@ public final class CorpseStrike {
 	private static final int COOLDOWN = 6;
 	/** A blade on a dead body cuts at least this share of its health deep, see {@link #strike}. */
 	private static final float BUTCHER_SHARE = 0.6F;
+	/** The chance a blade takes a part off a body whose wounds are not tracked, so the spot is unknown: a tuned number. */
+	private static final float BLIND_CUT = 0.55F;
 	private static final RandomSource RANDOM = Fate.stream("corpseStrike");
 
 	private static int lastStrike = -100;
@@ -168,15 +170,14 @@ public final class CorpseStrike {
 		if (wound != null) {
 			// An axe that reaches the bone of a leg or the neck on a downed body goes through the joint: no luck in it,
 			// as a butcher jointing a carcass takes a leg in a chop or two.
-			boolean chopped = struck != null && weapon == Weapon.CHOP && GoreConfig.get().butchery && GoreConfig.get().goreLevel.woundDepth >= 0.7F
-					&& wound.severity() >= Math.min(weapon.cap, GoreConfig.get().goreLevel.woundDepth) - 1.0E-3F;
+			boolean chopped = struck != null && weapon == Weapon.CHOP && GoreConfig.get().butchery && wound.severity() >= weapon.cap - 1.0E-3F;
 			if (struck != null && (wound.cut() || chopped)) {
 				GoreSystems.dismemberment().severPart(blood, level, entity, struck, () -> new Vec3(body.x, body.y, body.z), body.yaw, body.roll, away);
 			} else if (struck == null && wound.cut() && blade && GoreConfig.get().butchery) {
 				// Through the carcass, already cut to the bone: a few chops through the backbone and it splits.
 				GoreSystems.dismemberment().butchery().chopThrough(blood, level, corpse, wound.hit().part(), look, weapon == Weapon.CHOP);
 			}
-		} else if (blade && RANDOM.nextFloat() < 0.4F * GoreConfig.get().goreLevel.partChance + 0.15F) {
+		} else if (blade && RANDOM.nextFloat() < BLIND_CUT) {
 			// Wounds are off for this body, so the spot is unknown: a random part.
 			GoreSystems.dismemberment().severOnBody(blood, level, entity, () -> new Vec3(body.x, body.y, body.z), body.yaw, body.roll, away);
 		}

@@ -34,7 +34,15 @@ when a feature is turned off.
 ## Configuration (`config/`)
 - `GoreConfig`: one Gson JSON file (`config/fluidgore.json`), read live every tick. Every tunable lives here and is
   checked in `sanitize()`. `configVersion` migrates old files when a default changes.
-- `GoreLevel`: Off to Extreme, with per-level multipliers (amount, lifetime, wound depth, linger).
+- `GoreLevel`: Off to Full (the constant is `EXTREME`; Suffering uses the same steps and calls its top one Extreme).
+  **A level decides how much is drawn, never what happens to a body.** Its factors are how many particles and scraps
+  are drawn, how long pieces, blood and bodies stay, and the deepest a wound is drawn (`woundDrawn`). How deep a blow
+  goes, what it reaches, whether a part comes off, how much blood leaves and how a body rots are the same at every
+  level but Off; the tuned numbers behind them are constants beside the code that uses them (`Wounds.WOUND_RATE`,
+  `BloodEmitter.RUN`, `Dismemberment.MAX_PARTS_PER_HIT`, `CorpseStrike.BLIND_CUT`). The `goreLevels` game test puts
+  the same ewe through the same blows on Low and on Full and compares them. Dice whose count depends on what is drawn
+  (drops in a spray) must not share a stream with dice that decide what happens: `BloodEmitter` keeps the second
+  kind on its own `Fate` stream.
 - `BloodColor` (colour and chunk block; ender blood is recognised by hue and glows), `BloodResolution` (how finely
   blood is drawn: 16, 32 or 64 pixels to a block, or smooth).
 
@@ -73,10 +81,13 @@ when a feature is turned off.
 - `Runs`: follows blood from a wound down the posed cubes (`ModelHit.boxes`), keeping to skin within about a pixel
   and dropping off where there is none; undersides shed it and upturned faces hold it. `Wounds` traces a wound a
   second after it opens or deepens (not mid-flinch) and once more when the body has lain for 30 ticks.
-- `Wounds`: resolves blows, applies the gore level's depth cap, decides targeted cuts, heals with health, and clots
-  after `woundClotSeconds`. Only aimed blows sever precisely; guessed spots keep random severing.
+- `Wounds`: resolves blows, deepens the wound as far as the weapon goes, decides targeted cuts (a blade through a
+  wound already at its deepest), heals with health, and clots after `woundClotSeconds`. Only aimed blows sever
+  precisely; guessed spots keep random severing.
 - `WoundRenderer`: draws a wound as a stack of layers from `wounds.png`, in the same part transforms as the model, so
-  wounds follow the animation. Rotten flesh adds pus and maggot layers. `WoundCodec` serialises a body's wounds, their ages,
+  wounds follow the animation. It and `WoundAnatomy`'s floor draw a wound at `WoundAnatomy.drawn`: its own severity,
+  or as deep as this screen's Gore Level draws. Everything else (the organ reached, bleeding, severing, the codec)
+  reads the wound's own severity. Rotten flesh adds pus and maggot layers. `WoundCodec` serialises a body's wounds, their ages,
   runs and the organ each reached for sync (format 3 in `PieceCodec` and `Evidence`; formats 1 and 2 still read).
 - `WoundAnatomy`: a wound as a window into the body. Where the body has an anatomy table (`WoundSet.beast`, bound from
   the entity by `WoundAnatomy.bind`), the stock fat, meat and bone layers of a round or cut wound are replaced by a
@@ -277,7 +288,8 @@ when a feature is turned off.
   does the same, so the `Blast` bands (eardrums, lungs, torn, shredded) read it unchanged.
 
 ## Rot (`rot/`)
-- `Decay`: on Extreme with Bodies Rot on, every dead body gets a `RotClock`. **Decay-days are only ever added, never
+- `Decay`: with Bodies Rot on, every dead body gets a `RotClock`, at every Gore Level (`Decay.active`); the rot's
+  look, flies, maggots and pool are drawn on Full only (`Decay.shown`). **Decay-days are only ever added, never
   recomputed from age.** Each tick adds elapsed days times a degree-day rate where the body lies (biome temperature
   above 20 C, halved in water, zero when freezing) times Rot Speed, scaled by body size. Dry, hot places mummify
   instead, until the body reaches bloat; after that it bursts wherever it is.

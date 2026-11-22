@@ -9,7 +9,7 @@ lies on, and wounds, bones and organs drawn at the size of the model's own pixel
 game, not a horror pack on top of it.
 
 > **Content note:** This is to ensure to stay within all guidelines, this mod shows graphic violence against animals,
-> on purpose. At Gore Level Extreme it shows plainly what a kill costs the animal. The Gore Level and Suffering sliders
+> on purpose. At Gore Level Full it shows plainly what a kill costs the animal. The Gore Level and Suffering sliders
 > scale it down to something mild, or switch it off.
 >
 > GitHub recognizes there may be exceptional cases where content related to terrorism or extremism appears on GitHub for legitimate reasons — for instance, in academic research, training data, journalism, or counter-terrorism efforts.
@@ -43,7 +43,8 @@ What the server half changes in the world, and nothing else:
 Each blow is tested against the animal's actual model, not its hitbox, and lands where you aimed: a leg, the neck, the
 head, the flank. Blows to the same spot deepen the wound through four layers: **bruise, gash, open meat, bone**.
 Wounds are drawn on the model, so they move with every step, on living animals mid-fight and on bodies after death.
-Open wounds drip, so a wounded animal leaves a trail. How deep a wound can go depends on the Gore Level.
+Open wounds drip, so a wounded animal leaves a trail. A wound is as deep as the blows made it; the Gore Level decides
+how far into it your screen draws.
 
 ![Wound layers on a leg: bruise, open meat, bone](docs/images/wound-layers.png)
 
@@ -208,8 +209,7 @@ floor. A charge that goes off in the air over water tears a crown of spray off t
 column of water goes up from under it a moment later, and the spray rains back down.
 
 Wet pieces smear the walls they hit, and some stick there before they peel off and drop. Players caught close enough
-are left deaf for a while, with ringing ears. Blast gore starts at the Medium gore level and covers players too when
-the blast kills them.
+are left deaf for a while, with ringing ears. Blast gore covers players too when the blast kills them.
 
 ### Fire
 - **Burnt Bodies.** Animals on fire char from seared to roasted to black and stay that way, alive or dead. Fire sears
@@ -219,8 +219,8 @@ the blast kills them.
   knock off the char and break the bones.
 - **Burning People.** Players have an inside, built at the skin's own pixel size: a layer of fat, the muscles, a
   full skeleton and the organs where they lie. Catch fire and it burns down through them pixel by pixel. Clothes and
-  hair go first, then the skin blisters, chars and splits onto fat, muscle and bone. How deep it goes depends on the
-  gore level and how close the fire has brought you to death, and burns heal as health comes back. Die on fire and
+  hair go first, then the skin blisters, chars and splits onto fat, muscle and bone. How deep it goes depends on how
+  close the fire has brought you to death, and burns heal as health comes back. Die on fire and
   the body stays and burns on to a skeleton, even after you respawn. Zombies and other humanoid mobs can burn the same
   way (Burning Mobs Too, off by default, because zombies burn every dawn).
 - **Burning Animals.** Sheep, pigs and cows burn through their own anatomy: a sheep's hard white suet over dark
@@ -250,15 +250,16 @@ the blast kills them.
 - **Butchery.**
   - Right-click a dead chicken with an empty hand to pluck it, a handful at a time.
   - Take off the head, wings and legs at the joints with a blade. On a downed body, an axe that reaches the bone of a
-    leg or the neck goes through it in that chop (Medium and above).
+    leg or the neck goes through it in that chop.
   - Cut through the carcass and it splits, and a blade on a loose piece cuts it again until it is diced.
   - A sheep comes apart into a butcher's joints (neck, shoulder, rack, loin, leg, breast and flank), then down to
     chops.
   - A blade splits a sheep's severed head down the middle, showing the skin and cheek over the bone, the skull, brain
     and tongue on the cut faces.
 
-### Rot (Extreme only)
-At the Extreme gore level a body left lying rots, and each Minecraft day counts as one day of decay:
+### Rot (drawn on Full only)
+A body left lying rots, and each Minecraft day counts as one day of decay. The rot is counted at every Gore Level, so
+a body is as far gone on every screen, and drawn on Full:
 1. Within hours it is pale and stiff, and the first flies find it.
 2. It bloats green and tight, its legs pushed out stiff, until it splits open: maggots, a dark pool spreading under
    it, and the flies at their worst.
@@ -343,12 +344,15 @@ packs), Lithium, FerriteCore, Entity Culling and ImmediatelyFast.
 ![Settings](docs/images/settings.png)
 
 ## Settings
-Listed in the order of the settings screen. Hover over any option in game for a longer description. Times and caps
-marked "at Medium" are scaled by the Gore Level.
+Listed in the order of the settings screen. Hover over any option in game for a longer description. Times marked
+"at Medium" are scaled by the Gore Level.
 
-**Gore Level** (default Medium): Off / Low / Medium / High / Extreme. It scales blood, how often parts come off, how
-long it all stays and how deep wounds go. Low stops at gashes, Medium at open meat, and High and Extreme reach the
-bone. Off disables everything and clears existing blood and parts.
+**Gore Level** (default Full): Off / Low / Medium / High / Full. It sets how much of the gore your screen draws, and
+never what happens to a body: a blow goes as deep, the same parts come off, the same blood is lost and the animal dies
+the same way at every level, so players on different levels see the same body. Full draws everything. Lower levels
+draw fewer drops and scraps, keep blood, pieces and bodies for less time, and draw a wound less deep than it is: Low
+as a gash, Medium as open meat, High to the bone and the organs. Rot is drawn on Full only. Off disables everything
+and clears existing blood and parts. Demo: `levels`.
 
 **Who Bleeds**
 
@@ -391,7 +395,7 @@ bone. Off disables everything and clears existing blood and parts.
 | Rotten Undead | On | Zombies and their kin are rotting meat with dark, thick blood. |
 | Wounds Heal | On | Wounds close as health comes back and broken bones knit. |
 | Wounds Clot After | 30 s | How long a living body keeps dripping after the last blow. |
-| Brutal PvP | On | Players' blades cut other players deeper; a kill on High or Extreme takes more than one limb. |
+| Brutal PvP | On | Players' blades cut other players deeper; a kill takes more than one limb. |
 | Part Lifetime | 600 s | How long severed limbs and pieces stay at Medium (up to an hour). |
 | Max Severed Parts | 160 | Cap on severed parts; the oldest go first. |
 | Play With Parts | On | Punch severed parts, pick them up and throw them, kick them, stomp them flat. |
@@ -438,7 +442,7 @@ bone. Off disables everything and clears existing blood and parts.
 | Wading Through Bodies | 35% | How much each body you walk through slows you. 0 turns it off. |
 | Identify Remains | On | Look at a piece of a body and its name shows over the hotbar. |
 | Pieces React to Heat | On | Organs, scraps and limbs cook, char, crumble and rinse depending on where they lie. |
-| Bodies Rot | On | Extreme only: bodies and severed pieces rot by the day. |
+| Bodies Rot | On | Bodies and severed pieces rot by the day. Drawn on Gore Level Full only. |
 | Rot Speed | 1x | 1x counts one day of decay per Minecraft day; up to 100x. |
 
 **Fire**
@@ -560,6 +564,12 @@ generators.
   the body, so the skull inside it is a real skull in a head twice as large as it should be, and the muzzle is
   squashed harder than the braincase. The eyes inside the head lie on its sides where a sheep's are, further back than
   the eyes painted on the front of the vanilla face.
+- How fast blows deepen a wound, how long a wound runs, that a blade which kills or lands heavily takes off the part it
+  struck, and how many parts a killing blade takes when the spot is not known (up to five) are tuned numbers, not
+  measured ones. They are the same at every Gore Level.
+- On a Gore Level below Full a wound is drawn as a shallower wound of the stock kind (a gash, or open meat), which
+  can cover more skin than the cut it stands for. What the wound reached still answers: a rumen cut on Low spills its
+  cud from what is drawn as a gash. A body bloated with rot floats on every level, and is drawn fresh below Full.
 - Blood pools and stains are not saved, and each player's game works out its own: two players see the same pool in
   the same place, but not to the last pixel.
 - Only your own footing slips on blood. Mobs and other players are not slowed or moved by it.

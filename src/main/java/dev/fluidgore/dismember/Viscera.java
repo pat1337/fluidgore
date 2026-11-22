@@ -352,7 +352,7 @@ public final class Viscera {
 		part.label = GorePart.organLabel(part.owner, part.organ, part.side, 0);
 		// Blood for a few landings, and a little to drip: finite, so no throw or cut makes more of it.
 		part.condition.fluid = ORGAN_FLUID;
-		part.bleedLeft = ORGAN_BLEED * config.goreLevel.puddles;
+		part.bleedLeft = ORGAN_BLEED;
 		part.condition.inherit(GoreSystems.dismemberment().bodyCondition(entity, part.material()));
 		if (sear > 0.05F) {
 			part.condition.sear(sear);

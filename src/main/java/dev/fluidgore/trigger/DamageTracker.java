@@ -9,7 +9,6 @@ import dev.fluidgore.blood.BloodSupply;
 import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.event.Events;
-import dev.fluidgore.config.GoreLevel;
 import dev.fluidgore.demo.DemoPlayer;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.Dismemberment;
@@ -384,7 +383,7 @@ public final class DamageTracker {
 		GoreConfig config = GoreConfig.get();
 		boolean torn = false;
 		// Players too: a creeper that kills you throws your limbs about for everyone watching.
-		if (gore && blastAt != null && lethal && config.blastGore && config.goreLevel.ordinal() >= GoreLevel.MEDIUM.ordinal()) {
+		if (gore && blastAt != null && lethal && config.blastGore) {
 			Events.begin(blastEvent, blastSource, blastAt, blastCloud, blastWater);
 			try {
 				if (impact >= SHRED_IMPACT) {
@@ -466,13 +465,14 @@ public final class DamageTracker {
 					// The player aimed this blow: only the part that was struck can come off.
 					BodyPart struck = wound.hit().bodyPart();
 					boolean heavy = damage >= config.heavyHitDamage && !(victim instanceof Player);
-					boolean chop = weapon.cuts() && (lethal || heavy) && RANDOM.nextFloat() < config.goreLevel.partChance;
+					// A blade that kills, or lands heavily, takes off the part it struck: a rule of thumb until blows are measured.
+					boolean chop = weapon.cuts() && (lethal || heavy);
 					// The head comes off only with the blow that kills: a living body keeps it.
 					if (struck != null && (wound.cut() || chop) && (lethal || struck != BodyPart.HEAD)) {
 						dismemberment.severPart(blood, level, victim, struck, victim::position, Float.NaN, 0.0F, away);
 					}
 
-					if (pvp && lethal && config.goreLevel.ordinal() >= GoreLevel.HIGH.ordinal()) {
+					if (pvp && lethal) {
 						// Hacked down: more of the body comes apart than the limb that took the blow.
 						dismemberment.onBladedHit(blood, level, victim, true, away);
 					}

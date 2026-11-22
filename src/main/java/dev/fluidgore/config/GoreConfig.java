@@ -25,7 +25,8 @@ public final class GoreConfig {
 
 	private static GoreConfig instance = new GoreConfig();
 
-	public GoreLevel goreLevel = GoreLevel.MEDIUM;
+	/** How much of the gore this screen draws; it never changes what happens to a body (see {@link GoreLevel}). */
+	public GoreLevel goreLevel = GoreLevel.EXTREME;
 	public boolean affectPlayers = true;
 	public boolean affectMobs = true;
 	public boolean affectAnimals = true;
@@ -187,9 +188,9 @@ public final class GoreConfig {
 	 */
 	public boolean traceEvents = false;
 	/**
-	 * Extreme gore level only: bodies that stay (kept bodies, severed pieces) rot as a real carcass does, by the
-	 * Minecraft day: rigor, bloat, rupture, maggots, bones. Faster for small bodies and in hot biomes, slower in water,
-	 * not at all in the snow; in deserts they dry out into mummies instead.
+	 * Bodies that stay (kept bodies, severed pieces) rot as a real carcass does, by the Minecraft day: rigor, bloat,
+	 * rupture, maggots, bones. Faster for small bodies and in hot biomes, slower in water, not at all in the snow; in
+	 * deserts they dry out into mummies instead. Counted at every Gore Level, drawn at the top one only.
 	 */
 	public boolean bodyDecay = true;
 	/** Rot speed multiplier: 1 is real time (a Minecraft day for a day). */
@@ -254,7 +255,7 @@ public final class GoreConfig {
 	public int woundClotSeconds = 30;
 	/** Severed limbs and heads keep the armour they wore: a helmet stays on the head, boots on the legs. */
 	public boolean armorOnParts = true;
-	/** Player-on-player blades cut deeper and bleed harder, and a kill on High or Extreme takes more than the struck part. */
+	/** Player-on-player blades cut deeper and bleed harder, and a kill takes more than the struck part. */
 	public boolean brutalPvp = true;
 	/** Your own injuries on screen: chunky pixel blood thrown across it from the side a blow came from, running down. */
 	public boolean hurtScreen = true;
@@ -459,7 +460,7 @@ public final class GoreConfig {
 		}
 
 		configVersion = CONFIG_VERSION;
-		if (goreLevel == null) goreLevel = GoreLevel.MEDIUM;
+		if (goreLevel == null) goreLevel = GoreLevel.EXTREME;
 		if (bloodResolution == null) bloodResolution = BloodResolution.X16;
 		if (bloodColor == null) bloodColor = BloodColor.RED;
 		if (monsterBloodColor == null) monsterBloodColor = BloodColor.RED;

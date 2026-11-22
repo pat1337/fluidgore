@@ -11,6 +11,7 @@ import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.player.Injury;
 import dev.fluidgore.player.InjuryPose;
 import dev.fluidgore.ragdoll.RigPose;
+import dev.fluidgore.rot.Decay;
 import dev.fluidgore.rot.Rot;
 import dev.fluidgore.suffer.BodyPose;
 import dev.fluidgore.suffer.CorpseStrike;
@@ -102,7 +103,7 @@ public abstract class LivingEntityRendererMixin {
 		state.setData(BloodyWool.PLUMAGE, plumage);
 
 		// Rot discolours it on top of that.
-		Rot rot = GoreSystems.decay().of(entity.getId());
+		Rot rot = Decay.shown() ? GoreSystems.decay().of(entity.getId()) : null;
 		state.setData(Rot.KEY, rot);
 		if (rot != null) {
 			tint = tint == null ? rot.tint() : Integer.valueOf(Burns.apply(0xFF000000 | tint, rot.tint()) & 0xFFFFFF);

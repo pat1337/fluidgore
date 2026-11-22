@@ -6,7 +6,6 @@ import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.blood.Decal;
 import dev.fluidgore.blood.SurfaceProbe;
 import dev.fluidgore.config.GoreConfig;
-import dev.fluidgore.config.GoreLevel;
 import dev.fluidgore.dismember.GorePart;
 import dev.fluidgore.net.BodyRot;
 import dev.fluidgore.suffer.Corpse;
@@ -32,7 +31,8 @@ import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Bodies rot (Extreme gore level, {@code bodyDecay}). A body that stays (a kept body, see {@code server/KeptBodies}, or
+ * Bodies rot ({@code bodyDecay}). The rot is counted at every Gore Level, so a body is as far gone on every screen and
+ * floats when it has bloated, and drawn at the top level only ({@link #shown}). A body that stays (a kept body, see {@code server/KeptBodies}, or
  * a severed piece) goes through the stages in {@link Rot} at the pace of a real carcass, one Minecraft day for a day.
  *
  * <p>The pace is counted the way forensic science counts it, in degree-days: a day at 20 degrees is one decay-day,
@@ -111,10 +111,15 @@ public final class Decay {
 		ClientPlayNetworking.registerGlobalReceiver(BodyRot.TYPE, (rot, context) -> GoreSystems.decay().told(rot.entityId(), rot.days(), rot.arid()));
 	}
 
-	/** On: Extreme gore and Bodies Rot. */
+	/** Bodies Rot is on: the rot of bodies and pieces is counted. */
 	public static boolean active() {
 		GoreConfig config = GoreConfig.get();
-		return config.bodyDecay && config.goreLevel == GoreLevel.EXTREME;
+		return config.bodyDecay && config.goreLevel.enabled();
+	}
+
+	/** The rot is drawn too (its colours, the bloat, flies, maggots and the pool): the top Gore Level only. */
+	public static boolean shown() {
+		return active() && GoreConfig.get().goreLevel.full();
 	}
 
 	/** The server says this body has rotted {@code days} decay-days (at 1x), and whether it is drying into a mummy. */
@@ -162,6 +167,7 @@ public final class Decay {
 
 		tick++;
 		GoreConfig config = GoreConfig.get();
+		boolean shown = shown();
 		Entity camera = Minecraft.getInstance().getCameraEntity();
 		long game = level.getGameTime();
 		long clock = level.getOverworldClockTime();
@@ -197,7 +203,9 @@ public final class Decay {
 
 			body.count = body.count.to(game, clock, body.rate * config.decaySpeed, body.size, body.aridHere);
 			body.show();
-			if (camera != null && camera.distanceToSqr(entity) < EFFECTS_SQ) {
+			if (!shown) {
+				removeStain(blood, body);
+			} else if (camera != null && camera.distanceToSqr(entity) < EFFECTS_SQ) {
 				effects(level, blood, entity, body, camera);
 			}
 

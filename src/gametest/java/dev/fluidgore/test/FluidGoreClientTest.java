@@ -134,6 +134,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			bodiesInWater(context, singleplayer.getServer());
 			stuckPig(context, singleplayer.getServer());
 			windows(context, singleplayer.getServer());
+			goreLevels(context, singleplayer.getServer());
 			pallor(context, singleplayer.getServer());
 			lying(context, singleplayer.getServer());
 			deadBlast(context, singleplayer.getServer());
@@ -277,6 +278,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			case "meatsAndWool" -> meatsAndWool(context, server);
 			case "stuckPig" -> stuckPig(context, server);
 			case "windows" -> windows(context, server);
+			case "goreLevels" -> goreLevels(context, server);
 			case "pallor" -> pallor(context, server);
 			case "pieceReactions" -> pieceReactions(context, server);
 			case "sourceAttribution" -> sourceAttribution(context, server);
@@ -1620,6 +1622,153 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		}
 
 		return out.toString().trim();
+	}
+
+	/** What one ewe went through in {@link #goreLevels}, at one Gore Level. */
+	private record LevelRun(String wounds, String drawn, int drops, float bledFirst, float bledAlive, int missing, String death, float bledDead) {
+	}
+
+	/**
+	 * The Gore Level decides how much is drawn, never what happens. The same ewe (the same UUID, so the same dice) takes
+	 * the same blows on Low and on the top level: three cuts into the left flank, then a killing cut at a hind leg. Her
+	 * wounds (how deep, what they reach), the leg she loses, the way she dies and the blood she loses must be the same;
+	 * only what is drawn differs: fewer drops fly on Low, and the flank wound is drawn less deep.
+	 */
+	private static void goreLevels(ClientGameTestContext context, TestServerContext server) {
+		server.runCommand("gamerule send_command_feedback false");
+		server.runCommand("gamerule show_death_messages false");
+		server.runCommand("kill @e[type=!minecraft:player]");
+		server.runCommand("time set noon");
+		server.runCommand("weather clear");
+		server.runCommand("fill 2994 -61 -8 3008 -61 7 minecraft:smooth_stone");
+		server.runCommand("fill 2994 -60 -8 3008 -55 7 minecraft:air");
+		server.runCommand("item replace entity @a weapon.mainhand with minecraft:iron_sword");
+		GoreLevel before = context.computeOnClient(mc -> GoreConfig.get().goreLevel);
+		boolean throes = context.computeOnClient(mc -> GoreConfig.get().deathThroes);
+		context.runOnClient(mc -> GoreConfig.get().deathThroes = false);
+		LevelRun low = levelRun(context, server, GoreLevel.LOW, "low");
+		LevelRun full = levelRun(context, server, GoreLevel.EXTREME, "full");
+		context.runOnClient(mc -> {
+			GoreConfig.get().goreLevel = before;
+			GoreConfig.get().deathThroes = throes;
+		});
+		System.out.println("[FluidGoreTest] gore levels, Low:  " + low);
+		System.out.println("[FluidGoreTest] gore levels, Full: " + full);
+		check(full.wounds().contains("RUMEN"), "gore levels: the cuts did not reach the rumen on the top level: " + full.wounds());
+		check(low.wounds().equals(full.wounds()), "gore levels: the wounds differ: Low " + low.wounds() + ", Full " + full.wounds());
+		check(full.missing() != 0, "gore levels: the killing cut took no part off on the top level");
+		check(low.missing() == full.missing(), "gore levels: the parts lost differ: Low " + low.missing() + ", Full " + full.missing());
+		check(low.death().equals(full.death()), "gore levels: the deaths differ: Low " + low.death() + ", Full " + full.death());
+		// The blood's dice over time are each run's own (drips, the trickle), so the litres agree closely, not to the drop.
+		// After the first cut she is far from having bled all she can, so nothing evens the two runs out.
+		check(full.bledFirst() > 0.0F && full.bledFirst() < 0.9F * full.bledAlive(), "gore levels: the first cut bled nothing, or all she had: " + full.bledFirst()
+				+ " L of " + full.bledAlive() + " L");
+		check(Math.abs(low.bledFirst() - full.bledFirst()) <= 0.15F * full.bledFirst(),
+				"gore levels: the first cut bled different amounts: Low " + low.bledFirst() + " L, Full " + full.bledFirst() + " L");
+		check(full.bledAlive() > 0.0F && Math.abs(low.bledAlive() - full.bledAlive()) <= 0.15F * full.bledAlive(),
+				"gore levels: the living ewe lost different amounts of blood: Low " + low.bledAlive() + " L, Full " + full.bledAlive() + " L");
+		check(full.bledDead() > full.bledAlive() && Math.abs(low.bledDead() - full.bledDead()) <= 0.15F * full.bledDead(),
+				"gore levels: the dead ewe lost different amounts of blood: Low " + low.bledDead() + " L, Full " + full.bledDead() + " L");
+		// What is drawn does differ.
+		check(low.drops() < full.drops(), "gore levels: Low drew no fewer drops than the top level: " + low.drops() + " vs " + full.drops());
+		check(!low.drawn().equals(full.drawn()), "gore levels: Low draws the wounds as deep as the top level: " + low.drawn());
+		check(full.drawn().equals(full.wounds().replaceAll("/\\S+", "")), "gore levels: the top level does not draw the wounds at their depth: " + full.drawn()
+				+ " of " + full.wounds());
+		server.runCommand("kill @e[type=!minecraft:player]");
+		System.out.println("[FluidGoreTest] goreLevels passed");
+	}
+
+	private static LevelRun levelRun(ClientGameTestContext context, TestServerContext server, GoreLevel level, String name) {
+		server.runCommand("tp @a 3003.0 -60 0.3 90 10");
+		context.waitTicks(10);
+		context.runOnClient(mc -> {
+			GoreConfig.get().goreLevel = level;
+			GoreSystems.blood().clear();
+			GoreSystems.dismemberment().clear();
+			GoreSystems.suffering().clear();
+			dev.fluidgore.blood.BloodSupply.clear();
+		});
+		// Facing south, so her left side is east, towards the player. The UUID picks a ewe (see Anatomy.male).
+		server.runCommand("summon minecraft:sheep 3000.5 -60 0.5 {NoAI:1b,Silent:1b,Sheared:1b,Tags:[\"fg_level\"],UUID:[I;11,0,0,3],Rotation:[0f,0f]}");
+		context.waitTicks(20);
+		int ewe = context.computeOnClient(mc -> sheepNear(mc, 3000.5, 0.5));
+		check(ewe >= 0, "gore levels: the ewe was not found on " + name);
+		int drops = 0;
+		float bledFirst = 0.0F;
+		for (int n = 0; n < 3; n++) {
+			context.runOnClient(mc -> aimTrunk(mc, (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(ewe), -0.16, -0.06));
+			server.runCommand("execute as @p run damage @e[tag=fg_level,limit=1] 2.6 minecraft:player_attack by @s");
+			// The most drops in the air at once after the first cut.
+			for (int t = 0; t < 12; t++) {
+				context.waitTicks(1);
+				if (n == 0) {
+					drops = Math.max(drops, context.computeOnClient(mc -> GoreSystems.blood().droplets().droplets().size()));
+				}
+			}
+
+			if (n == 0) {
+				bledFirst = context.computeOnClient(mc -> dev.fluidgore.blood.BloodSupply.lost(ewe));
+			}
+		}
+
+		context.waitTicks(100);
+		String wounds = context.computeOnClient(mc -> describeReached(ewe));
+		String drawn = context.computeOnClient(mc -> {
+			var set = GoreSystems.dismemberment().wounds().get(ewe);
+			StringBuilder out = new StringBuilder();
+			for (int i = 0; set != null && i < set.count(); i++) {
+				out.append(i).append(':').append(String.format(java.util.Locale.ROOT, "%.2f", dev.fluidgore.wound.WoundAnatomy.drawn(set, i))).append(' ');
+			}
+
+			return out.toString().trim();
+		});
+		float bledAlive = context.computeOnClient(mc -> dev.fluidgore.blood.BloodSupply.lost(ewe));
+		// From a pit, level with the wound and close to it.
+		server.runCommand("fill 3002 -61 0 3002 -61 0 minecraft:air");
+		server.runCommand("tp @a 3002.0 -61.0 0.3 90 5");
+		context.waitTicks(5);
+		context.runOnClient(mc -> {
+			aimTrunk(mc, (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(ewe), -0.16, -0.06);
+			mc.options.fov().set(30);
+		});
+		context.waitTicks(2);
+		context.takeScreenshot("gore_levels_" + name + "_01_flank");
+		if (level == GoreLevel.EXTREME) {
+			// The same wound on the same ewe, drawn as the lower levels draw it.
+			for (GoreLevel lower : new GoreLevel[] {GoreLevel.MEDIUM, GoreLevel.LOW}) {
+				context.runOnClient(mc -> GoreConfig.get().goreLevel = lower);
+				context.waitTicks(3);
+				context.takeScreenshot("gore_levels_" + name + "_01_flank_drawn_" + lower.name().toLowerCase(java.util.Locale.ROOT));
+			}
+
+			context.runOnClient(mc -> GoreConfig.get().goreLevel = level);
+		}
+
+		context.runOnClient(mc -> mc.options.fov().set(70));
+		server.runCommand("fill 3002 -61 0 3002 -61 0 minecraft:smooth_stone");
+		server.runCommand("tp @a 3003.0 -60 0.3 90 10");
+		context.waitTicks(5);
+
+		// The killing cut, at the hind leg on her near side.
+		context.runOnClient(mc -> {
+			var body = (net.minecraft.world.entity.LivingEntity) mc.level.getEntity(ewe);
+			Vec3 leg = ModelHit.centre(body, ModelParts.pose(body), BodyPart.LEFT_LEG);
+			aimAt(mc, leg.x, leg.y, leg.z);
+		});
+		server.runCommand("execute as @p run damage @e[tag=fg_level,limit=1] 100 minecraft:player_attack by @s");
+		context.waitTicks(10);
+		int missing = context.computeOnClient(mc -> GoreSystems.dismemberment().missingMask(ewe));
+		String death = context.computeOnClient(mc -> {
+			var corpse = GoreSystems.suffering().corpse(ewe);
+			return corpse == null ? "no body" : corpse.kind.name();
+		});
+		context.waitTicks(140);
+		float bledDead = context.computeOnClient(mc -> dev.fluidgore.blood.BloodSupply.lost(ewe));
+		context.takeScreenshot("gore_levels_" + name + "_02_dead");
+		server.runCommand("kill @e[type=!minecraft:player]");
+		// Until the server has let go of her: the next ewe has her UUID.
+		context.waitTicks(60);
+		return new LevelRun(wounds, drawn, drops, bledFirst, bledAlive, missing, death, bledDead);
 	}
 
 	private static void stuckPig(ClientGameTestContext context, TestServerContext server) {
@@ -7934,10 +8083,11 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		check(desert.startsWith("arid=true") && desert.endsWith("maggots=0.0"), "the desert pig did not dry out: " + desert);
 		context.takeScreenshot("decay_04_desert_mummy");
 
-		// Off below Extreme.
+		// Below the top level the rot is still counted, and not drawn.
 		context.runOnClient(mc -> GoreConfig.get().goreLevel = GoreLevel.HIGH);
 		context.waitTicks(2);
-		check(context.computeOnClient(mc -> GoreSystems.decay().of(ids[0]) == null), "bodies rot below Extreme");
+		check(context.computeOnClient(mc -> GoreSystems.decay().of(ids[0]) != null), "bodies stop rotting below the top Gore Level");
+		check(!context.computeOnClient(mc -> dev.fluidgore.rot.Decay.shown()), "rot is drawn below the top Gore Level");
 		context.runOnClient(mc -> GoreConfig.get().goreLevel = GoreLevel.EXTREME);
 
 		context.runOnClient(mc -> {

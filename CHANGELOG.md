@@ -64,6 +64,24 @@ All notable changes to Fluid Gore are listed here. The format follows
   small animals leave smaller prints.
 
 ### Changed
+- The Gore Level sets how much of the gore your screen draws, and no longer what happens to a body. At every level
+  a blow goes as deep and reaches what lies under it, the same parts come off, the same blood leaves the body and the
+  animal dies the same way, so players on different levels see the same body. Lower levels draw fewer drops and
+  scraps, keep blood, pieces and bodies for less time, and draw a wound less deep than it is: Low as a gash, Medium as
+  open meat, High to the bone and the organs. Before, Low and Medium stopped wounds short of the bone, so a sheep's
+  wound could not reach the rib, lung or rumen under it, and whether a part came off was a dice roll scaled by the
+  level. Demo: `levels`.
+- The top Gore Level is called Full and is the default. It draws everything that is there and nothing more: the
+  drops, mist and scraps that the old Extreme multiplied by 2.6 are drawn once. A level already chosen in the
+  settings is kept, with Extreme now shown as Full.
+- A blade through a wound already cut as deep as it goes takes the part off every time; a blade that kills, or lands
+  heavily, takes off the part it struck. Neither depends on the Gore Level or on luck any more.
+- Blast gore (bodies torn or shredded by a blast) and the extra parts a Brutal PvP kill takes are no longer held back
+  on the lower Gore Levels.
+- A living body on fire burns as deep on every Gore Level; how deep depends only on how near death the fire has
+  brought it.
+- Rot is counted at every Gore Level and drawn on Full. A body bloated with rot floats on every level.
+- A spray of blood carries the same amount however many drops it is drawn with.
 - A sheep is now one measured animal: a mature Merino ewe of 49 kg, holding 2.9 litres of blood (59 ml a kilogram).
   It used to be 70 kg with 4.2 litres, from no named source, so a sheep now leaves about a third less blood and burns
   a little sooner. The weight is the mean of sixteen ewes weighed and dissected for Butterfield's *New Concepts of

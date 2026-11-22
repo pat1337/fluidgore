@@ -274,7 +274,8 @@ public final class WoundRenderer {
 		float[] min = {cube.minX, cube.minY, cube.minZ};
 		float[] max = {cube.maxX, cube.maxY, cube.maxZ};
 		float face = set.sign[i] > 0 ? max[a] : min[a];
-		float severity = set.severity[i];
+		// As deep as this screen's Gore Level draws it; the wound itself is as deep as the blows made it.
+		float severity = WoundAnatomy.drawn(set, i);
 		boolean slash = set.morph[i] == WoundSet.SLASH;
 		Layer[] layers = switch (set.morph[i]) {
 			case WoundSet.PLUCK -> PLUCKED;

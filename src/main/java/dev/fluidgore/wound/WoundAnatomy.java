@@ -10,6 +10,7 @@ import dev.fluidgore.anatomy.Anatomy.Region;
 import dev.fluidgore.anatomy.MeltRenderer;
 import dev.fluidgore.anatomy.Probe;
 import dev.fluidgore.blood.BloodEmitter;
+import dev.fluidgore.config.GoreConfig;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.Tissue;
 import dev.fluidgore.mixin.ModelPartAccessor;
@@ -112,15 +113,26 @@ public final class WoundAnatomy {
 		return new Context(table, fit, Probe.canonicalSign(fit, axis, set.sign[i]), Math.min(DEEPEST, thickness / 3.0F));
 	}
 
-	/** How deep wound {@code i} has gone, in the cube's pixels: from the split skin down to {@link Context#deepest}. */
-	static float depthPixels(WoundSet set, int i, Context ctx) {
-		float open = Mth.clamp((set.severity[i] - OPENS) / (1.0F - OPENS), 0.0F, 1.0F);
+	/** How deep a wound of {@code severity} goes, in the cube's pixels: from the split skin down to {@link Context#deepest}. */
+	static float depthPixels(float severity, Context ctx) {
+		float open = Mth.clamp((severity - OPENS) / (1.0F - OPENS), 0.0F, 1.0F);
 		return Math.max(0.05F, open * ctx.deepest());
 	}
 
-	/** {@link #depthPixels} in the table's canonical pixels along the wound's axis. */
-	static float depth(WoundSet set, int i, Context ctx) {
-		return depthPixels(set, i, ctx) / Math.abs(ctx.fit()[set.axis[i]]);
+	/** {@link #depthPixels} of wound {@code i} at {@code severity}, in the table's canonical pixels along the wound's axis. */
+	static float depth(WoundSet set, int i, float severity, Context ctx) {
+		return depthPixels(severity, ctx) / Math.abs(ctx.fit()[set.axis[i]]);
+	}
+
+	/**
+	 * The severity wound {@code i} is drawn at on this screen: its own, or as deep as the Gore Level draws. Only wounds
+	 * that deepen with blows are held back; a cut face, a broken bone and plucked skin are drawn as they are.
+	 */
+	public static float drawn(WoundSet set, int i) {
+		return switch (set.morph[i]) {
+			case WoundSet.ROUND, WoundSet.SLASH, WoundSet.INCISED, WoundSet.STICK -> GoreConfig.get().goreLevel.drawn(set.severity[i]);
+			default -> set.severity[i];
+		};
 	}
 
 	/** The surface point of wound {@code i} (its centre on the cube's face), in canonical pixels. */
@@ -136,14 +148,17 @@ public final class WoundAnatomy {
 		return Probe.canonical(ctx.fit(), p[0], p[1], p[2]);
 	}
 
-	/** Whether the table has anything at the bottom of wound {@code i}: if not, the stock layers are drawn instead. */
+	/**
+	 * Whether the table has anything at the bottom of wound {@code i} as deep as it is drawn: if not, the stock layers are
+	 * drawn instead.
+	 */
 	static boolean shows(WoundSet set, int i, Context ctx) {
-		return Probe.under(ctx.table(), surface(set, i, ctx), set.axis[i], ctx.canonicalSign(), depth(set, i, ctx)) != null;
+		return Probe.under(ctx.table(), surface(set, i, ctx), set.axis[i], ctx.canonicalSign(), depth(set, i, drawn(set, i), ctx)) != null;
 	}
 
 	/**
 	 * The organ of note that wound {@code i} reaches at its depth now (the deepest one on the way in), or null for a
-	 * wound still in the body wall.
+	 * wound still in the body wall. Read at the wound's own depth, whatever the Gore Level draws of it.
 	 */
 	static @Nullable Kind reach(WoundSet set, int i) {
 		Context ctx = of(set, i);
@@ -152,7 +167,7 @@ public final class WoundAnatomy {
 		}
 
 		Kind reached = null;
-		for (Probe.Layer layer : Probe.layers(ctx.table(), surface(set, i, ctx), set.axis[i], ctx.canonicalSign(), depth(set, i, ctx))) {
+		for (Probe.Layer layer : Probe.layers(ctx.table(), surface(set, i, ctx), set.axis[i], ctx.canonicalSign(), depth(set, i, set.severity[i], ctx))) {
 			if (ofNote(layer.kind())) {
 				reached = layer.kind();
 			}
@@ -215,7 +230,7 @@ public final class WoundAnatomy {
 
 	/**
 	 * Draws the floor of wound {@code i}: the tissue the table has under each half-pixel cell of its footprint, at the
-	 * wound's depth, {@code lift} pixels proud of the face. {@code r} is the footprint's radius; a cut is a thin stroke
+	 * depth the wound is drawn to ({@link #drawn}), {@code lift} pixels proud of the face. {@code r} is the footprint's radius; a cut is a thin stroke
 	 * along its angle, a round wound a disc.
 	 */
 	static void floor(WoundSet set, int i, Context ctx, float r, float lift, PoseStack.Pose pose, VertexConsumer anatomy, int light, int overlay) {
@@ -224,8 +239,9 @@ public final class WoundAnatomy {
 		int b = (a + 1) % 3;
 		int c = (a + 2) % 3;
 		float face = set.sign[i] > 0 ? max(cube, a) : min(cube, a);
-		float depth = depth(set, i, ctx);
-		float deep = depthPixels(set, i, ctx) / Math.max(ctx.deepest(), 1.0E-3F);
+		float shown = drawn(set, i);
+		float depth = depth(set, i, shown, ctx);
+		float deep = depthPixels(shown, ctx) / Math.max(ctx.deepest(), 1.0E-3F);
 		boolean cut = set.morph[i] == WoundSet.SLASH || set.morph[i] == WoundSet.INCISED || set.morph[i] == WoundSet.STICK;
 		float angle = cut ? (set.variant[i] & 3) * (Mth.PI / 4.0F) : 0.0F;
 		float cos = Mth.cos(angle);

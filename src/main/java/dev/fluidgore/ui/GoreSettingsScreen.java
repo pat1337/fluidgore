@@ -50,7 +50,7 @@ public class GoreSettingsScreen extends OptionsSubScreen {
 			return;
 		}
 
-		this.list.addBig(enumSlider("fluidgore.option.gore_level", GoreLevel.values(), c.goreLevel, GoreLevel::translationKey, v -> c.goreLevel = v));
+		this.list.addBig(enumSlider("fluidgore.option.gore_level", GoreLevel.values(), c.goreLevel, GoreLevel::goreKey, v -> c.goreLevel = v));
 
 		section("fluidgore.header.targets",
 				toggle("fluidgore.option.affect_players", c.affectPlayers, v -> c.affectPlayers = v),

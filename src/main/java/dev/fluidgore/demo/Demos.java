@@ -2,6 +2,7 @@ package dev.fluidgore.demo;
 
 import dev.fluidgore.GoreSystems;
 import dev.fluidgore.blood.Cleaning;
+import dev.fluidgore.config.GoreLevel;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.GorePart;
 import dev.fluidgore.dismember.ModelParts;
@@ -32,6 +33,7 @@ import org.jspecify.annotations.Nullable;
 public final class Demos {
 	/** Fluid Gore's own demos. */
 	private static final List<Demo> OWN = List.of(
+			new Demo("levels", "4.1.0", "One wound at each Gore Level: a shorn ewe is cut three times in the left flank, as deep as the rumen. The wound stays what it is while the Gore Level is turned down and up again; only how deep into it your screen draws changes. Your own level comes back when the demo ends. Look close at the cut", false, Demos::levels),
 			new Demo("spatter", "4.1.0", "Spatter and prints: a pig killed with a sword in front of a stone wall. The drops that flew straight at the wall leave round stains and the ones that came across it stains drawn out the way they flew; from the bigger ones blood runs on down the wall and stops in a bead, or reaches the floor and pools there. Then a pig standing in a pool is struck and bolts, leaving the prints of its cloven hooves, each fainter than the last. Walk through the pool to leave your own", true, Demos::spatter),
 			new Demo("poolblast", "4.1.0", "Blasts over blood and over water: a block of TNT beside a pool of blood throws the pool, close in as a red mist and further out as drops that land in streaks pointing back at the charge; then one in the air over a pond tears a crown of spray off the water, a column goes up from under it, and it rains back down", true, Demos::poolBlast),
 			new Demo("bucket", "4.1.0", "Blood by the bucket: a pit one block square holds 300 litres. A bucket dipped in it takes most of it, the rest runs together in the bottom, and tipped out on the floor it pours in a stream and runs where blood runs. With an empty bucket in your own hand, use it on standing blood to take it up and anywhere else to tip it out", true, Demos::bucket),
@@ -43,7 +45,7 @@ public final class Demos {
 			new Demo("deadblast", "4.0.0", "A blast on bodies already dead: two cows killed, then a block of TNT beside them. The body next to it comes apart, and the one further off is thrown limp by the wave", true, Demos::deadBlast),
 			new Demo("wetpieces", "4.0.0", "Pieces in water: a sheep blown apart at the bottom of a deep pool. Its blood clouds in the water; the lungs and the fat come up and float, the bones lie on the bottom, and meat and organs sink after them", true, Demos::piecesInWater),
 			new Demo("lying", "4.0.0", "Bodies lying together: four pigs and a sheep packed tight, one stuck first, are killed together. They come to rest side by side, against each other and not through each other, and the stuck one's blood smears the flanks of the bodies against it. With Ragdoll Physics on, they set with their legs locked straight out from the trunk", false, Demos::lying),
-			new Demo("water", "4.0.0", "A body in water: a pig killed in a deep pool sinks slowly to the bottom, its blood clouding round it. Then ten days are skipped: with Rot on (Extreme), the bloated body comes up and floats low in the water", true, Demos::water),
+			new Demo("water", "4.0.0", "A body in water: a pig killed in a deep pool sinks slowly to the bottom, its blood clouding round it. Then ten days are skipped: with Rot on (Gore Level Full), the bloated body comes up and floats low in the water", true, Demos::water),
 			new Demo("coats", "4.0.0", "Blood on the animals and in water: a pig stuck beside a sheep and a cow spatters their coats; its pool runs under the sheep, and blood climbs the wool of its legs higher than it reaches on the pig's hide. Then a pig stuck standing in a trough of water: its blood clouds out in the water, sinks and thins away", true, Demos::coats),
 			new Demo("pallor", "4.0.0", "Pallor: two pigs side by side, and one is stuck and bled out. As the blood leaves it the pink flush goes out of its skin, and it lies a washed-out, pale pink beside the one that never bled", false, Demos::pallor),
 			new Demo("stuckpig", "4.0.0", "A pig stuck with a sword: the blade to its head goes into the throat, and the blood pours down its chest and the fronts of both forelegs. It bleeds out, goes down, and the blood runs on across the side it lies on. Then a punch on another pig: a bruise, a red flush under unbroken skin", false, Demos::stuckPig),
@@ -62,7 +64,7 @@ public final class Demos {
 			new Demo("cremation", "2.14.0", "A chicken, a sheep and a cow set alight where they lie: each burns on its own fat, the heavier the longer and smokier, down to the bone; the cow is put out half burnt, its char knocked off and its bones broken up into ash", true, Demos::cremation),
 			new Demo("chickens", "2.13.0", "Chickens killed three ways (wrung neck, cut throat, beheaded) flap themselves to death; feathers fly bloody, a hen in the rain goes dark and slick, and the feathers lie where they fell", false, Demos::chickens),
 			new Demo("stairs", "2.13.0", "A sheep and a pig killed at the top of a narrow stair: the bodies slump over the edge and tumble down step by step", true, Demos::stairs),
-			new Demo("decay", "2.12.0", "A chicken, a pig and a cow left to rot (Extreme): six weeks in a minute, day by day, from bloat to bones", false, Demos::decay),
+			new Demo("decay", "2.12.0", "A chicken, a pig and a cow left to rot (Gore Level Full): six weeks in a minute, day by day, from bloat to bones", false, Demos::decay),
 			new Demo("kept", "2.11.0", "The vanilla death made gory: a sword kill and an axe kill keel over, stay, are chopped where they lie, and are cleaned up", false, Demos::kept),
 			new Demo("injured", "2.10.0", "Injuries: a zombie limps on a smashed leg holding its belly, then you take blows and fade near death", false, Demos::injured),
 			new Demo("armor", "2.10.0", "A zombie in armour hacked apart: the helmet flies off with the head, the boots stay on the leg", false, Demos::armor),
@@ -76,7 +78,7 @@ public final class Demos {
 			new Demo("rot", "2.2.0", "A zombie hacked open: slashes along the swing into rotting flesh, pus and maggots", false, Demos::rot),
 			new Demo("deaths", "2.1.0", "Eight cows, eight causes of death: each drops at once, then rigid, paddling, gasps, still", false, Demos::deaths),
 			new Demo("burnt", "1.8.0", "A chicken and a pig burnt alive: they char black, smoke and leave scorch marks", false, Demos::burnt),
-			new Demo("evidence", "1.8.0", "A pig beaten to death on Extreme: the body and the blood stay as evidence", false, Demos::evidence),
+			new Demo("evidence", "1.8.0", "A pig beaten to death on Gore Level Full: the body and the blood stay as evidence", false, Demos::evidence),
 			new Demo("death", "1.7.0", "A cow dies red and keels over, is knocked about, then pops into pieces", false, Demos::death),
 			new Demo("floor", "1.7.0", "Pigs blown up on a raised floor; the floor goes and the gore falls with it", true, Demos::floor),
 			new Demo("pit", "1.6.0", "A 5x5 pit of pigs and a lit TNT: shredded, torn open, thrown", true, Demos::pit),
@@ -626,13 +628,13 @@ public final class Demos {
 
 	/**
 	 * Three bodies of three sizes rot side by side, a day skipped every second and a half (/time add, so this world's
-	 * day count moves on six weeks). Needs the Extreme gore level and Fluid Gore on the server (singleplayer).
+	 * day count moves on six weeks). Needs the top Gore Level and Fluid Gore on the server (singleplayer).
 	 */
 	private static void decay(Script s, Stage st) {
 		s.summon(st, "chicken", "fgd_rot_chicken", -2.0, 0, 3.5, 90.0F, "");
 		s.summon(st, "pig", "fgd_rot_pig", 0, 0, 3.5, 90.0F, "");
 		s.summon(st, "cow", "fgd_rot_cow", 2.3, 0, 3.5, 90.0F, "");
-		s.pause(20).hold("minecraft:iron_axe").say("Three animals killed and left where they fell (Extreme gore level)");
+		s.pause(20).hold("minecraft:iron_axe").say("Three animals killed and left where they fell (Gore Level Full)");
 		s.hit("fgd_rot_chicken", 100.0F).hit("fgd_rot_pig", 100.0F).hit("fgd_rot_cow", 100.0F).pause(80);
 		String[] days = new String[43];
 		// Timed for the plains; a hotter biome is faster, a colder one slower.
@@ -1178,7 +1180,7 @@ public final class Demos {
 
 	/**
 	 * 4.0: a body sinks in water, and floats once it bloats. From the game test {@code bodiesInWater}. Ten days are
-	 * skipped (/time add, so this world's day count moves on); the float needs the Extreme gore level and Bodies Rot.
+	 * skipped (/time add, so this world's day count moves on); the float is drawn bloated at the top Gore Level with Bodies Rot.
 	 */
 	private static void water(Script s, Stage st) {
 		s.cmd("fill " + st.block(-2, -3, 3) + " " + st.block(2, -1, 7) + " minecraft:water");
@@ -1189,7 +1191,7 @@ public final class Demos {
 		s.cmd("damage @e[tag=fgd_water_pig,limit=1] 100 minecraft:generic");
 		s.hold("minecraft:air").say("Dead, it sinks slowly to the bottom, its blood clouding round it").pause(300);
 		s.say("Ten days later").cmd("time add 240000").pause(120);
-		s.say("Bloated with the gas of its rot, it comes up and floats low in the water (Extreme, with Bodies Rot on)").pause(300);
+		s.say("Bloated with the gas of its rot, it comes up and floats low in the water (Gore Level Full, with Bodies Rot on)").pause(300);
 	}
 
 	/**
@@ -1216,6 +1218,22 @@ public final class Demos {
 		s.say("Over the other's ribs the same blade finds a lung, and the blood at the wound froths with air").pause(100);
 		s.cmd("damage @e[tag=fgd_window_b,limit=1] 100 minecraft:generic");
 		s.say("She dies of the chest wound: blood from the mouth and nose, whatever else was done to her").pause(200);
+	}
+
+	/** 4.1: the Gore Level draws less of a wound and leaves the wound as it is. From the game test {@code goreLevels}. */
+	private static void levels(Script s, Stage st) {
+		s.summon(st, "sheep", "fgd_level", 0, 0, 2.2, -90.0F, "Sheared:1b,UUID:[I;11,0,0,9]");
+		s.pause(20).hold("minecraft:iron_sword").client(mc -> DemoPlayer.level(GoreLevel.EXTREME));
+		s.say("A shorn ewe, her left side to you, at Gore Level Full. Three cuts with a sword in the same place on her flank");
+		for (int n = 0; n < 3; n++) {
+			s.client(mc -> aimTrunk(mc, st.find(mc.level, EntityTypes.SHEEP, 0, 0, 2.2), -0.16, -0.06));
+			s.hit("fgd_level", 2.6F).pause(n < 2 ? 30 : 60);
+		}
+
+		s.say("Full draws the wound as deep as it is: through the belly wall to the wall of the rumen").pause(120);
+		s.client(mc -> DemoPlayer.level(GoreLevel.MEDIUM)).say("Medium: the same wound, drawn as far as the open meat of the belly wall").pause(120);
+		s.client(mc -> DemoPlayer.level(GoreLevel.LOW)).say("Low: the same wound, drawn as a gash").pause(120);
+		s.client(mc -> DemoPlayer.level(GoreLevel.EXTREME)).say("Full again: nothing about the wound changed, only how much of it was drawn").pause(120);
 	}
 
 	/** 4.0: sticking, blood running down the skin, and a fresh bruise. From the game test {@code stuckPig}. */
@@ -1384,7 +1402,7 @@ public final class Demos {
 		s.pause(160).say("Burnt to death: charred, smoking, a scorch mark under it").pause(300);
 	}
 
-	/** Bare hands until it dies, on Extreme: the battered body lies in its blood for a long while. */
+	/** Bare hands until it dies, on the top Gore Level: the battered body lies in its blood for a long while. */
 	private static void evidence(Script s, Stage st) {
 		s.summon(st, "pig", "fgd_pig", 0, 0, 3, 90.0F, "");
 		s.pause(20).hold("minecraft:air").say("Beaten to death with bare hands");
@@ -1393,7 +1411,7 @@ public final class Demos {
 			s.hit("fgd_pig", 2.0F).pause(14);
 		}
 
-		s.say("On Extreme the body and the blood stay: anyone coming by can see what happened").pause(300);
+		s.say("On Gore Level Full the body and the blood stay: anyone coming by can see what happened").pause(300);
 	}
 
 	/** One sword kill, then the body is punched about while it dies, until it pops. */

@@ -250,7 +250,7 @@ public final class Giblets {
 		int rgb = dev.fluidgore.trigger.EntityFilter.bloodType(entity).rgb;
 		float width = entity.getBbWidth();
 		float height = entity.getBbHeight();
-		// A cow makes about 160 pieces at Medium; smaller bodies fewer.
+		// A cow makes about 160 pieces with every one drawn; smaller bodies fewer, and lower Gore Levels draw fewer.
 		float body = width * width * height / (0.9F * 0.9F * 1.4F);
 		int n = Math.round(Mth.clamp(160.0F * body, 20.0F, 500.0F) * preset.particles * share);
 		n = Math.min(n, config.maxGiblets);
@@ -767,7 +767,7 @@ public final class Giblets {
 				sy[i] += (FX.nextFloat() - 0.5F) * 1.2F;
 				float squeezed = Thermal.release(c, tissue[i].wet * 0.5F);
 				if (squeezed > 0.0F) {
-					world.landOnFloor(level, x[i], y[i] - hy[i], z[i], squeezed * GoreConfig.get().goreLevel.puddles, blood[i], world.decalLifetime());
+					world.landOnFloor(level, x[i], y[i] - hy[i], z[i], squeezed, blood[i], world.decalLifetime());
 				}
 
 				SoundEvent sound = material[i].bone() ? SoundEvents.BONE_BLOCK_HIT : c.charred > 0.4F ? SoundEvents.TUFF_HIT : SoundEvents.SLIME_SQUISH_SMALL;
@@ -789,7 +789,7 @@ public final class Giblets {
 
 				float bled = Thermal.release(c, c.fluid * 0.5F);
 				if (bled > 0.0F) {
-					world.landOnFloor(level, x[i], y[i] - hy[i], z[i], bled * GoreConfig.get().goreLevel.puddles, blood[i], world.decalLifetime());
+					world.landOnFloor(level, x[i], y[i] - hy[i], z[i], bled, blood[i], world.decalLifetime());
 				}
 
 				if (longest < 1.0F / 32.0F || count >= Math.min(GoreConfig.get().maxGiblets, CAPACITY)) {
@@ -835,7 +835,7 @@ public final class Giblets {
 				Vec3 way = new Vec3(look.x, 0.0, look.z).lengthSqr() > 1.0E-6 ? new Vec3(look.x, 0.0, look.z).normalize() : new Vec3(1.0, 0.0, 0.0);
 				world.smear(level, x[i], y[i] - hy[i], z[i], way, Math.max(hx[i], hz[i]) * 3.0F + 0.12F, c.cooked > 0.5F ? 0x5A3A28 : blood[i]);
 				if (wet > 0.0F) {
-					world.landOnFloor(level, x[i], y[i] - hy[i], z[i], wet * GoreConfig.get().goreLevel.puddles, blood[i], world.decalLifetime());
+					world.landOnFloor(level, x[i], y[i] - hy[i], z[i], wet, blood[i], world.decalLifetime());
 				}
 
 				level.playLocalSound(x[i], y[i], z[i], SoundEvents.SLIME_SQUISH, SoundSource.PLAYERS, 1.0F, 0.6F, false);
@@ -1037,7 +1037,7 @@ public final class Giblets {
 		hisses = HeatEffects.show(level, events, material[i], x[i], y[i], z[i], y[i] + hy[i], Math.max(hx[i], hz[i]) * 2.0F, hisses);
 		if ((events & Thermal.DRIPPING) != 0 && resting[i] && stuck[i] == 0 && FX.nextInt(12) == 0) {
 			// Rendered fat runs out from under it: a greasy stain spreading where it lies.
-			world.landOnFloor(level, x[i], y[i] - hy[i], z[i], 0.003F * GoreConfig.get().goreLevel.puddles, GREASE, world.decalLifetime());
+			world.landOnFloor(level, x[i], y[i] - hy[i], z[i], 0.003F, GREASE, world.decalLifetime());
 		}
 	}
 
@@ -1153,7 +1153,7 @@ public final class Giblets {
 							String.format(java.util.Locale.ROOT, "landed at %.2f, left blood %.4f", fall, wet));
 				}
 
-				world.landOnFloor(level, x[i], y[i] - bottom, z[i], wet * GoreConfig.get().goreLevel.puddles, blood[i], world.decalLifetime());
+				world.landOnFloor(level, x[i], y[i] - bottom, z[i], wet, blood[i], world.decalLifetime());
 			}
 
 			if (vx[i] * vx[i] + vy[i] * vy[i] + vz[i] * vz[i] < 0.0025) {

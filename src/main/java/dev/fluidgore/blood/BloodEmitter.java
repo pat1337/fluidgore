@@ -33,6 +33,13 @@ import org.jspecify.annotations.Nullable;
  */
 public final class BloodEmitter {
 	private static final RandomSource RANDOM = Fate.stream("blood");
+	/**
+	 * The dice for what a wound does (how badly it bleeds, how long it runs, whether an artery was opened), apart from
+	 * {@link #RANDOM}'s for how it is drawn: the number of drops drawn depends on the Gore Level, and must not shift these.
+	 */
+	private static final RandomSource WOUND = Fate.stream("bleeding");
+	/** How long a wound runs and an artery jets, against the rolled length: a tuned number, the same at every Gore Level. */
+	private static final float RUN = 1.3F;
 	private static final SoundEvent[] CRUNCH = {
 			SoundEvents.MUD_BREAK, SoundEvents.SLIME_BLOCK_BREAK, SoundEvents.HONEY_BLOCK_BREAK, SoundEvents.WART_BLOCK_BREAK
 	};
@@ -67,24 +74,38 @@ public final class BloodEmitter {
 		// How hard this body bleeds from a wound (its size is in it: see BloodAmount); how much it has left is BloodSupply's.
 		float bodySize = measure;
 		// How bad this particular wound is: most near 1, some barely bleed, some gush.
-		float severity = Mth.clamp(world.lognormal(0.5F), 0.3F, 4.0F);
-		float volume = Math.min(3.0F, (0.03F + damage * 0.03F) * preset.puddles * bodySize * (lethal ? 3.0F : 1.0F) * severity * open);
-		int count = Math.round((3.0F + damage * 2.5F) * preset.particles * (lethal ? 2.2F : 1.0F) * severity * open * BloodAmount.countFactor(measure));
+		float severity = Mth.clamp((float) Math.exp(WOUND.nextGaussian() * 0.5F), 0.3F, 4.0F);
+		float volume = Math.min(3.0F, (0.03F + damage * 0.03F) * bodySize * (lethal ? 3.0F : 1.0F) * severity * open);
+		// The Gore Level thins the spray, never the blood: the drops that are drawn carry all of it.
+		int count = preset.drawn(Math.round((3.0F + damage * 2.5F) * (lethal ? 2.2F : 1.0F) * severity * open * BloodAmount.countFactor(measure)));
 		if (count <= 0 && volume < 0.005F) {
 			return;
 		}
 
 		// The wound is a random point on the upper body, not always the exact centre.
-		double ox = (RANDOM.nextDouble() - 0.5) * entity.getBbWidth() * 0.6;
-		double oy = entity.getBbHeight() * (0.4 + RANDOM.nextDouble() * 0.45);
-		double oz = (RANDOM.nextDouble() - 0.5) * entity.getBbWidth() * 0.6;
+		double ox = (WOUND.nextDouble() - 0.5) * entity.getBbWidth() * 0.6;
+		double oy = entity.getBbHeight() * (0.4 + WOUND.nextDouble() * 0.45);
+		double oz = (WOUND.nextDouble() - 0.5) * entity.getBbWidth() * 0.6;
 		Vec3 origin = new Vec3(entity.getX() + ox, entity.getY() + oy, entity.getZ() + oz);
+		// How long it runs, and whether an artery was opened. Arteries are opened by edges and blasts, not by fists. A
+		// walking corpse has no pulse to jet with.
+		int trickle = Math.round((50 + WOUND.nextInt(60)) * RUN * Math.min(2.0F, severity) * Mth.clamp(measure, 0.3F, 2.0F));
+		float spurtChance = Mth.clamp(damage / 14.0F + (lethal ? 0.35F : 0.0F) + (severity - 1.0F) * 0.2F, 0.0F, 0.9F) * Mth.clamp(open * open, 0.0F, 1.0F);
+		boolean spurts = config.arterialSpurts && !EntityFilter.isRotten(entity) && WOUND.nextFloat() < spurtChance;
+		Vec3 jet = null;
+		int jetLife = 0;
+		float jetStrength = 0.0F;
+		if (spurts) {
+			jet = new Vec3(WOUND.nextGaussian() * 0.5 + (away != null ? away.x : 0.0), 0.6 + WOUND.nextDouble() * 0.6,
+					WOUND.nextGaussian() * 0.5 + (away != null ? away.z : 0.0));
+			jetLife = Math.round((20 + WOUND.nextInt(40)) * RUN);
+			jetStrength = 0.7F + WOUND.nextFloat() * 0.6F;
+		}
 
 		spray(world, origin, away, count, volume * 0.7F, rgb, entity.getBbWidth() * 0.4, 0.12, 0.32 + 0.1 * (severity - 1.0));
 		// Only a light mist at the wound; the blood itself is the falling droplets and the trickle below.
 		redstoneDust(world, level, origin, rgb, Math.min(12, Math.round(count * 0.25F)), entity.getBbWidth() * 0.3);
 
-		int trickle = Math.round((50 + RANDOM.nextInt(60)) * preset.duration * Math.min(2.0F, severity) * Mth.clamp(measure, 0.3F, 2.0F));
 		double width = entity.getBbWidth() * 0.25;
 		// A bruise does not run.
 		if (open >= 0.3F) {
@@ -106,15 +127,8 @@ public final class BloodEmitter {
 			chunks(level, origin, type, meatOf(entity), Math.round((lethal ? 14 : 6) * preset.particles * severity));
 		}
 
-		// Arteries are opened by edges and blasts, not by fists. A walking corpse has no pulse to jet with.
-		float spurtChance = Mth.clamp(damage / 14.0F + (lethal ? 0.35F : 0.0F) + (severity - 1.0F) * 0.2F, 0.0F, 0.9F) * Math.min(1.0F, preset.particles)
-				* Mth.clamp(open * open, 0.0F, 1.0F);
-		if (config.arterialSpurts && !EntityFilter.isRotten(entity) && RANDOM.nextFloat() < spurtChance) {
-			Vec3 dir = new Vec3(RANDOM.nextGaussian() * 0.5 + (away != null ? away.x : 0.0), 0.6 + RANDOM.nextDouble() * 0.6,
-					RANDOM.nextGaussian() * 0.5 + (away != null ? away.z : 0.0));
-			int life = Math.round((20 + RANDOM.nextInt(40)) * preset.duration);
-			world.spurts().start(() -> new Vec3(entity.getX() + ox, entity.getY() + oy, entity.getZ() + oz), dir, rgb, life,
-					0.7F + RANDOM.nextFloat() * 0.6F);
+		if (spurts) {
+			world.spurts().start(() -> new Vec3(entity.getX() + ox, entity.getY() + oy, entity.getZ() + oz), jet, rgb, jetLife, jetStrength);
 		}
 
 		if (config.goreSounds && (heavy || severity > 2.0F)) {
@@ -135,7 +149,11 @@ public final class BloodEmitter {
 			return;
 		}
 
-		spray(world, at, null, Math.round(18 * preset.particles), 0.25F * preset.puddles, rgb, 0.1, 0.08, 0.35);
+		boolean jets = !EntityFilter.isRotten(entity) && config.arterialSpurts;
+		int life = jets ? Math.round((30 + WOUND.nextInt(40)) * RUN) : 0;
+		Vec3 fromStump = jets ? new Vec3(WOUND.nextGaussian() * 0.4, 1.0, WOUND.nextGaussian() * 0.4) : null;
+		Vec3 fromPart = jets ? new Vec3(WOUND.nextGaussian(), 0.3, WOUND.nextGaussian()) : null;
+		spray(world, at, null, preset.drawn(18), 0.25F, rgb, 0.1, 0.08, 0.35);
 		redstoneDust(world, level, at, rgb, Math.round(6 * preset.particles), 0.1);
 		if (config.goreChunks) {
 			chunks(level, at, EntityFilter.bloodType(entity), meatOf(entity), Math.round(12 * preset.particles));
@@ -147,37 +165,36 @@ public final class BloodEmitter {
 
 		if (EntityFilter.isRotten(entity)) {
 			// No heartbeat: the rot just slops out of the stump.
-			drip(world, stump.get(), rgb, 0.06F * preset.puddles);
-		} else if (config.arterialSpurts) {
-			int life = Math.round((30 + RANDOM.nextInt(40)) * preset.duration);
-			world.spurts().start(stump, new Vec3(RANDOM.nextGaussian() * 0.4, 1.0, RANDOM.nextGaussian() * 0.4), rgb, life, 1.1F);
-			world.spurts().start(part, new Vec3(RANDOM.nextGaussian(), 0.3, RANDOM.nextGaussian()), rgb, life / 2, 0.6F);
+			drip(world, stump.get(), rgb, 0.06F);
+		} else if (jets) {
+			world.spurts().start(stump, fromStump, rgb, life, 1.1F);
+			world.spurts().start(part, fromPart, rgb, life / 2, 0.6F);
 		}
 	}
 
 	/** A burst from an arbitrary point (thrown or stomped parts, headless necks). */
 	public static void burst(BloodWorld world, ClientLevel level, Vec3 origin, int rgb, float volume, int count) {
 		GoreLevel preset = GoreConfig.get().goreLevel;
-		int scaled = Math.round(count * preset.particles);
+		int scaled = preset.drawn(count);
 		if (rgb == BoneEmitter.BONE) {
 			BoneEmitter.burst(level, origin, null, scaled, scaled * 2, 0.15);
 			return;
 		}
 
-		spray(world, origin, null, scaled, volume * preset.puddles, rgb, 0.1, 0.08, 0.3);
+		spray(world, origin, null, scaled, volume, rgb, 0.1, 0.08, 0.3);
 		redstoneDust(world, level, origin, rgb, Math.min(6, scaled / 3), 0.1);
 	}
 
 	/** Blood thrown out of a fresh cut along {@code away} (unit vector): off the blade and out of the wound. */
 	public static void cut(BloodWorld world, ClientLevel level, Vec3 origin, Vec3 away, int rgb, float volume, int count) {
 		GoreLevel preset = GoreConfig.get().goreLevel;
-		int scaled = Math.round(count * preset.particles);
+		int scaled = preset.drawn(count);
 		if (rgb == BoneEmitter.BONE) {
 			BoneEmitter.burst(level, origin, away, scaled, scaled * 2, 0.2);
 			return;
 		}
 
-		spray(world, origin, away, scaled, volume * preset.puddles, rgb, 0.3, 0.12, 0.42);
+		spray(world, origin, away, scaled, volume, rgb, 0.3, 0.12, 0.42);
 		redstoneDust(world, level, origin, rgb, Math.min(5, scaled / 3), 0.08);
 	}
 
@@ -187,13 +204,13 @@ public final class BloodEmitter {
 	 */
 	public static void blast(BloodWorld world, ClientLevel level, Vec3 origin, @Nullable Vec3 away, int rgb, float volume, int count) {
 		GoreLevel preset = GoreConfig.get().goreLevel;
-		int scaled = Math.round(count * preset.particles);
+		int scaled = preset.drawn(count);
 		if (rgb == BoneEmitter.BONE) {
 			BoneEmitter.burst(level, origin, away, scaled, scaled * 2, 0.4);
 			return;
 		}
 
-		spray(world, origin, away != null ? new Vec3(away.x * 0.5, 0.0, away.z * 0.5) : null, scaled, volume * preset.puddles, rgb, 0.5, 0.25, 0.95);
+		spray(world, origin, away != null ? new Vec3(away.x * 0.5, 0.0, away.z * 0.5) : null, scaled, volume, rgb, 0.5, 0.25, 0.95);
 		if (WaterClouds.inWater(level, origin.x, origin.y, origin.z)) {
 			// Under water there is no mist: the spray clouds out in the water (see DropletSystem).
 			return;
@@ -243,8 +260,11 @@ public final class BloodEmitter {
 			return;
 		}
 
-		float each = volume / count;
-		for (int i = 0; i < count && world.droplets().hasRoom(); i++) {
+		// Every drop is rolled first, so that together they carry exactly the volume, however few are drawn.
+		double[] flight = new double[count * 6];
+		float[] roll = new float[count];
+		float rolled = 0.0F;
+		for (int i = 0; i < count; i++) {
 			// Random direction on the upper hemisphere, biased away from the attacker.
 			double yaw = RANDOM.nextDouble() * Math.PI * 2.0;
 			double pitch = RANDOM.nextDouble() * 0.9 + 0.1;
@@ -260,12 +280,19 @@ public final class BloodEmitter {
 			double speed = (minSpeed + RANDOM.nextDouble() * (maxSpeed - minSpeed)) * world.lognormal(0.25F);
 			// Drop sizes and volumes vary a lot: a few fat drops among fine spray.
 			float sizeRoll = world.lognormal(0.45F);
-			world.droplets().spawn(
-					origin.x + (RANDOM.nextDouble() - 0.5) * spread,
-					origin.y + (RANDOM.nextDouble() - 0.5) * spread,
-					origin.z + (RANDOM.nextDouble() - 0.5) * spread,
-					dx / length * speed, dy / length * speed * 0.8 + 0.05, dz / length * speed,
-					each * sizeRoll, world.vary(rgb, 0.18F), Mth.clamp(0.03F * sizeRoll, 0.015F, 0.09F));
+			flight[i * 6] = origin.x + (RANDOM.nextDouble() - 0.5) * spread;
+			flight[i * 6 + 1] = origin.y + (RANDOM.nextDouble() - 0.5) * spread;
+			flight[i * 6 + 2] = origin.z + (RANDOM.nextDouble() - 0.5) * spread;
+			flight[i * 6 + 3] = dx / length * speed;
+			flight[i * 6 + 4] = dy / length * speed * 0.8 + 0.05;
+			flight[i * 6 + 5] = dz / length * speed;
+			roll[i] = sizeRoll;
+			rolled += sizeRoll;
+		}
+
+		for (int i = 0; i < count && world.droplets().hasRoom(); i++) {
+			world.droplets().spawn(flight[i * 6], flight[i * 6 + 1], flight[i * 6 + 2], flight[i * 6 + 3], flight[i * 6 + 4], flight[i * 6 + 5],
+					volume * roll[i] / rolled, world.vary(rgb, 0.18F), Mth.clamp(0.03F * roll[i], 0.015F, 0.09F));
 		}
 	}
 

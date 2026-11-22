@@ -97,7 +97,10 @@ the pieces) exactly as the sheep does.
   beside the others of its kind.
 - The sheet's animal is the ewe. The ram and the lamb have no weights of their own (a lamb is 15% of the ewe), and
   a third of the ewe's muscle and what the reference leaves unlisted are weighed together, not piece by piece.
-- Only a sheep's wounds are read from its anatomy. Other animals show a stock picture of fat, meat and bone.
+- Only a sheep's wounds are read from its anatomy. Other animals show a stock picture of fat, meat and bone, and so
+  does a sheep's wound on a Gore Level below Full, which draws it shallower than it is.
+- The Gore Level only decides how much is drawn (the `goreLevels` game test holds it to that). What a blow does is the
+  same at every level, but it is still tuned, not measured: how fast blows deepen a wound, and when a part comes off.
 - Blood is drawn from each body's real volume and is conserved on the ground. Weight is not: pieces carry no mass.
   The sheep's tables are drawn, not weighed, and `docs/sheets/sheep.md` gives the size of the difference part by part.
 - Only the sheep's weight and blood volume name their source.

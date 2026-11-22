@@ -343,21 +343,20 @@ public final class BloodyWool {
 			return;
 		}
 
-		float bleed = config.goreLevel.puddles;
 		int rgb = EntityFilter.bloodColor(victim);
 		Kind own = kind(victim);
 		if (own != null) {
 			int region = part == null ? WoundSet.TORSO : part.ordinal();
 			// Hide shows it round the wound and in the runs down from it (see Runs); a fleece or feathers drink it in.
 			float take = own == Kind.HIDE ? 0.35F : 1.0F;
-			add(victim.getId(), own, region, (0.08F + 0.3F * depth) * bleed * take, own.most, rgb);
+			add(victim.getId(), own, region, (0.08F + 0.3F * depth) * take, own.most, rgb);
 			if (region == BodyPart.HEAD.ordinal()) {
 				// A head or throat wound runs down the neck onto the chest.
-				add(victim.getId(), own, WoundSet.TORSO, (0.03F + 0.12F * depth) * bleed * take, own.most, rgb);
+				add(victim.getId(), own, WoundSet.TORSO, (0.03F + 0.12F * depth) * take, own.most, rgb);
 			}
 		}
 
-		spatter(level, victim, at, SPATTER_RANGE, (0.03F + 0.12F * depth) * bleed, rgb);
+		spatter(level, victim, at, SPATTER_RANGE, (0.03F + 0.12F * depth), rgb);
 	}
 
 	/**
@@ -370,7 +369,7 @@ public final class BloodyWool {
 			return;
 		}
 
-		spatter(level, source, at, range, 0.5F * config.goreLevel.puddles, rgb);
+		spatter(level, source, at, range, 0.5F, rgb);
 	}
 
 	private void spatter(ClientLevel level, @Nullable LivingEntity source, Vec3 at, double range, float amount, int rgb) {
@@ -493,7 +492,7 @@ public final class BloodyWool {
 		for (Corpse corpse : GoreSystems.suffering().corpses()) {
 			Kind kind = kind(corpse.entity);
 			if (kind != null && !corpse.lifeless() && Flesh.of(corpse.entity).bleeds()) {
-				float amount = LYING * config.goreLevel.puddles * (kind == Kind.HIDE ? 0.5F : 1.0F);
+				float amount = LYING * (kind == Kind.HIDE ? 0.5F : 1.0F);
 				int rgb = EntityFilter.bloodColor(corpse.entity);
 				add(corpse.entity.getId(), kind, WoundSet.TORSO, amount, kind.lyingSoak, rgb);
 				add(corpse.entity.getId(), kind, BodyPart.HEAD.ordinal(), amount * 0.6F, kind.lyingSoak, rgb);
@@ -633,7 +632,7 @@ public final class BloodyWool {
 			climb(living, kind, true);
 			// A coat that drinks takes the blood out of the pool as it fills.
 			if (coat.overall() < kind.most && kind.drinks > 0.0F) {
-				fluid.drain(cell, Math.min(cell.volume(), kind.drinks * POOL_EVERY * (lying ? 3.0F : 1.0F) * config.goreLevel.puddles));
+				fluid.drain(cell, Math.min(cell.volume(), kind.drinks * POOL_EVERY * (lying ? 3.0F : 1.0F)));
 			}
 
 			if (coat.overall() > before) {

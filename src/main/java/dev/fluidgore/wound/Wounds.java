@@ -5,7 +5,6 @@ import dev.fluidgore.GoreSystems;
 import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.config.GoreConfig;
-import dev.fluidgore.config.GoreLevel;
 import dev.fluidgore.dismember.BodyPart;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.suffer.Corpse;
@@ -51,6 +50,11 @@ public final class Wounds {
 	private record Aim(Model<?> model, ModelHit.Result hit, float bodyYaw, int tick) {
 	}
 
+	/**
+	 * How fast blows deepen a wound, against the blow's damage relative to the body's health: a tuned number, the same at
+	 * every Gore Level.
+	 */
+	private static final float WOUND_RATE = 1.8F;
 	/** A bone breaks once this much damage, relative to the body's health, has landed on it. */
 	public static final float FRACTURE = 0.55F;
 	/** And is smashed beyond saving (the head caved in, the limb torn off, the ribs stove right in) past this. */
@@ -253,8 +257,7 @@ public final class Wounds {
 
 	/** Opens a model wound; fragment box contacts are projected here without inventing random substitute hits. */
 	private @Nullable Strike open(LivingEntity victim, Model<?> model, ModelHit.Result hit, float bodyYaw, Weapon weapon, float damage) {
-		GoreLevel level = GoreConfig.get().goreLevel;
-		if (!level.enabled() || !applies(victim)) {
+		if (!GoreConfig.get().goreLevel.enabled() || !applies(victim)) {
 			return null;
 		}
 
@@ -280,8 +283,9 @@ public final class Wounds {
 
 		// Damage relative to how much the body can take: a sword on a chicken opens it up, on a horse it gashes.
 		float relative = damage / Math.max(4.0F, victim.getMaxHealth());
-		float amount = Math.max(0.12F, relative * 0.9F) * weapon.depth * level.woundRate;
-		float cap = Math.min(weapon.cap, level.woundDepth);
+		float amount = Math.max(0.12F, relative * 0.9F) * weapon.depth * WOUND_RATE;
+		// As deep as the weapon goes, whatever the Gore Level: a level only draws less of the wound (see WoundRenderer).
+		float cap = weapon.cap;
 		Vec3 offset = hit.point().subtract(victim.position());
 		long now = now();
 		WoundSet.Change change = set.add(hit, weapon, amount, cap, offset, bodyYaw, stick, angle, now, RANDOM);
@@ -296,10 +300,9 @@ public final class Wounds {
 			}
 		}
 
-		// Through a limb already cut as deep as it goes, it may come off; through the carcass, it splits (see Butchery).
-		boolean through = weapon.cuts() && change.before() >= cap - 1.0E-3F;
-		boolean cut = through && (hit.bodyPart() == null || RANDOM.nextFloat() < Math.min(1.0F, level.partChance * 2.0F));
-		return new Strike(hit, change.after(), cut, true, bone(set, hit, weapon, relative * level.woundRate, offset, bodyYaw));
+		// Through a limb already cut as deep as it goes, it comes off; through the carcass, it splits (see Butchery).
+		boolean cut = weapon.cuts() && change.before() >= cap - 1.0E-3F;
+		return new Strike(hit, change.after(), cut, true, bone(set, hit, weapon, relative * WOUND_RATE, offset, bodyYaw));
 	}
 
 	/**
@@ -381,7 +384,6 @@ public final class Wounds {
 			return;
 		}
 
-		float puddles = GoreConfig.get().goreLevel.puddles;
 		for (Int2ObjectMap.Entry<WoundSet> entry : sets.int2ObjectEntrySet()) {
 			WoundSet set = entry.getValue();
 			if (!set.flesh.bleeds()) {
@@ -410,7 +412,7 @@ public final class Wounds {
 			// Its own blood, as much as it has left to give.
 			BloodSupply.begin(corpse != null ? corpse.entity : (LivingEntity) entity);
 			try {
-				bleed(level, blood, set, corpse, entity, base, yaw, puddles);
+				bleed(level, blood, set, corpse, entity, base, yaw);
 			} finally {
 				BloodSupply.end();
 			}
@@ -457,7 +459,7 @@ public final class Wounds {
 	}
 
 	/** One body's wounds bleeding for this step. */
-	private void bleed(ClientLevel level, BloodWorld blood, WoundSet set, @Nullable Corpse corpse, @Nullable Entity entity, Vec3 base, float yaw, float puddles) {
+	private void bleed(ClientLevel level, BloodWorld blood, WoundSet set, @Nullable Corpse corpse, @Nullable Entity entity, Vec3 base, float yaw) {
 		// The living clot: the drip thins out after the last blow and stops, so a wounded survivor does not pool forever.
 		float flow = 1.0F;
 		if (corpse == null) {
@@ -476,7 +478,7 @@ public final class Wounds {
 			// Beaten without the skin giving way: it bleeds inside, and the blood comes from the mouth and nose.
 			Vec3 mouth = mouth(corpse != null ? corpse.entity : (LivingEntity) entity);
 			if (mouth != null) {
-				BloodEmitter.drip(blood, mouth, set.blood, 0.004F * Math.min(3.0F, set.trauma) * puddles);
+				BloodEmitter.drip(blood, mouth, set.blood, 0.004F * Math.min(3.0F, set.trauma));
 			}
 		}
 
@@ -490,12 +492,12 @@ public final class Wounds {
 			Vec3 at = base.add(offset);
 			if (set.flesh.rots()) {
 				// A rotting wound seeps slowly, and now and then a maggot drops out of a deep one.
-				BloodEmitter.drip(blood, at, set.blood, 0.002F * severity * puddles);
+				BloodEmitter.drip(blood, at, set.blood, 0.002F * severity);
 				if (severity >= 0.5F && RANDOM.nextFloat() < 0.25F) {
 					level.addParticle(MAGGOT, at.x, at.y, at.z, 0.0, 0.0, 0.0);
 				}
 			} else {
-				BloodEmitter.drip(blood, at, set.blood, 0.004F * severity * puddles);
+				BloodEmitter.drip(blood, at, set.blood, 0.004F * severity);
 			}
 		}
 	}

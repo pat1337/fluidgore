@@ -287,7 +287,7 @@ public final class GorePartManager {
 						crumble(level, p, -wanted.y);
 					} else if (wet(p) > 0.0F && under == 0.0F) {
 						// As much blood as it still has: a piece cooked through leaves none.
-						float splash = blood(p, 0.12F * GoreConfig.get().goreLevel.puddles * wet(p));
+						float splash = blood(p, 0.12F * wet(p));
 						blood.landOnFloor(level, p.x, p.y - r, p.z, splash, p.bloodRgb, blood.decalLifetime());
 						if (p.event != 0L) {
 							Events.record(p.event, p.eventSource, Events.Channel.COLLISION, -1, Events.Effect.WOUND, Events.piece(p.key),

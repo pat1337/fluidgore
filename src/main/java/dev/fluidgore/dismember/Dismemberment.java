@@ -60,6 +60,8 @@ public final class Dismemberment {
 	private static final RandomSource RANDOM = Fate.stream("dismember");
 	/** Vanilla living-entity renderers shift the model down by this amount after flipping it. */
 	private static final float MODEL_Y_OFFSET = 1.501F;
+	/** The most parts a killing blade takes when the spot it struck is not known (see {@link #onBladedHit}): a tuned number. */
+	private static final int MAX_PARTS_PER_HIT = 5;
 
 	private final Int2IntOpenHashMap missing = new Int2IntOpenHashMap();
 	private final GorePartManager parts = new GorePartManager();
@@ -426,7 +428,7 @@ public final class Dismemberment {
 			}
 		}
 
-		part.bleedLeft = 0.1F * GoreConfig.get().goreLevel.puddles;
+		part.bleedLeft = 0.1F;
 		vaporized.add(entity.getId());
 		giblets.spill(level, blood, entity, new Vec3(part.x, part.y, part.z), 0.0F);
 		BloodEmitter.burst(blood, level, new Vec3(part.x, part.y, part.z), EntityFilter.bloodColor(entity), 0.06F, 12);
@@ -522,12 +524,11 @@ public final class Dismemberment {
 	 * heavy non-lethal hits take one.
 	 */
 	public void onBladedHit(BloodWorld blood, ClientLevel level, LivingEntity entity, boolean lethal, @Nullable Vec3 away) {
-		GoreLevel preset = GoreConfig.get().goreLevel;
-		if (!preset.enabled() || RANDOM.nextFloat() >= preset.partChance) {
+		if (!GoreConfig.get().goreLevel.enabled()) {
 			return;
 		}
 
-		int maxParts = lethal ? preset.maxPartsPerHit : 1;
+		int maxParts = lethal ? MAX_PARTS_PER_HIT : 1;
 		int count = 1 + (maxParts > 1 ? RANDOM.nextInt(maxParts) : 0);
 		List<BodyPart> candidates = remaining(entity);
 		if (!lethal) {
@@ -662,7 +663,7 @@ public final class Dismemberment {
 		}
 
 		part.spinSpeed = (0.2F + RANDOM.nextFloat() * 0.35F) * (float) Math.sqrt(fling);
-		part.bleedLeft = part.bone() ? 0.0F : 0.12F * preset.puddles;
+		part.bleedLeft = part.bone() ? 0.0F : 0.12F;
 		part.light = net.minecraft.util.LightCoordsUtil.getLightCoords(level, entity.blockPosition());
 		if (bodyPart == BodyPart.HEAD && GoreConfig.get().sufferingLevel.enabled()) {
 			// The head keeps twitching and moaning for a few seconds (see Suffering#tickSeveredHeads).

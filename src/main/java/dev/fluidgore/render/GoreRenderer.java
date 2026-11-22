@@ -519,7 +519,7 @@ public final class GoreRenderer {
 		// Same flip vanilla applies to entity models, then centre the part on its pivot for tumbling.
 		poseStack.scale(-1.0F, -1.0F, 1.0F);
 		poseStack.translate(-part.localCenter.x, -part.localCenter.y, -part.localCenter.z);
-		boolean rots = part.rot > 0.0F && Decay.active();
+		boolean rots = part.rot > 0.0F && Decay.shown();
 		int tint = rots ? Burns.apply(0xFF000000 | part.tint, Rot.tint(part.rot, part.arid)) & 0xFFFFFF : part.tint;
 		// What heat has done to it, over its own colour.
 		tint = Burns.apply(0xFF000000 | tint, part.condition.tint(part.material())) & 0xFFFFFF;

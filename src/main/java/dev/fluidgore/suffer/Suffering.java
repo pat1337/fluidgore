@@ -102,7 +102,7 @@ public final class Suffering {
 
 	/** Ticks a dead body the server keeps is on screen with no corpse before it is taken for one already lying there. */
 	private static final int ADOPT_AFTER = 5;
-	/** How much longer a beaten or burnt body lies than an ordinary kill, on High and Extreme. */
+	/** How much longer a beaten or burnt body lies than an ordinary kill, on the Gore Levels that keep bodies longer. */
 	private static final float EVIDENCE_LINGER = 3.0F;
 	/** Survivors notice a body, and a mother her young, from this far. */
 	private static final double MOURN_RADIUS = 9.0;
@@ -314,7 +314,7 @@ public final class Suffering {
 			kind = Corpse.Kind.CHEST;
 		}
 
-		// On High and Extreme a body that was beaten or burnt to death lies there a good while: the evidence of what was
+		// On High and the top Gore Level a body that was beaten or burnt to death lies there a good while: the evidence of what was
 		// done to it. A small body is left lying longer too.
 		float evidence = kind == Corpse.Kind.BEATEN || burnt ? EVIDENCE_LINGER : 1.0F;
 		// A small body, and a horse, are left lying longer.

@@ -143,7 +143,7 @@ public final class PlayerInjuries {
 		}
 
 		int rgb = EntityFilter.bloodColor(player);
-		int count = Math.min(6, 1 + Math.round(damage / 3.0F * config.goreLevel.puddles)) + (cause == Cause.BLAST ? 3 : 0);
+		int count = Math.min(6, 1 + Math.round(damage / 3.0F)) + (cause == Cause.BLAST ? 3 : 0);
 		for (int i = 0; i < count; i++) {
 			float x;
 			float y;

@@ -1,5 +1,7 @@
 package dev.fluidgore.demo;
 
+import dev.fluidgore.config.GoreConfig;
+import dev.fluidgore.config.GoreLevel;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -22,6 +24,10 @@ public final class DemoPlayer {
 	private static @Nullable ItemStack held;
 	/** Ticks left to keep command echoes out of the chat after a demo ends (the last replies arrive late). */
 	private static int quiet;
+	/** The player's own Gore Level while a demo draws at another (see {@link #level}); null = the demo has not changed it. */
+	private static @Nullable GoreLevel ownLevel;
+	/** The Gore Level the demo last set. */
+	private static @Nullable GoreLevel demoLevel;
 
 	private DemoPlayer() {
 	}
@@ -59,6 +65,27 @@ public final class DemoPlayer {
 		playing = null;
 		script = null;
 		held = null;
+		ownLevel();
+	}
+
+	/** Draws at {@code level} from now until the demo ends, when the player's own Gore Level comes back. */
+	static void level(GoreLevel level) {
+		if (ownLevel == null) {
+			ownLevel = GoreConfig.get().goreLevel;
+		}
+
+		demoLevel = level;
+		GoreConfig.get().goreLevel = level;
+	}
+
+	/** Gives the player their own Gore Level back, unless they changed it themselves while the demo ran. */
+	private static void ownLevel() {
+		if (ownLevel != null && GoreConfig.get().goreLevel == demoLevel) {
+			GoreConfig.get().goreLevel = ownLevel;
+		}
+
+		ownLevel = null;
+		demoLevel = null;
 	}
 
 	public static void tick(Minecraft mc) {
@@ -74,6 +101,7 @@ public final class DemoPlayer {
 			playing = null;
 			script = null;
 			held = null;
+			ownLevel();
 			return;
 		}
 

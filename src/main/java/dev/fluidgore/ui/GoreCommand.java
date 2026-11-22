@@ -102,8 +102,9 @@ public final class GoreCommand {
 			return 0;
 		}
 
-		if (level != GoreLevel.EXTREME) {
-			source.sendFeedback(Component.literal("Gore Level is " + level + "; Extreme shows the most.").withStyle(ChatFormatting.GRAY));
+		if (!level.full()) {
+			source.sendFeedback(Component.literal("Gore Level is ").append(Component.translatable(level.goreKey())).append("; Full draws everything.")
+					.withStyle(ChatFormatting.GRAY));
 		}
 
 		DemoPlayer.start(mc, demo);

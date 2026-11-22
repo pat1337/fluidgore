@@ -5,7 +5,6 @@ import dev.fluidgore.blood.BloodEmitter;
 import dev.fluidgore.blood.BloodSupply;
 import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.config.GoreConfig;
-import dev.fluidgore.config.GoreLevel;
 import dev.fluidgore.event.Events;
 import dev.fluidgore.physics.Blast;
 import dev.fluidgore.dismember.Dismemberment;
@@ -430,7 +429,7 @@ public final class PressureVessel {
 			Events.begin(vessel != null ? vessel.event : Events.id(Events.Source.CHARGE, centre, tntKg), vessel != null ? Events.Source.COMPRESSED_GAS : Events.Source.CHARGE,
 					centre, 0.0F, water);
 			try {
-				boolean gore = config.blastGore && config.goreLevel.ordinal() >= GoreLevel.MEDIUM.ordinal() && EntityFilter.affects(body);
+				boolean gore = config.blastGore && EntityFilter.affects(body);
 				if (gore && kPa >= SHRED_KPA) {
 					dismemberment.vaporize(blood, level, body, centre, tntKg, seen);
 					Events.record(Events.Channel.PRESSURE, -1, Events.Effect.WOUND, Events.body(body), String.format(java.util.Locale.ROOT, "dead body shredded at %.0f kPa", kPa));

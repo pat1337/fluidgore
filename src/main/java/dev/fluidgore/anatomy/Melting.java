@@ -5,7 +5,6 @@ import dev.fluidgore.blood.BloodTextures;
 import dev.fluidgore.blood.BloodWorld;
 import dev.fluidgore.blood.SurfaceProbe;
 import dev.fluidgore.config.GoreConfig;
-import dev.fluidgore.config.GoreLevel;
 import dev.fluidgore.demo.DemoPlayer;
 import dev.fluidgore.dismember.ModelParts;
 import dev.fluidgore.suffer.Corpse;
@@ -32,9 +31,8 @@ import org.jspecify.annotations.Nullable;
 /**
  * People burning alive, drawn layer by layer by {@link MeltRenderer}. Every tick a player spends on fire the fire gets
  * a little further into them, four times as fast in lava, and how far it can get goes with how near death the burns
- * have brought them (their health) and the gore level: a healthy player on fire reddens, blisters and chars, one about
- * to die of it has the skin burnt through to fat running and dripping, and on Extreme the muscle under it. Burns heal
- * as health comes back.
+ * have brought them (their health): a healthy player on fire reddens, blisters and chars, one about to die of it has
+ * the skin burnt through to fat running and dripping, and the muscle under it. Burns heal as health comes back.
  *
  * <p>Dying on fire, the body stays where it fell and goes on burning on its own fat ({@link Cremation} takes over from
  * how far it got here, see {@link #handOver}): the skin and fat go, the muscle cooks off, the organs shrivel, and it
@@ -120,16 +118,8 @@ public final class Melting {
 		return body == null ? 0.0F : body.bare;
 	}
 
-	/** The furthest a living body can burn at a gore level, at the point of death. */
-	public static float cap(GoreLevel level) {
-		return switch (level) {
-			case OFF -> 0.0F;
-			case LOW -> 0.12F;
-			case MEDIUM -> 0.22F;
-			case HIGH -> 0.34F;
-			case EXTREME -> 0.5F;
-		};
-	}
+	/** The furthest a living body can burn, at the point of death: the same at every Gore Level. */
+	public static final float LIVING_CAP = 0.5F;
 
 	/**
 	 * How {@code entity} looks burnt, or null if it does not burn this way or is not burnt. A body burns on in
@@ -201,7 +191,6 @@ public final class Melting {
 			return;
 		}
 
-		float cap = cap(config.goreLevel);
 		for (Entity e : level.entitiesForRendering()) {
 			if (!(e instanceof LivingEntity living) || !living.isAlive() || camera.distanceToSqr(living) > RANGE_SQ || !applies(living)) {
 				continue;
@@ -223,7 +212,7 @@ public final class Melting {
 			float max = Math.max(1.0F, living.getMaxHealth());
 			if (burning) {
 				float hurt = Mth.clamp(1.0F - health / max, 0.0F, 1.0F);
-				float limit = cap * (HEALTHY + (1.0F - HEALTHY) * hurt);
+				float limit = LIVING_CAP * (HEALTHY + (1.0F - HEALTHY) * hurt);
 				if (body.bare < limit) {
 					body.bare = Math.min(limit, body.bare + RATE * (living.isInLava() ? 4.0F : 1.0F));
 				}
