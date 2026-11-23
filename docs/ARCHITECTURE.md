@@ -80,8 +80,10 @@ when a feature is turned off.
 - `Sticking`: a blade or flint on the head of a `QuadrupedModel` goes to the throat instead, on the skull's
   underside at the end against the trunk, the first spot clear of every other cube.
 - `Runs`: follows blood from a wound down the posed cubes (`ModelHit.boxes`), keeping to skin within about a pixel
-  and dropping off where there is none; undersides shed it and upturned faces hold it. `Wounds` traces a wound a
-  second after it opens or deepens (not mid-flinch) and once more when the body has lain for 30 ticks.
+  and dropping off where there is none; undersides shed it and upturned faces hold it. A wound that has ended up inside
+  another cube (a cut throat with the head arched back into the chest) bleeds from the nearest clear skin of its own
+  face. `Wounds` traces a wound a second after it opens or deepens (not mid-flinch) and once more when the body has
+  lain for 30 ticks.
 - `Wounds`: resolves blows, deepens the wound as far as the weapon goes, decides targeted cuts (a blade through a
   wound already at its deepest), heals with health, and clots after `woundClotSeconds`. Only aimed blows sever
   precisely; guessed spots keep random severing.

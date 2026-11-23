@@ -27,6 +27,8 @@ final class Runs {
 	private static final int MAX_STEPS = 120;
 	/** A run lifts off the skin this far, under the wound's own layers. */
 	private static final float OUT = 0.3F;
+	/** How far along its face a covered wound's blood looks for clear skin to come out on, in model pixels. */
+	private static final float UNCOVER = 4.0F;
 
 	private record Sample(int box, int axis, int sign, float b, float c) {
 	}
@@ -119,8 +121,9 @@ final class Runs {
 		local[b] = clamp(set.u[wound] + (alongB ? 0.0F : offset), bounds.min[b], bounds.max[b]);
 		local[c] = clamp(set.v[wound] + (alongB ? offset : 0.0F), bounds.min[c], bounds.max[c]);
 		ModelHit.Box box = boxes.get(from);
-		Vector3f q = box.pose().transformPosition(new Vector3f(local[0], local[1], local[2]).div(16.0F));
 		Vector3f n = normal(box, a, set.sign[wound]);
+		uncover(boxes, all, from, local, a, n, px);
+		Vector3f q = box.pose().transformPosition(new Vector3f(local[0], local[1], local[2]).div(16.0F));
 		q.add(new Vector3f(n).mul(OUT * px));
 
 		List<Sample> samples = new ArrayList<>();
@@ -145,8 +148,9 @@ final class Runs {
 
 	/**
 	 * The nearest skin to {@code q} that can hold blood falling there: within {@link #CLING}, no higher than it, a
-	 * face that is neither an underside nor turned up, and not buried inside another cube. Its world point goes in
-	 * {@code point}.
+	 * face that is neither an underside nor turned up, and not buried inside another cube. A face that leans out over
+	 * the blood still holds it as it runs down, though the nearest point of it lies a little above: there it may be as
+	 * high as the blood fell from. Its world point goes in {@code point}.
 	 */
 	private static @Nullable Sample nearest(List<ModelHit.Box> boxes, Bounds[] all, Vector3f q, float px, Vector3f point, Vector3f scratch) {
 		Sample best = null;
@@ -194,14 +198,17 @@ final class Runs {
 				continue;
 			}
 
+			boolean edge = false;
 			for (int i = 0; i < 3; i++) {
+				edge |= i != axis && (p[i] < bounds.min[i] || p[i] > bounds.max[i]);
 				p[i] = clamp(p[i], bounds.min[i], bounds.max[i]);
 			}
 
 			p[axis] = sign > 0 ? bounds.max[axis] : bounds.min[axis];
 			Vector3f world = box.pose().transformPosition(new Vector3f(p[0], p[1], p[2]).div(16.0F));
 			float dist = world.distance(q);
-			if (dist > bestDist || world.y > q.y + 1.0E-5F) {
+			// An edge or a corner above the blood is skin it has run off; the open face it runs on is not.
+			if (dist > bestDist || world.y > q.y + (edge ? 0.0F : STEP * px) + 1.0E-5F) {
 				continue;
 			}
 
@@ -216,6 +223,35 @@ final class Runs {
 		}
 
 		return best;
+	}
+
+	/**
+	 * Moves {@code local}, a spot on face {@code a} of box {@code from}, to the nearest point of that face whose skin is
+	 * not inside another cube, a step at a time along the face. A wound the body has folded over (a cut throat with the
+	 * head arched back into the chest) bleeds out where its skin is clear. Left where it is if the face is covered as
+	 * far as {@link #UNCOVER}.
+	 */
+	private static void uncover(List<ModelHit.Box> boxes, Bounds[] all, int from, float[] local, int a, Vector3f n, float px) {
+		ModelHit.Box box = boxes.get(from);
+		Bounds bounds = all[from];
+		Vector3f out = new Vector3f(n).mul(OUT * px);
+		float[] trial = new float[3];
+		for (float by = 0.0F; by <= UNCOVER; by += STEP) {
+			for (int k = 0; k < (by > 0.0F ? 4 : 1); k++) {
+				int along = k < 2 ? (a + 1) % 3 : (a + 2) % 3;
+				System.arraycopy(local, 0, trial, 0, 3);
+				trial[along] += k % 2 == 0 ? by : -by;
+				if (trial[along] < bounds.min[along] || trial[along] > bounds.max[along]) {
+					continue;
+				}
+
+				Vector3f world = box.pose().transformPosition(new Vector3f(trial[0], trial[1], trial[2]).div(16.0F)).add(out);
+				if (!buried(boxes, all, from, world)) {
+					System.arraycopy(trial, 0, local, 0, 3);
+					return;
+				}
+			}
+		}
 	}
 
 	/** True if {@code world} is inside any cube but box {@code except}. */

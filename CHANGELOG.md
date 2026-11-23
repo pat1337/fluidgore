@@ -138,6 +138,10 @@ All notable changes to Fluid Gore are listed here. The format follows
   away along the ground.
 - Ragdoll Physics with the mod on the server: a body tumbling down a passage one block wide is no longer left behind
   on the server partway down. Everyone now finds it where it came to rest.
+- A stuck animal's body sometimes showed no blood running across the side it lies on. With the head arched back, the
+  cut in the throat lay inside the chest's block, where the blood had no skin to run on; it now comes out on the skin
+  beside it that is clear. Blood running down the skin also keeps to a face that leans out a little over it, as on a
+  body lying at a slant, instead of dropping off it at once.
 
 ### Changed
 - Ragdoll Physics: a body carries its weight as the animal does, not as its blocks are sized. Most of it is in the
