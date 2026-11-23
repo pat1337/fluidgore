@@ -123,7 +123,8 @@ All notable changes to Fluid Gore are listed here. The format follows
 - Blood no longer hangs in the air over fences, fence gates and walls. It used to land on their collision box, which
   stands half a block above the rails, and lay there as a square sheet. Blood that lands on a rail, a wall top or a pane
   now leaves a thin line along it, and the rest runs off the edge and drips to the ground below. No pool forms on top
-  of a fence. Loose scraps rest on the rails too, not above them.
+  of a fence, a corner post included: blood running toward the rail that joins the post there runs on along that rail
+  and drips off its side. Loose scraps rest on the rails too, not above them.
 - Ragdoll Physics: bodies no longer pass through fences or end up lying across them. A thin wall or a step's edge
   could slip between the points a body was tested at; now every edge of a body and of the block is tested as well.
 - Ragdoll Physics: a body the server keeps no longer jumps about while it goes down stairs or steps. The body on

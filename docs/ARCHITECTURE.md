@@ -124,7 +124,7 @@ when a feature is turned off.
   mark tiles), so marks and pools share one grid. `SurfaceProbe`: exact surface heights on what a block draws (its
   collision shape cut to its outline: a fence's collision box stands half a block above its rails), and the top face a
   mark lies on. Floor marks are cut to that face, and blood landing on one too narrow for a pool (a rail, a wall top)
-  runs off its edge. Giblets and ragdolls rest on the same shape. `Spurts`: arterial jets. `Footprints`. `Gush`:
+  runs off its edge, or, where another arm joins on that side (a corner post), on along that arm. Giblets and ragdolls rest on the same shape. `Spurts`: arterial jets. `Footprints`. `Gush`:
   rate-limited blood sounds.
 - `BloodFluidSim` + `BloodCell`: blood on the ground as a fluid of a fixed amount, in litres. A cell is one block of
   space cut into 8 by 8 sub-cells. Each sub-cell has a floor height, read from the shapes of the block and the one

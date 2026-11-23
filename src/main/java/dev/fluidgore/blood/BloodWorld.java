@@ -239,7 +239,10 @@ public final class BloodWorld {
 			vz = high ? 0.01 : -0.01;
 		}
 
-		droplets.runoff(edgeX, y - 0.02, edgeZ, vx, vz, rest, rgb);
+		// Where another arm joins on that side (a fence's corner post), the edge is not an edge: the blood runs on onto that
+		// arm's top and leaves it over its side.
+		double from = SurfaceProbe.isOpen(level, edgeX, y - 0.02, edgeZ) ? y - 0.02 : y + 0.01;
+		droplets.runoff(edgeX, from, edgeZ, vx, vz, rest, rgb);
 	}
 
 	/** Log-normal random factor with median 1: most values near 1, occasional large ones. */
