@@ -16,6 +16,7 @@ This file covers how to build and test the mod and the rules the code follows. F
                                 # the vanilla launcher's, %APPDATA%\.minecraft\mods or ~/.minecraft/mods), deleting
                                 # older fluidgore-*.jar there (two copies crash the game)
 ./gradlew runClientGameTest     # the automated in-game test (singleplayer, then a dedicated server)
+java tools/Gate.java            # the jar gate: the full suite ten times on the commit checked out (see below)
 ```
 
 The Cobble Tank is its own project, `../CobbleTank` (build and install it there). Fluid Gore's dev client, showcase
@@ -34,12 +35,12 @@ Game test options:
 | `-Pshaders=<zip>` | With Iris in `-PextraMods`: switch that shader pack on in `bugLook` (close-ups of reported glitches). |
 | `-PshotScale=<n>` | Draw every screenshot at n times the window's size (854x480): more detail, the same framing. |
 | `-PhideHud` | Leave the hotbar, hearts and hand out of every screenshot taken in the world. |
+| `-PserverPort=<n>` | Put the test's dedicated server on port n instead of 25599, so that runs in two worktrees at once do not clash. |
 
 A run passes when Gradle exits with 0, the log shows `[FluidGoreTest]` lines and there is no `AssertionError`.
 Screenshots go to `build/run/clientGameTest/screenshots/`. Look at them after any visual change. The full suite is
 long, so while you work on one feature, run just that feature's tests. Before a jar is released or installed in a
 game, run the full suite ten times: every run must pass every test (see "Docs and releases").
-The test's dedicated server uses port 25599.
 
 Every screenshot gets a JSON file of the same name beside it: the camera, each body and loose piece in the picture
 (where it is on the screen, whether a block hides it, the blood it holds and has lost, its wounds and what they reach,
@@ -209,5 +210,8 @@ are listed in the fabric-api 0.162.0+26.3 POM.
   game-test suite (`./gradlew runClientGameTest`, no `-PonlyTests`) has passed ten runs on the commit it is built
   from, every run 5/5: Gradle exits with 0, the log has its `[FluidGoreTest]` lines, there is no `AssertionError`, the
   dedicated-server half ran, and the screenshots of what changed have been looked at. One failure starts the count
-  again after the fix.
+  again after the fix. `java tools/Gate.java` runs the ten and applies the first four checks: it needs a clean working
+  tree, stops at the first failure, keeps each run's log and the last run's screenshots in `build/gate/`, and writes
+  the commit and each result to `build/gate/gate.txt` (`java tools/Gate.java 3` for three runs, `--port <n>` for
+  `-PserverPort`).
 - `notes/` is git-ignored and holds private working notes; nothing in the public docs should depend on it.

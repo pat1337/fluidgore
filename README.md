@@ -584,6 +584,9 @@ generators.
   only seen by players who watched it bleed. The same goes for blood on coats.
 - Spatter on a coat is placed by which way the animal faces, not how it lies: a body on its side is spattered as if
   it stood.
+- The vanilla model's blocks can push into one another as a body moves: a stuck animal's head arched back sinks into
+  its chest. A cut that ends up inside another block bleeds from the nearest clear skin on its own side, up to 4
+  pixels from the cut.
 - In a tightly packed herd the crosshair stops at the nearest animal's box, so the legs of the ones behind it cannot
   be picked out.
 - Ragdoll Physics is experimental. A kept body's fall is played out in one player's game; another player's ragdoll

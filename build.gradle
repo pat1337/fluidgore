@@ -61,6 +61,12 @@ loom {
 			vmArg "-Dfluidgore.ragdollOn=true"
 		}
 	}
+	// ... with the test's dedicated server on another port than 25599, for runs in two worktrees at once: -PserverPort=25600
+	if (project.hasProperty("serverPort")) {
+		runs.configureEach {
+			vmArg "-Dfluidgore.serverPort=${project.property('serverPort')}"
+		}
+	}
 	// ... with screenshots drawn at n times the window's size: -PshotScale=2
 	if (project.hasProperty("shotScale")) {
 		runs.configureEach {

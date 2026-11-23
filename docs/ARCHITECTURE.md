@@ -406,3 +406,5 @@ state (`GoreSystems`, `BloodSupply`, the wound sets, the corpses and pieces) and
 `tools/Lens.java` turns the pictures and facts into marked pictures, crops, contact sheets and run-to-run differences.
 `Live` (only with `-Plive`) runs no tests: it opens a world and answers commands from `tools/Live.java` over a local
 socket, one per connection, using the same context, so its screenshots get facts too.
+`tools/Gate.java` runs the full suite again and again for the jar gate. It knows a run reached the end from the line
+`[FluidGoreTest] dedicated server passed`, which the test prints after the dedicated server's part.

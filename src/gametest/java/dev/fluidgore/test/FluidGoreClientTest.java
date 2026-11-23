@@ -40,7 +40,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		String only = System.getProperty("fluidgore.only");
 		if ("tankDedicated".equals(only) || "fragmentsDedicated".equals(only)) {
 			java.util.Properties properties = new java.util.Properties();
-			properties.setProperty("server-port", "25599");
+			properties.setProperty("server-port", serverPort());
 			context.runOnClient(mc -> GoreConfig.get().goreLevel = GoreLevel.EXTREME);
 			try (TestDedicatedServerContext server = context.worldBuilder().createServer(properties);
 					TestDedicatedServerConnection connection = server.connect()) {
@@ -64,7 +64,7 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			if (Boolean.getBoolean("fluidgore.dedicated")) {
 				// -Pdedicated: the same tests against a dedicated server, the server half in a world of its own.
 				java.util.Properties properties = new java.util.Properties();
-				properties.setProperty("server-port", "25599");
+				properties.setProperty("server-port", serverPort());
 				try (TestDedicatedServerContext server = context.worldBuilder().createServer(properties);
 						TestDedicatedServerConnection connection = server.connect()) {
 					connection.waitForChunksRender();
@@ -198,8 +198,8 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 
 		context.runOnClient(mc -> GoreConfig.get().goreLevel = GoreLevel.EXTREME);
 		java.util.Properties properties = new java.util.Properties();
-		// Avoid clashing with a real server already using the default port on this machine.
-		properties.setProperty("server-port", "25599");
+		// Avoid clashing with a real server already using the default port on this machine (-PserverPort to move it).
+		properties.setProperty("server-port", serverPort());
 		try (TestDedicatedServerContext server = context.worldBuilder().createServer(properties);
 				TestDedicatedServerConnection connection = server.connect()) {
 			connection.waitForChunksRender();
@@ -207,6 +207,8 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			context.waitTicks(20);
 			combat(context, server, "server");
 		}
+		// The end of the full suite, for tools/Gate.java.
+		System.out.println("[FluidGoreTest] dedicated server passed");
 
 		context.runOnClient(mc -> {
 			GoreConfig.get().goreLevel = GoreLevel.MEDIUM;
@@ -214,6 +216,14 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 			GoreConfig.get().keepBodies = true;
 			GoreConfig.get().chickenDeaths = true;
 		});
+	}
+
+	/**
+	 * The dedicated server's port: 25599, or -PserverPort, so that test runs in two worktrees at once do not take the
+	 * same one.
+	 */
+	private static String serverPort() {
+		return Integer.toString(Integer.getInteger("fluidgore.serverPort", 25599));
 	}
 
 	/** One test of the pick list ({@code -PonlyTests}), by name. */
@@ -10338,6 +10348,33 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 	}
 
 	/**
+	 * Waits until the server has every chunk over the blocks from x0, z0 to x1, z1 loaded with its entities ticking: blocks
+	 * can be set there, and an entity summoned there is sent to the client at once.
+	 */
+	private static void waitForEntityTicking(ClientGameTestContext context, TestServerContext server, int x0, int z0, int x1, int z1) {
+		for (int tick = 0; tick < 200; tick++) {
+			boolean ready = server.computeOnServer(s -> {
+				for (int cx = x0 >> 4; cx <= x1 >> 4; cx++) {
+					for (int cz = z0 >> 4; cz <= z1 >> 4; cz++) {
+						if (!s.overworld().areEntitiesActuallyLoadedAndTicking(new net.minecraft.world.level.ChunkPos(cx, cz))) {
+							return false;
+						}
+					}
+				}
+
+				return true;
+			});
+			if (ready) {
+				return;
+			}
+
+			context.waitTicks(1);
+		}
+
+		throw new AssertionError("the chunks from " + x0 + ", " + z0 + " to " + x1 + ", " + z1 + " did not load in 10 seconds");
+	}
+
+	/**
 	 * The deaths, one cow per cause, side by side, sampled every tick. Every body must be down within half a second
 	 * and lie where it dropped; a head blow goes rigid and a blast leaves it limp; all of them paddle, a broken back with
 	 * its hind end hanging dead; those that still breathe gasp and a beheaded one never does; every body is still
@@ -10346,6 +10383,9 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 	private static void deaths(ClientGameTestContext context, TestServerContext server) {
 		server.runCommand("kill @e[type=!minecraft:player]");
 		server.runCommand("tp @a 168.5 -60 -9.5 0 22");
+		// Be there first. After a test far away these chunks are not loaded yet: the fills below would fail, and the cows
+		// would wait unseen on the server until their chunks came in, at times too late to be found on the client.
+		waitForEntityTicking(context, server, 155, -3, 182, 4);
 		// Level ground: the playerGore test's creeper leaves a crater here, and a body falling into one leans on its wall.
 		server.runCommand("fill 155 -63 -3 182 -62 4 minecraft:dirt replace minecraft:air");
 		server.runCommand("fill 155 -61 -3 182 -61 4 minecraft:grass_block replace minecraft:air");
