@@ -1242,6 +1242,8 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 		server.runCommand("gamemode survival @a");
 		server.runCommand("tp @a 960.5 -60 0.5 0 20");
 		context.waitTicks(20);
+		// After a test far away, the fox below could stay unseen on the server until its chunk's entities were ticking.
+		waitForEntityTicking(context, server, 950, -6, 972, 12);
 		server.runCommand("fill 950 -61 -6 972 -61 12 minecraft:stone");
 		server.runCommand("fill 950 -60 -6 972 -50 12 minecraft:air");
 		context.runOnClient(mc -> {
@@ -1280,7 +1282,27 @@ public class FluidGoreClientTest implements FabricClientGameTest {
 
 			return -1;
 		});
-		check(foxId >= 0, "reported bugs: fox not found");
+		if (foxId < 0) {
+			// For the failure: whether the server still has the fox, and what the client holds under its id.
+			String onServer = server.computeOnServer(s -> {
+				for (Entity e : s.overworld().getAllEntities()) {
+					if (e.entityTags().contains("fg_fox")) {
+						return "id " + e.getId() + (e.isAlive() ? ", alive" : ", dead") + ", health " + ((net.minecraft.world.entity.LivingEntity) e).getHealth()
+								+ ", at " + e.blockPosition().toShortString() + ", removed " + e.getRemovalReason();
+					}
+				}
+
+				return "no fox";
+			});
+			int serverId = onServer.startsWith("id ") ? Integer.parseInt(onServer.substring(3, onServer.indexOf(','))) : -1;
+			String onClient = context.computeOnClient(mc -> {
+				Entity e = mc.level.getEntity(serverId);
+				return (e == null ? "nothing under that id" : e.getType() + (e.isRemoved() ? " removed " + e.getRemovalReason() : ""))
+						+ ", body " + (GoreSystems.suffering().corpse(serverId) != null) + ", vaporized " + GoreSystems.dismemberment().vaporized(serverId)
+						+ ", chunk " + (mc.level.getChunkSource().hasChunk(60, 0) ? "loaded" : "not loaded");
+			});
+			throw new AssertionError("reported bugs: fox not found (on the server: " + onServer + "; on the client: " + onClient + ")");
+		}
 		boolean headless = false;
 		for (int blow = 0; blow < 8 && !headless; blow++) {
 			context.runOnClient(mc -> {
